@@ -71,7 +71,7 @@ export const AirQualityService = {
       if (!station) return '보통';
 
       const grade = worseGrade(station.pm10Grade, station.pm25Grade);
-      return (grade && GRADE_LABEL[grade]) ?? '보통';
+      return (grade ? GRADE_LABEL[grade] : undefined) ?? '보통';
     } catch {
       return '보통';
     }
