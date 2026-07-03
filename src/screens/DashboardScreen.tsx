@@ -1,0 +1,769 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  CloudFog,
+  Droplets,
+  Settings,
+  Wind,
+  X,
+} from 'lucide-react-native';
+import { Colors, PurposeColors } from '../constants/colors';
+import { PURPOSES, detectPurposeFromEvents, findMatchingEvent } from '../constants/purposes';
+import { FEEDBACK_MESSAGES } from '../constants/feedback';
+import { useAppStore } from '../store';
+import { CalendarService } from '../services/calendar/CalendarService';
+import { WeatherService } from '../services/weather/WeatherService';
+import { calcPerceivedTemp, formatPerceivedFormula, formatTemp } from '../utils/temperature';
+import { getAlertTime, getCurrentSlotIndex, getTodayString } from '../utils/time';
+import { getCurrentCoords } from '../utils/location';
+import { ChecklistItem } from '../components/ChecklistItem';
+import { ProgressBar } from '../components/ProgressBar';
+import { PurposeSelector } from '../components/PurposeSelector';
+import { Toast } from '../components/Toast';
+import { WeatherTimeline } from '../components/WeatherTimeline';
+import { QuickAddModal } from '../components/QuickAddModal';
+import { SettingsPanel } from '../components/SettingsPanel';
+import type { ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
+
+// 위치 권한이 없거나 좌표 조회에 실패했을 때만 쓰이는 폴백 좌표 (서울시청)
+const FALLBACK_LAT = 37.5665;
+const FALLBACK_LON = 126.978;
+
+const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
+  0: '오늘만',
+  1: '날씨 알림',
+  2: '목적 준비물',
+  3: '일상 루틴',
+};
+
+const FEEDBACK_OPTIONS: { val: FeedbackType; label: string }[] = [
+  { val: 'cold', label: '추웠음' },
+  { val: 'good', label: '적당함' },
+  { val: 'hot', label: '더웠음' },
+];
+
+function sortSection(items: ChecklistItemType[]): ChecklistItemType[] {
+  return [...items].sort((a, b) => Number(a.checked) - Number(b.checked));
+}
+
+function getCurationBackground(rainAlert: boolean, heatAlert: boolean): string {
+  if (rainAlert) return Colors.sky50;
+  if (heatAlert) return Colors.orange50;
+  return Colors.indigo50;
+}
+
+function PulseDot() {
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, { toValue: 1.8, duration: 900, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0, duration: 900, useNativeDriver: true }),
+        ]),
+        Animated.timing(scale, { toValue: 1, duration: 0, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 0, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [scale, opacity]);
+
+  return (
+    <View style={styles.pulseWrapper}>
+      <View style={styles.pulseDotCore} />
+      <Animated.View
+        style={[styles.pulseDotRing, { opacity, transform: [{ scale }] }]}
+      />
+    </View>
+  );
+}
+
+export function DashboardScreen() {
+  const scrollRef = useRef<ScrollView>(null);
+  const checklistYRef = useRef(0);
+
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [quickAddText, setQuickAddText] = useState('');
+  const [quickAddLabel, setQuickAddLabel] = useState<string | null>(null);
+
+  const checklist = useAppStore((s) => s.checklist);
+  const checklistDate = useAppStore((s) => s.checklistDate);
+  const purposeId = useAppStore((s) => s.purposeId);
+  const autoDetected = useAppStore((s) => s.autoDetected);
+  const autoDetectedEvent = useAppStore((s) => s.autoDetectedEvent);
+  const currentWeather = useAppStore((s) => s.currentWeather);
+  const weatherTimeline = useAppStore((s) => s.weatherTimeline);
+  const userSettings = useAppStore((s) => s.userSettings);
+  const todayFeedback = useAppStore((s) => s.todayFeedback);
+  const statusDismissed = useAppStore((s) => s.statusDismissed);
+  const toast = useAppStore((s) => s.toast);
+
+  const setAutoDetected = useAppStore((s) => s.setAutoDetected);
+  const setWeather = useAppStore((s) => s.setWeather);
+  const setTimeline = useAppStore((s) => s.setTimeline);
+  const setWeatherLoading = useAppStore((s) => s.setWeatherLoading);
+  const buildChecklist = useAppStore((s) => s.buildChecklist);
+  const startNewDay = useAppStore((s) => s.startNewDay);
+  const setPurpose = useAppStore((s) => s.setPurpose);
+  const toggleCheck = useAppStore((s) => s.toggleCheck);
+  const checkAll = useAppStore((s) => s.checkAll);
+  const uncheckAll = useAppStore((s) => s.uncheckAll);
+  const deleteItem = useAppStore((s) => s.deleteItem);
+  const addTempItem = useAppStore((s) => s.addTempItem);
+  const addPermanentRoutine = useAppStore((s) => s.addPermanentRoutine);
+  const applyFeedback = useAppStore((s) => s.applyFeedback);
+  const dismissStatus = useAppStore((s) => s.dismissStatus);
+  const showToast = useAppStore((s) => s.showToast);
+  const clearToast = useAppStore((s) => s.clearToast);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const events = await CalendarService.getTodayEvents();
+      if (cancelled) return;
+
+      const detectedId = detectPurposeFromEvents(events, userSettings.departureTime);
+      const matchedEvent = detectedId
+        ? findMatchingEvent(detectedId, events, userSettings.departureTime)
+        : null;
+      setAutoDetected(detectedId, matchedEvent);
+
+      setWeatherLoading(true);
+      const coords = await getCurrentCoords();
+      const lat = coords?.lat ?? FALLBACK_LAT;
+      const lon = coords?.lon ?? FALLBACK_LON;
+      const [weather, timeline] = await Promise.all([
+        WeatherService.getCurrentWeather(lat, lon),
+        WeatherService.getTimeline(lat, lon),
+      ]);
+      if (cancelled) return;
+      setWeatherLoading(false);
+
+      if (weather) {
+        setWeather({ ...weather, calendarEvents: events });
+      }
+      setTimeline(timeline);
+
+      // 오늘 이미 빌드된 체크리스트가 있으면(=재실행/재오픈) 체크 상태를 보존하고
+      // 새로 만들지 않는다. 날짜가 바뀌었거나 최초 실행이면 새로 빌드하고
+      // 당일 한정 상태(피드백 등)도 함께 초기화한다.
+      if (checklistDate !== getTodayString()) {
+        startNewDay();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handlePurposeSelect = (id: PurposeId | null) => {
+    setPurpose(id);
+    buildChecklist();
+    scrollRef.current?.scrollTo({ y: checklistYRef.current, animated: true });
+  };
+
+  const handleQuickAddSubmit = () => {
+    const trimmed = quickAddText.trim();
+    if (!trimmed) return;
+    setQuickAddLabel(trimmed);
+    setQuickAddText('');
+  };
+
+  const handleQuickAddToday = () => {
+    if (quickAddLabel) addTempItem(quickAddLabel);
+    setQuickAddLabel(null);
+  };
+
+  const handleQuickAddPermanent = () => {
+    if (quickAddLabel) {
+      addPermanentRoutine(quickAddLabel);
+      buildChecklist();
+    }
+    setQuickAddLabel(null);
+  };
+
+  const handleFeedback = (val: FeedbackType) => {
+    applyFeedback(val);
+    showToast(FEEDBACK_MESSAGES[val]);
+  };
+
+  const total = checklist.length;
+  const checkedCount = checklist.filter((i) => i.checked).length;
+  const allChecked = total > 0 && checkedCount === total;
+
+  const handleToggleAll = () => {
+    if (allChecked) {
+      uncheckAll();
+    } else {
+      checkAll();
+    }
+  };
+
+  const tier0 = sortSection(checklist.filter((i) => i.tier === 0));
+  const tier1 = sortSection(checklist.filter((i) => i.tier === 1));
+  const tier2 = sortSection(checklist.filter((i) => i.tier === 2));
+  const tier3 = sortSection(checklist.filter((i) => i.tier === 3));
+
+  const activePurposeColor = purposeId ? PurposeColors[PURPOSES[purposeId].color].chip : undefined;
+
+  const perceivedTemp = currentWeather
+    ? calcPerceivedTemp(
+        currentWeather.temp,
+        currentWeather.humidity,
+        currentWeather.wind,
+        userSettings.deltaOffset
+      )
+    : null;
+
+  const perceivedFormula =
+    currentWeather && perceivedTemp !== null
+      ? formatPerceivedFormula(
+          currentWeather.temp,
+          currentWeather.humidity,
+          currentWeather.wind,
+          userSettings.deltaOffset,
+          perceivedTemp
+        )
+      : null;
+
+  const timelineHint = weatherTimeline.length > 0 ? WeatherService.getTimelineHint(weatherTimeline) : null;
+
+  const banners: string[] = [];
+  if (currentWeather?.rainAlert) banners.push('오늘 비 예보가 있어요 — 우산을 챙기세요.');
+  if (currentWeather?.heatAlert) banners.push('폭염 주의 — 물을 충분히 마시세요.');
+  if (autoDetectedEvent) {
+    banners.push(`${autoDetectedEvent.time} '${autoDetectedEvent.title}' 일정이 있어요.`);
+  }
+
+  const alertTime = getAlertTime(userSettings.departureTime);
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.headerWrapper}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>아맞다</Text>
+            <Text style={styles.headerSubtitle}>Morning OS</Text>
+          </View>
+          <Pressable
+            style={styles.settingsButton}
+            onPress={() => setSettingsVisible((v) => !v)}
+            hitSlop={8}
+          >
+            <Settings size={20} color={Colors.slate600} />
+          </Pressable>
+        </View>
+
+        <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
+      </View>
+
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {!statusDismissed ? (
+          <View style={styles.statusBar}>
+            <View style={styles.statusLeft}>
+              <PulseDot />
+              <View style={styles.statusTextArea}>
+                <Text style={styles.statusLabel}>외출 30분 전</Text>
+                <Text style={styles.statusTime}>{userSettings.departureTime}</Text>
+              </View>
+            </View>
+            <Pressable onPress={dismissStatus} hitSlop={8}>
+              <X size={18} color={Colors.slate400} />
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View
+          style={[
+            styles.curationCard,
+            {
+              backgroundColor: currentWeather
+                ? getCurationBackground(currentWeather.rainAlert, currentWeather.heatAlert)
+                : Colors.slate50,
+            },
+          ]}
+        >
+          <Text style={styles.curationLocation}>내 위치 날씨</Text>
+          <Text style={styles.curationDate}>
+            {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+          </Text>
+
+          {currentWeather ? (
+            <>
+              <Text style={styles.curationWeatherLabel}>{currentWeather.label}</Text>
+
+              {perceivedFormula ? (
+                <View style={styles.perceivedBox}>
+                  <Text style={styles.perceivedFormula}>{perceivedFormula}</Text>
+                  <Text style={styles.perceivedTemp}>{formatTemp(perceivedTemp ?? currentWeather.temp)}</Text>
+                </View>
+              ) : null}
+
+              {banners.map((banner, i) => (
+                <View key={i} style={styles.alertBanner}>
+                  <Text style={styles.alertBannerText}>{banner}</Text>
+                </View>
+              ))}
+
+              <Text style={styles.recommendation}>
+                {currentWeather.recommendEmoji} {currentWeather.recommendation}
+              </Text>
+
+              {timelineHint ? (
+                <View style={[styles.timelineHintBox, { backgroundColor: timelineHint.bg }]}>
+                  <Text style={[styles.timelineHintText, { color: timelineHint.color }]}>
+                    {timelineHint.text}
+                  </Text>
+                </View>
+              ) : null}
+
+              <View style={styles.feedbackRow}>
+                {FEEDBACK_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.val}
+                    style={[
+                      styles.feedbackChip,
+                      todayFeedback === opt.val && styles.feedbackChipActive,
+                    ]}
+                    onPress={() => handleFeedback(opt.val)}
+                  >
+                    <Text
+                      style={[
+                        styles.feedbackChipText,
+                        todayFeedback === opt.val && styles.feedbackChipTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : (
+            <Text style={styles.loadingText}>날씨 정보를 불러오는 중...</Text>
+          )}
+        </View>
+
+        {weatherTimeline.length > 0 ? (
+          <View style={styles.sectionSpacing}>
+            <WeatherTimeline slots={weatherTimeline} currentSlot={getCurrentSlotIndex()} />
+          </View>
+        ) : null}
+
+        <View style={styles.sectionSpacing}>
+          <PurposeSelector
+            purposeId={purposeId}
+            onSelect={handlePurposeSelect}
+            autoDetected={autoDetected}
+            autoDetectedEvent={autoDetectedEvent}
+          />
+        </View>
+
+        <View
+          style={[styles.checklistCard, styles.sectionSpacing]}
+          onLayout={(e) => {
+            checklistYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <View style={styles.checklistHeader}>
+            <View style={styles.checklistHeaderLeft}>
+              <Text style={styles.checklistTitle}>오늘의 체크리스트</Text>
+              <View style={styles.checklistCountBadge}>
+                <Text style={styles.checklistCountText}>
+                  {checkedCount}/{total}
+                </Text>
+              </View>
+            </View>
+            <Pressable onPress={handleToggleAll}>
+              <Text style={styles.checklistToggleAll}>{allChecked ? '전체해제' : '모두완료'}</Text>
+            </Pressable>
+          </View>
+
+          <ProgressBar checked={checkedCount} total={total} />
+
+          {(
+            [
+              [0, tier0],
+              [1, tier1],
+              [2, tier2],
+              [3, tier3],
+            ] as const
+          ).map(([tier, items]) =>
+            items.length > 0 ? (
+              <View key={tier} style={styles.tierSection}>
+                <Text style={styles.tierLabel}>{TIER_LABELS[tier]}</Text>
+                {items.map((item) => (
+                  <ChecklistItem
+                    key={item.id}
+                    item={item}
+                    onToggle={toggleCheck}
+                    onDelete={deleteItem}
+                    purposeColor={activePurposeColor}
+                  />
+                ))}
+              </View>
+            ) : null
+          )}
+
+          <TextInput
+            style={styles.quickAddInput}
+            value={quickAddText}
+            onChangeText={setQuickAddText}
+            placeholder="더 챙길 것이 있나요? 오늘만 추가하기..."
+            placeholderTextColor={Colors.slate400}
+            onSubmitEditing={handleQuickAddSubmit}
+            returnKeyType="done"
+          />
+        </View>
+
+        {currentWeather ? (
+          <View style={[styles.envStrip, styles.sectionSpacing]}>
+            <View style={styles.envCell}>
+              <CloudFog size={18} color={Colors.slate500} />
+              <Text style={styles.envValue}>{currentWeather.dustLevel}</Text>
+              <Text style={styles.envLabel}>미세먼지</Text>
+            </View>
+            <View style={styles.envCell}>
+              <Droplets size={18} color={Colors.slate500} />
+              <Text style={styles.envValue}>{currentWeather.humidity}%</Text>
+              <Text style={styles.envLabel}>습도</Text>
+            </View>
+            <View style={styles.envCell}>
+              <Wind size={18} color={Colors.slate500} />
+              <Text style={styles.envValue}>{currentWeather.wind}m/s</Text>
+              <Text style={styles.envLabel}>바람</Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={[styles.notificationPreview, styles.sectionSpacing]}>
+          <Text style={styles.notificationTitle}>알림 미리보기</Text>
+          <View style={styles.notificationRow}>
+            <Text style={styles.notificationStep}>1단계 · 전날 22:00</Text>
+            <Text style={styles.notificationText}>내일 날씨 예보를 확인해보세요.</Text>
+          </View>
+          <View style={styles.notificationRow}>
+            <Text style={styles.notificationStep}>2단계 · 당일 {alertTime}</Text>
+            <Text style={styles.notificationText}>외출 30분 전이에요. 체크리스트를 확인하세요.</Text>
+          </View>
+          <View style={styles.notificationRow}>
+            <Text style={styles.notificationStep}>3단계 · 현관 이탈 감지</Text>
+            <Text style={styles.notificationText}>오늘 착장은 어땠나요? 피드백을 남겨주세요.</Text>
+          </View>
+        </View>
+
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
+
+      {quickAddLabel ? (
+        <QuickAddModal
+          label={quickAddLabel}
+          onTodayOnly={handleQuickAddToday}
+          onPermanent={handleQuickAddPermanent}
+          onCancel={() => setQuickAddLabel(null)}
+        />
+      ) : null}
+
+      {toast ? <Toast message={toast} onDone={clearToast} /> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.bgDefault,
+  },
+  headerWrapper: {
+    position: 'relative',
+    zIndex: 30,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 12,
+    backgroundColor: Colors.bgDefault,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.indigo600,
+  },
+  headerSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.slate400,
+  },
+  settingsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+  statusBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: Colors.slate800,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  statusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pulseWrapper: {
+    width: 10,
+    height: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  pulseDotCore: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.emerald500,
+  },
+  pulseDotRing: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.emerald500,
+  },
+  statusTextArea: {},
+  statusLabel: {
+    fontSize: 11,
+    color: Colors.slate500,
+  },
+  statusTime: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.slate800,
+  },
+  curationCard: {
+    borderRadius: 20,
+    padding: 18,
+  },
+  curationLocation: {
+    fontSize: 12,
+    color: Colors.slate500,
+  },
+  curationDate: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.slate400,
+  },
+  curationWeatherLabel: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.slate800,
+  },
+  perceivedBox: {
+    marginTop: 12,
+    alignItems: 'flex-start',
+  },
+  perceivedFormula: {
+    fontSize: 11,
+    color: Colors.slate500,
+  },
+  perceivedTemp: {
+    marginTop: 4,
+    fontSize: 36,
+    fontWeight: '800',
+    color: Colors.slate800,
+  },
+  alertBanner: {
+    marginTop: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  alertBannerText: {
+    fontSize: 12,
+    color: Colors.slate600,
+    fontWeight: '500',
+  },
+  recommendation: {
+    marginTop: 14,
+    fontSize: 14,
+    color: Colors.slate700,
+  },
+  timelineHintBox: {
+    marginTop: 10,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  timelineHintText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  feedbackRow: {
+    flexDirection: 'row',
+    marginTop: 16,
+    gap: 8,
+  },
+  feedbackChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  feedbackChipActive: {
+    backgroundColor: Colors.indigo600,
+  },
+  feedbackChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.slate600,
+  },
+  feedbackChipTextActive: {
+    color: Colors.white,
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 13,
+    color: Colors.slate400,
+  },
+  sectionSpacing: {
+    marginTop: 16,
+  },
+  checklistCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 18,
+  },
+  checklistHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  checklistHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checklistTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.slate800,
+  },
+  checklistCountBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 50,
+    backgroundColor: Colors.indigo50,
+  },
+  checklistCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.indigo600,
+  },
+  checklistToggleAll: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.indigo600,
+  },
+  tierSection: {
+    marginTop: 14,
+  },
+  tierLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.slate400,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  quickAddInput: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: Colors.slate200,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 13,
+    color: Colors.slate800,
+  },
+  envStrip: {
+    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 14,
+  },
+  envCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  envValue: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate800,
+  },
+  envLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Colors.slate400,
+  },
+  notificationPreview: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+  },
+  notificationTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.slate800,
+    marginBottom: 10,
+  },
+  notificationRow: {
+    marginBottom: 8,
+  },
+  notificationStep: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.indigo600,
+  },
+  notificationText: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.slate600,
+  },
+  bottomSpacer: {
+    height: 120,
+  },
+});

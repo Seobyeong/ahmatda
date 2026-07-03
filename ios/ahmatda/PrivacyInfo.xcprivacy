@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  이 앱은 광고/분석 SDK나 크로스 앱 트래킹을 사용하지 않는다 (코드 검토로 확인됨:
+	  캘린더/위치/Wi-Fi/알림은 모두 기기 내 기능 제공 목적으로만 쓰이고 외부로 전송되지 않음).
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!--
+	  App Store Connect의 "개인정보 취급방침" 영양성분표(Privacy Nutrition Label)는
+	  이 파일과 별개로 App Store Connect 웹 UI에서 직접 작성해야 하는 항목이라
+	  여기서는 채우지 않았다. 실제로 수집하는 항목(위치, 캘린더 일정 제목/시각,
+	  Wi-Fi BSSID)을 기준으로 그쪽에서 별도로 작성할 것.
+	-->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<!--
+	  Required Reason API 선언. 아래는 이 앱의 실제 동작(온-디바이스 캐싱/타이머,
+	  외부 전송 없음)에 부합하는 것으로 확인된 코드만 우선 포함했다.
+
+	  react-native, @react-native-async-storage/async-storage, expo-constants,
+	  expo-file-system, react-native-background-fetch는 이미 자체
+	  PrivacyInfo.xcprivacy를 포함하고 있어(node_modules 내 확인됨) 여기서
+	  중복 선언하지 않았다.
+
+	  반면 expo-location, @notifee/react-native, react-native-calendar-events,
+	  @react-native-community/netinfo, react-native-screens,
+	  react-native-safe-area-context, react-native-svg, expo-dev-client는
+	  자체 매니페스트가 없어 실제 API 사용 여부를 소스만으로 단정할 수 없다.
+	  macOS + Xcode에서 Archive → Organizer → "Generate Privacy Report"를 실행하면
+	  최종 바이너리 기준으로 부족한 카테고리를 정확히 알려주므로, App Store 제출 전
+	  반드시 그 결과로 아래 배열을 보완할 것. 참고로 자주 필요한 나머지 카테고리와
+	  검증된 reason 코드는 다음과 같다:
+	    - NSPrivacyAccessedAPICategoryFileTimestamp   → C617.1
+	    - NSPrivacyAccessedAPICategorySystemBootTime  → 35F9.1
+	    - NSPrivacyAccessedAPICategoryDiskSpace       → E174.1
+	-->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

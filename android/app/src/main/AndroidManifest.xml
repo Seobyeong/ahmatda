@@ -1,0 +1,66 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <!-- OPTIONAL PERMISSIONS, REMOVE WHATEVER YOU DO NOT NEED -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <uses-permission android:name="android.permission.VIBRATE"/>
+  <!-- These require runtime permissions on M -->
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <!-- END OPTIONAL PERMISSIONS -->
+
+  <!-- 캘린더 -->
+  <uses-permission android:name="android.permission.READ_CALENDAR" />
+
+  <!-- 알림 (Android 13+) -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <!-- 부팅 후 알람 재등록 -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!--
+    USE_EXACT_ALARM은 Google Play 정책상 알람시계·캘린더 등 핵심 카테고리 앱만 사용이
+    허용되는 제한된 권한이라 이 앱(외출 체크리스트)에서 선언하면 심사 반려·정책 위반
+    위험이 있다. 일반 앱용 SCHEDULE_EXACT_ALARM만 사용한다 — Android 12+에서는 사용자가
+    설정 > 앱 > 특별한 접근 권한 > 알람 및 리마인더에서 직접 허용해야 하며, 거부된 경우
+    NotificationService.getExactAlarmStatus()로 확인하고 openExactAlarmSettings()로
+    설정 화면으로 안내한다 (거부돼도 알림 자체가 실패하진 않고 배달 시각이 부정확해질 뿐).
+  -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+  <!-- Wi-Fi BSSID 읽기 -->
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+  <!-- Foreground Service -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+  <queries>
+    <!-- Support checking for http(s) links via the Linking API -->
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <category android:name="android.intent.category.BROWSABLE" />
+      <data android:scheme="https" />
+    </intent>
+  </queries>
+
+  <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:theme="@style/AppTheme" android:supportsRtl="true">
+    <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+
+    <!--
+      부팅 후 알람(트리거 알림) 재등록용 리시버는 의도적으로 추가하지 않았습니다.
+      io.invertase.notifee.NotifeeApiModule 은 notifee의 React Native 브릿지 모듈 클래스이며
+      android.content.BroadcastReceiver 를 상속하지 않아, BOOT_COMPLETED 리시버로 등록하면
+      기기 부팅마다 크래시할 위험이 있습니다. @notifee/react-native 설치 후 해당 라이브러리가
+      제공하는 실제 리시버 클래스(라이브러리 AAR의 AndroidManifest.xml 참고)로 등록해주세요.
+    -->
+  </application>
+</manifest>
