@@ -20,6 +20,7 @@ import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
 import { NotificationService } from '../services/notification/NotificationService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
+import { TimeInput } from '../components/TimeInput';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type OnboardingScreenProps = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
@@ -305,15 +306,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
       {step === 2 ? (
         <View>
           <Text style={styles.title}>외출 시간을 설정해주세요</Text>
-          <TextInput
-            style={styles.timeInput}
-            value={time}
-            onChangeText={setTime}
-            placeholder="08:15"
-            placeholderTextColor={Colors.slate400}
-            keyboardType="numeric"
-            maxLength={5}
-          />
+          <TimeInput value={time} onChange={setTime} />
 
           <View style={styles.divider} />
 
@@ -525,16 +518,6 @@ const styles = StyleSheet.create({
     color: Colors.indigo600,
     fontWeight: '500',
     textAlign: 'center',
-  },
-  timeInput: {
-    borderWidth: 1,
-    borderColor: Colors.slate200,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: Colors.slate800,
-    backgroundColor: Colors.white,
   },
   divider: {
     height: 1,

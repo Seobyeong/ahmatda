@@ -369,18 +369,26 @@ export const useAppStore = create<AppStore>()(
         })),
 
       // 피드백
+      // 오늘 이미 준 피드백과 같은 값이면 무시하고, 다른 값으로 바꾸는 경우 이전
+      // 보정치를 먼저 되돌린 뒤 새로 적용한다 — 그래야 앱 재시작이나 재선택으로
+      // deltaOffset이 중복 조정되지 않는다.
       applyFeedback: (val) =>
         set((state) => {
+          if (state.todayFeedback === val) return {};
+
           let deltaOffset = state.userSettings.deltaOffset;
+          if (state.todayFeedback === 'cold') deltaOffset += 1;
+          else if (state.todayFeedback === 'hot') deltaOffset -= 1;
           if (val === 'cold') deltaOffset -= 1;
           else if (val === 'hot') deltaOffset += 1;
 
+          const today = getTodayString();
           return {
             userSettings: { ...state.userSettings, deltaOffset },
             todayFeedback: val,
             feedbackHistory: [
-              ...state.feedbackHistory,
-              { date: getTodayString(), val },
+              ...state.feedbackHistory.filter((r) => r.date !== today),
+              { date: today, val },
             ],
           };
         }),
@@ -399,6 +407,9 @@ export const useAppStore = create<AppStore>()(
         permanentRoutines: state.permanentRoutines,
         userSettings: state.userSettings,
         feedbackHistory: state.feedbackHistory,
+        // 같은 날 앱이 재시작돼도(기기 재부팅, 강제 종료 등) 오늘 이미 준 피드백을
+        // 기억해야 applyFeedback의 재선택 방지 로직이 제대로 동작한다.
+        todayFeedback: state.todayFeedback,
       }),
     }
   )

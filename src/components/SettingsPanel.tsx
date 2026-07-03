@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import RNCalendarEvents from 'react-native-calendar-events';
-import { X } from 'lucide-react-native';
+import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { useAppStore } from '../store';
+import { TimeInput } from './TimeInput';
 import type { FeedbackType } from '../types';
 
 interface SettingsPanelProps {
@@ -45,7 +46,6 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const setWeatherItemEnabled = useAppStore((s) => s.setWeatherItemEnabled);
 
   const [editingTime, setEditingTime] = useState(false);
-  const [timeInput, setTimeInput] = useState(departureTime);
   const [calendarConnected, setCalendarConnected] = useState(false);
 
   useEffect(() => {
@@ -54,16 +54,6 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
       .then((status) => setCalendarConnected(status === 'authorized'))
       .catch(() => setCalendarConnected(false));
   }, [visible]);
-
-  const startEditingTime = () => {
-    setTimeInput(departureTime);
-    setEditingTime(true);
-  };
-
-  const commitTime = () => {
-    updateDepartureTime(timeInput);
-    setEditingTime(false);
-  };
 
   const deltaColor =
     deltaOffset > 0 ? Colors.red500 : deltaOffset < 0 ? Colors.blue500 : Colors.slate600;
@@ -84,18 +74,18 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
         <View style={styles.row}>
           <Text style={styles.rowLabel}>외출 시간</Text>
           {editingTime ? (
-            <TextInput
-              style={styles.timeInput}
-              value={timeInput}
-              onChangeText={setTimeInput}
-              onSubmitEditing={commitTime}
-              onBlur={commitTime}
-              keyboardType="numeric"
-              autoFocus
-              maxLength={5}
-            />
+            <View style={styles.timeEditRow}>
+              <TimeInput value={departureTime} onChange={updateDepartureTime} compact autoFocus />
+              <Pressable
+                style={styles.timeDoneButton}
+                onPress={() => setEditingTime(false)}
+                hitSlop={8}
+              >
+                <Check size={14} color={Colors.emerald600} />
+              </Pressable>
+            </View>
           ) : (
-            <Pressable onPress={startEditingTime}>
+            <Pressable onPress={() => setEditingTime(true)}>
               <Text style={styles.rowValue}>{departureTime}</Text>
             </Pressable>
           )}
@@ -208,16 +198,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.slate800,
   },
-  timeInput: {
-    borderWidth: 1,
-    borderColor: Colors.slate200,
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    fontSize: 14,
-    color: Colors.slate800,
-    minWidth: 70,
-    textAlign: 'right',
+  timeEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timeDoneButton: {
+    marginLeft: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.emerald100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
     marginTop: 18,
