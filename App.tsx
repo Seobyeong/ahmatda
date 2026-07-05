@@ -44,7 +44,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // 온보딩 완료 후 알림 예약
+    // 온보딩 완료 또는 출발시각 변경 시 알림 전체 재예약 (전날 알림/출발 알림/피드백 알림)
     if (userSettings.onboarded) {
       NotificationService.rescheduleAll(
         userSettings.departureTime,
@@ -54,6 +54,18 @@ export default function App() {
       BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
     }
   }, [userSettings.onboarded, userSettings.departureTime]);
+
+  useEffect(() => {
+    // 체크리스트가 바뀔 때마다(체크/추가/삭제) 이미 예약된 출발 알림의 "N개" 문구를
+    // 최신 미체크 개수로 갱신한다. 위 effect는 온보딩/출발시각이 바뀔 때만 실행되므로
+    // 그 사이의 체크리스트 변경은 예약 시점 스냅샷 그대로 남는 문제가 있었음.
+    if (!userSettings.onboarded) return;
+
+    NotificationService.scheduleDepartureAlert(
+      userSettings.departureTime,
+      checklist.filter(i => !i.checked).length
+    );
+  }, [userSettings.onboarded, checklist]);
 
   useEffect(() => {
     // 온보딩 완료 후 출발 시각 감시 창에 맞춰 Wi-Fi 이탈 모니터링을 매일 재arm
