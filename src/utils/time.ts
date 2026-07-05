@@ -35,6 +35,28 @@ export function getTodayString(): string {
   return `${y}-${m}-${d}`;
 }
 
+// 출발 알림 시각(출발 30분 전) 기준 감시 창 길이 — Wi-Fi 이탈 감지가 이 시간만큼만
+// 활성화된다(배터리 보호). WifiMonitorService, BackgroundTaskService가 공유한다.
+export const DEPARTURE_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+// 지금이 출발 알림 시각 기준 감시 창(alertTime ~ alertTime + DEPARTURE_WINDOW_MS) 안인지 판정.
+// alertTime이 자정을 넘겨 wrap되는 경우(예: departureTime "00:15" → alertTime "23:45")
+// 오늘 날짜에 앉힌 창은 실제로는 어제 저녁에 시작된 창이므로, 오늘/어제 두 기준으로
+// 앉힌 창을 모두 확인해서 자정 근처 출발시각도 올바르게 판정한다.
+export function isWithinDepartureWindow(departureTime: string, now: Date = new Date()): boolean {
+  const alertTime = getAlertTime(departureTime);
+  const [hh, mm] = alertTime.split(':').map(Number);
+
+  for (const dayOffset of [0, -1]) {
+    const start = new Date(now);
+    start.setDate(start.getDate() + dayOffset);
+    start.setHours(hh, mm, 0, 0);
+    const end = new Date(start.getTime() + DEPARTURE_WINDOW_MS);
+    if (now >= start && now <= end) return true;
+  }
+  return false;
+}
+
 // 오늘 자정 epoch millis (로컬 타임존 기준)
 export function getTodayStartMs(): number {
   const now = new Date();

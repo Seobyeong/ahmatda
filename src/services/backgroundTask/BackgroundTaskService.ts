@@ -1,22 +1,9 @@
 import BackgroundFetch from 'react-native-background-fetch';
-import { getAlertTime } from '@/utils/time';
+import { getAlertTime, isWithinDepartureWindow } from '@/utils/time';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { useAppStore } from '@/store';
 
 const DEPARTURE_TASK_ID = 'ahmatda-departure-check';
-const MONITOR_WINDOW_MS = 2 * 60 * 60 * 1000; // WifiMonitorService의 2시간 타임아웃과 동일한 의도
-
-function isWithinMonitoringWindow(departureTime: string): boolean {
-  const alertTime = getAlertTime(departureTime); // "HH:mm", 출발 30분 전
-  const [hh, mm] = alertTime.split(':').map(Number);
-
-  const start = new Date();
-  start.setHours(hh, mm, 0, 0);
-  const end = new Date(start.getTime() + MONITOR_WINDOW_MS);
-
-  const now = new Date();
-  return now >= start && now <= end;
-}
 
 export const BackgroundTaskService = {
   // 앱 시작 시 1회 호출 — 주기적 백그라운드 폴링(최소 15분 간격) 등록.
@@ -64,7 +51,7 @@ export const BackgroundTaskService = {
   async _runCheck(): Promise<void> {
     const { userSettings } = useAppStore.getState();
     if (!userSettings.onboarded) return;
-    if (!isWithinMonitoringWindow(userSettings.departureTime)) return;
+    if (!isWithinDepartureWindow(userSettings.departureTime)) return;
 
     await WifiMonitorService.checkOnce();
   },

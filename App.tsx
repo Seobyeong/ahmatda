@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import notifee, { EventType } from '@notifee/react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -55,19 +56,30 @@ export default function App() {
   }, [userSettings.onboarded, userSettings.departureTime]);
 
   useEffect(() => {
-    // 온보딩 완료 후 Wi-Fi 이탈 모니터링 시작 (집 BSSID가 없으면 서비스 내부에서 자동 스킵)
+    // 온보딩 완료 후 출발 시각 감시 창에 맞춰 Wi-Fi 이탈 모니터링을 매일 재arm
+    // (집 BSSID가 없으면 서비스 내부에서 자동 스킵)
     if (!userSettings.onboarded) return;
 
-    WifiMonitorService.startMonitoring((uncheckedItems) => {
-      useAppStore.getState().showToast(
-        `외출이 감지됐어요 — 아직 ${uncheckedItems.length}개를 못 챙겼어요.`
-      );
+    const arm = () => {
+      WifiMonitorService.armForDeparture(userSettings.departureTime, (uncheckedItems) => {
+        useAppStore.getState().showToast(
+          `외출이 감지됐어요 — 아직 ${uncheckedItems.length}개를 못 챙겼어요.`
+        );
+      });
+    };
+    arm();
+
+    // 앱이 오래 백그라운드에 있으면 재확인 인터벌 자체가 실행을 보장받지 못할 수
+    // 있어서, 포그라운드로 돌아올 때마다 한 번 더 재확인해 스스로 회복하게 한다.
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') arm();
     });
 
     return () => {
-      WifiMonitorService.stopMonitoring();
+      appStateSub.remove();
+      WifiMonitorService.disarm();
     };
-  }, [userSettings.onboarded]);
+  }, [userSettings.onboarded, userSettings.departureTime]);
 
   return (
     <>

@@ -1,17 +1,20 @@
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '@/services/notification/NotificationService';
-import { getTodayString } from '@/utils/time';
+import { getTodayString, isWithinDepartureWindow } from '@/utils/time';
 import type { ChecklistItem } from '@/types';
 
-const BSSID_KEY       = 'home_bssid';
-const ALERT_DATE_KEY  = 'wifi_alert_date';
-const DEBOUNCE_MS     = 10_000;  // 10초 디바운스 (오탐 방지)
-const TIMEOUT_MS      = 2 * 60 * 60 * 1000;  // 2시간 타임아웃
+const BSSID_KEY         = 'home_bssid';
+const ALERT_DATE_KEY    = 'wifi_alert_date';
+const DEBOUNCE_MS       = 10_000;  // 10초 디바운스 (오탐 방지)
+const TIMEOUT_MS        = 2 * 60 * 60 * 1000;  // 2시간 타임아웃 (배터리 보호용 안전장치)
+const ARM_CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 감시 창 진입/이탈 재확인 주기
 
 let unsubscribe: (() => void) | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let timeoutTimer:  ReturnType<typeof setTimeout> | null = null;
+let armInterval:   ReturnType<typeof setInterval> | null = null;
+let monitorGeneration = 0;
 
 export const WifiMonitorService = {
 
@@ -61,8 +64,13 @@ export const WifiMonitorService = {
   async startMonitoring(
     onOuting: (uncheckedItems: ChecklistItem[]) => void
   ): Promise<void> {
+    // 짧은 시간 안에 startMonitoring이 중복 호출되면(예: 설정 화면에서 출발시각을
+    // 연속 수정) AsyncStorage 조회가 끝나는 순서가 호출 순서와 다를 수 있어서,
+    // 가장 마지막 호출만 리스너를 실제로 설치하도록 세대 번호로 막는다.
+    const generation = ++monitorGeneration;
     const homeBssid = await WifiMonitorService.getHomeBssid();
     if (!homeBssid) return;  // BSSID 미등록 시 모니터링 안 함
+    if (generation !== monitorGeneration) return;  // 그 사이 더 최신 호출이 있었음
 
     // 이미 실행 중이면 중복 등록 방지
     WifiMonitorService.stopMonitoring();
@@ -112,8 +120,41 @@ export const WifiMonitorService = {
 
   // 모니터링 중지
   stopMonitoring(): void {
+    // 세대 번호를 올려서, 이 시점에 AsyncStorage 조회를 기다리고 있는 startMonitoring
+    // 호출이 있다면 재개 시점에 무효화되도록 한다 (disarm 직후 뒤늦게 리스너가
+    // 살아나는 것을 방지).
+    monitorGeneration++;
     if (unsubscribe) { unsubscribe(); unsubscribe = null; }
     if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
     if (timeoutTimer)  { clearTimeout(timeoutTimer);  timeoutTimer  = null; }
+  },
+
+  // 출발 시각 기준 감시 창(출발 30분 전 ~ +2시간) 진입/이탈 여부를 주기적으로
+  // 재확인해서 매일 재arm한다. 하루짜리 setTimeout 대신 짧은 주기 재확인을 쓰는 이유:
+  // RN은 앱이 오래 백그라운드에 있으면 긴 타이머가 실행을 보장받지 못해서, 다음날
+  // 같은 시각에 정확히 맞춰 실행돼야 하는 긴 타이머는 조용히 죽을 수 있다. 짧은
+  // 주기로 반복 재확인하면 앱이 다시 활성화됐을 때 곧 따라잡는다.
+  armForDeparture(
+    departureTime: string,
+    onOuting: (uncheckedItems: ChecklistItem[]) => void
+  ): void {
+    if (armInterval) { clearInterval(armInterval); armInterval = null; }
+
+    const tick = () => {
+      if (isWithinDepartureWindow(departureTime)) {
+        if (!unsubscribe) WifiMonitorService.startMonitoring(onOuting);
+      } else {
+        WifiMonitorService.stopMonitoring();
+      }
+    };
+
+    tick();
+    armInterval = setInterval(tick, ARM_CHECK_INTERVAL_MS);
+  },
+
+  // 모니터링 + 재arm 인터벌 모두 중지 (앱 언마운트 시)
+  disarm(): void {
+    if (armInterval) { clearInterval(armInterval); armInterval = null; }
+    WifiMonitorService.stopMonitoring();
   },
 };
