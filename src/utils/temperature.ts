@@ -1,5 +1,3 @@
-import { FeedbackType } from '@/types';
-
 // 체감온도 계산
 // T_perceived = actual + 습도보정 + 바람보정 + deltaOffset
 export function calcPerceivedTemp(
@@ -19,16 +17,6 @@ export function calcPerceivedTemp(
   else if (wind > 3) windAdj = -1;
 
   return Math.round(actual + humidityAdj + windAdj + deltaOffset);
-}
-
-// 피드백 적용 → 새 deltaOffset 반환
-export function applyFeedbackDelta(
-  current: number,
-  feedback: FeedbackType
-): number {
-  if (feedback === 'cold') return current - 1;
-  if (feedback === 'hot') return current + 1;
-  return current;
 }
 
 // 온도 포맷
