@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import RNCalendarEvents from 'react-native-calendar-events';
+import { Animated, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
 import { useAppStore } from '../store';
+import { CalendarService } from '../services/calendar/CalendarService';
 import { TimeInput } from './TimeInput';
 import type { FeedbackType } from '../types';
 
@@ -54,9 +54,19 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
 
   useEffect(() => {
     if (!visible) return;
-    RNCalendarEvents.checkPermissions()
-      .then((status) => setCalendarConnected(status === 'authorized'))
-      .catch(() => setCalendarConnected(false));
+
+    const check = () => {
+      CalendarService.checkPermission().then((status) =>
+        setCalendarConnected(status === 'authorized')
+      );
+    };
+    check();
+
+    // 이 패널을 연 채로 "설정 열기"를 눌러 OS 설정으로 갔다 돌아온 경우도 반영
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => subscription.remove();
   }, [visible]);
 
   const deltaColor =
@@ -102,7 +112,13 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
 
         <View style={styles.row}>
           <Text style={styles.rowLabel}>캘린더 연동</Text>
-          <Text style={styles.rowValue}>{calendarConnected ? '연결됨' : '권한 없음'}</Text>
+          {calendarConnected ? (
+            <Text style={styles.rowValue}>연결됨</Text>
+          ) : (
+            <Pressable onPress={() => CalendarService.openSettings()}>
+              <Text style={styles.calendarSettingsLink}>권한 없음 · 설정 열기</Text>
+            </Pressable>
+          )}
         </View>
 
         <Text style={styles.sectionTitle}>날씨 알림 항목</Text>
@@ -224,6 +240,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.slate800,
+  },
+  calendarSettingsLink: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.indigo600,
   },
   timeEditRow: {
     flexDirection: 'row',

@@ -9,7 +9,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import RNCalendarEvents from 'react-native-calendar-events';
 import notifee from '@notifee/react-native';
 import * as Location from 'expo-location';
 import NetInfo, { NetInfoStateType } from '@react-native-community/netinfo';
@@ -18,6 +17,7 @@ import { AlarmClock, Bell, Calendar, Check, MapPin } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
+import { CalendarService } from '../services/calendar/CalendarService';
 import { NotificationService } from '../services/notification/NotificationService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
 import { TimeInput } from '../components/TimeInput';
@@ -41,9 +41,17 @@ interface PermissionRowProps {
   description: string;
   status: PermissionState;
   onRequest: () => void;
+  deniedActionLabel?: string;
 }
 
-function PermissionRow({ icon, title, description, status, onRequest }: PermissionRowProps) {
+function PermissionRow({
+  icon,
+  title,
+  description,
+  status,
+  onRequest,
+  deniedActionLabel,
+}: PermissionRowProps) {
   return (
     <View style={[styles.permissionRow, status === 'denied' && styles.permissionRowDenied]}>
       <View style={styles.permissionIcon}>{icon}</View>
@@ -60,7 +68,9 @@ function PermissionRow({ icon, title, description, status, onRequest }: Permissi
         </View>
       ) : (
         <Pressable style={styles.permissionButton} onPress={onRequest}>
-          <Text style={styles.permissionButtonText}>허용</Text>
+          <Text style={styles.permissionButtonText}>
+            {status === 'denied' && deniedActionLabel ? deniedActionLabel : '허용'}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -123,13 +133,22 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
 
+  // 한 번 거부되면 OS가 앱 내 권한 다이얼로그를 다시 띄워주지 않으므로(iOS/Android 공통),
+  // 이미 거부된 상태에서 다시 누르면 요청 대신 설정 화면으로 보낸다.
   const requestCalendarPermission = async () => {
-    try {
-      const result = await RNCalendarEvents.requestPermissions();
-      setPermissions((p) => ({ ...p, calendar: result === 'authorized' ? 'granted' : 'denied' }));
-    } catch {
-      setPermissions((p) => ({ ...p, calendar: 'denied' }));
+    if (permissions.calendar === 'denied') {
+      await CalendarService.openSettings();
+      return;
     }
+    const granted = await CalendarService.requestPermission();
+    setPermissions((p) => ({ ...p, calendar: granted ? 'granted' : 'denied' }));
+  };
+
+  // 설정 화면에서 돌아왔을 때 최신 상태를 반영하기 위한 재조회
+  const checkCalendarPermission = async () => {
+    const status = await CalendarService.checkPermission();
+    if (status === 'undetermined') return;  // 아직 한 번도 물어본 적 없으면 idle 유지
+    setPermissions((p) => ({ ...p, calendar: status === 'authorized' ? 'granted' : 'denied' }));
   };
 
   const requestNotificationPermission = async () => {
@@ -177,9 +196,13 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     checkExactAlarmPermission();
 
     // 설정 화면에서 돌아왔을 때(포그라운드 복귀) 최신 상태를 다시 조회한다 —
-    // openAlarmPermissionSettings()는 화면 전환만 시켜줄 뿐 결과를 반환하지 않는다.
+    // openAlarmPermissionSettings()/openSettings()는 화면 전환만 시켜줄 뿐 결과를
+    // 반환하지 않는다.
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') checkExactAlarmPermission();
+      if (nextState === 'active') {
+        checkExactAlarmPermission();
+        checkCalendarPermission();
+      }
     });
     return () => subscription.remove();
   }, []);
@@ -239,6 +262,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             description="일정에서 목적과 준비물을 자동으로 파악해요"
             status={permissions.calendar}
             onRequest={requestCalendarPermission}
+            deniedActionLabel="설정에서 허용"
           />
           <PermissionRow
             icon={<Bell size={20} color={Colors.indigo600} />}

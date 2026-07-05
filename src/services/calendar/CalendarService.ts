@@ -1,3 +1,4 @@
+import { Linking } from 'react-native';
 import RNCalendarEvents from 'react-native-calendar-events';
 import { CalendarEvent } from '@/types';
 import { getTodayStartMs, getTodayEndMs, parseEventTime } from '@/utils/time';
@@ -13,6 +14,21 @@ export const CalendarService = {
     } catch {
       return false;
     }
+  },
+
+  // 현재 권한 상태 조회 (재요청 UI에서 "이미 거부됨"과 "아직 안 물어봄"을 구분하는 용도)
+  async checkPermission(): Promise<'authorized' | 'denied' | 'restricted' | 'undetermined'> {
+    try {
+      return await RNCalendarEvents.checkPermissions();
+    } catch {
+      return 'undetermined';
+    }
+  },
+
+  // 한 번 거부된 권한은 OS가 앱 내 재요청 다이얼로그를 다시 띄워주지 않으므로,
+  // 앱 설정 화면으로 직접 이동시킨다.
+  async openSettings(): Promise<void> {
+    await Linking.openSettings();
   },
 
   // 오늘 일정 조회 (로컬 타임존 기준 자정 ~ 23:59)
