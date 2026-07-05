@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Animated,
   AppState,
   Pressable,
   ScrollView,
@@ -20,20 +19,13 @@ import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { NotificationService } from '../services/notification/NotificationService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
+import { SensitivitySelector } from '../components/SensitivitySelector';
 import { TimeInput } from '../components/TimeInput';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type OnboardingScreenProps = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
 type PermissionState = 'idle' | 'granted' | 'denied';
-
-const SENSITIVITY_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
-  1: '매우 추위 탐',
-  2: '추위 탐',
-  3: '보통',
-  4: '더위 탐',
-  5: '매우 더위 탐',
-};
 
 interface PermissionRowProps {
   icon: React.ReactNode;
@@ -74,40 +66,6 @@ function PermissionRow({
         </Pressable>
       )}
     </View>
-  );
-}
-
-interface SensitivityButtonProps {
-  value: 1 | 2 | 3 | 4 | 5;
-  selected: boolean;
-  onPress: () => void;
-}
-
-function SensitivityButton({ value, selected, onPress }: SensitivityButtonProps) {
-  const scale = useRef(new Animated.Value(selected ? 1.1 : 1)).current;
-
-  useEffect(() => {
-    Animated.spring(scale, {
-      toValue: selected ? 1.1 : 1,
-      useNativeDriver: true,
-      friction: 6,
-      tension: 80,
-    }).start();
-  }, [selected, scale]);
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        onPress={onPress}
-        style={[styles.sensitivityButton, selected && styles.sensitivityButtonActive]}
-      >
-        <Text
-          style={[styles.sensitivityButtonText, selected && styles.sensitivityButtonTextActive]}
-        >
-          {value}
-        </Text>
-      </Pressable>
-    </Animated.View>
   );
 }
 
@@ -299,23 +257,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             나의 더위/추위 민감도를 선택하면 착장 추천이 더 정확해져요.
           </Text>
 
-          <View style={styles.sensitivityRow}>
-            {([1, 2, 3, 4, 5] as const).map((value) => (
-              <SensitivityButton
-                key={value}
-                value={value}
-                selected={sensitivity === value}
-                onPress={() => setSensitivityValue(value)}
-              />
-            ))}
-          </View>
-
-          <View style={styles.sensitivitySpectrum}>
-            <Text style={styles.spectrumLabel}>추위 많이 탐</Text>
-            <Text style={styles.spectrumLabel}>더위 많이 탐</Text>
-          </View>
-
-          <Text style={styles.sensitivityCurrentLabel}>{SENSITIVITY_LABELS[sensitivity]}</Text>
+          <SensitivitySelector value={sensitivity} onChange={setSensitivityValue} />
 
           <View style={styles.infoBox}>
             <Text style={styles.infoBoxText}>초기 보정치 Δt = {deltaLabel}°C로 설정됩니다</Text>
@@ -487,49 +429,6 @@ const styles = StyleSheet.create({
     color: Colors.slate500,
     marginBottom: 24,
     lineHeight: 20,
-  },
-  sensitivityRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  sensitivityButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1.5,
-    borderColor: Colors.slate200,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sensitivityButtonActive: {
-    backgroundColor: Colors.indigo600,
-    borderColor: Colors.indigo600,
-  },
-  sensitivityButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.slate500,
-  },
-  sensitivityButtonTextActive: {
-    color: Colors.white,
-  },
-  sensitivitySpectrum: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  spectrumLabel: {
-    fontSize: 11,
-    color: Colors.slate400,
-  },
-  sensitivityCurrentLabel: {
-    marginTop: 20,
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.indigo600,
-    textAlign: 'center',
   },
   infoBox: {
     marginTop: 20,

@@ -3,8 +3,11 @@ import { Animated, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, Vi
 import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
+import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
+import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
+import { SensitivitySelector } from './SensitivitySelector';
 import { TimeInput } from './TimeInput';
 import type { FeedbackType } from '../types';
 
@@ -39,18 +42,25 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
 
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
   const deltaOffset = useAppStore((s) => s.userSettings.deltaOffset);
+  const sensitivityLevel = useAppStore((s) => s.userSettings.sensitivityLevel);
+  const homeBssid = useAppStore((s) => s.userSettings.homeBssid);
   const disabledWeatherItems = useAppStore((s) => s.userSettings.disabledWeatherItems);
   const disabledPurposeItems = useAppStore((s) => s.userSettings.disabledPurposeItems);
   const purposeId = useAppStore((s) => s.purposeId);
   const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
+  const setSensitivity = useAppStore((s) => s.setSensitivity);
+  const updateDeltaOffset = useAppStore((s) => s.updateDeltaOffset);
+  const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const removePermanentRoutine = useAppStore((s) => s.removePermanentRoutine);
   const setWeatherItemEnabled = useAppStore((s) => s.setWeatherItemEnabled);
   const setPurposeItemEnabled = useAppStore((s) => s.setPurposeItemEnabled);
 
   const [editingTime, setEditingTime] = useState(false);
+  const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
+  const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     if (!visible) return;
@@ -68,6 +78,28 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     });
     return () => subscription.remove();
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setEditingSensitivity(false);
+      setWifiRegisterStatus('idle');
+    }
+  }, [visible]);
+
+  const handleSensitivityChange = (level: 1 | 2 | 3 | 4 | 5) => {
+    setSensitivity(level);
+    updateDeltaOffset(SENSITIVITY_DELTA[level]);
+  };
+
+  const handleRegisterWifi = async () => {
+    const bssid = await WifiMonitorService.registerCurrentWifiAsHome();
+    if (bssid) {
+      setHomeBssid(bssid);
+      setWifiRegisterStatus('success');
+    } else {
+      setWifiRegisterStatus('error');
+    }
+  };
 
   const deltaColor =
     deltaOffset > 0 ? Colors.red500 : deltaOffset < 0 ? Colors.blue500 : Colors.slate600;
@@ -109,6 +141,33 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
           <Text style={styles.rowLabel}>Δt 보정치</Text>
           <Text style={[styles.rowValue, { color: deltaColor }]}>{deltaLabel}°C</Text>
         </View>
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>체온 민감도</Text>
+          <Pressable onPress={() => setEditingSensitivity((v) => !v)}>
+            <Text style={styles.calendarSettingsLink}>
+              {editingSensitivity ? '닫기' : '재조정'}
+            </Text>
+          </Pressable>
+        </View>
+        {editingSensitivity ? (
+          <View style={styles.sensitivityEditArea}>
+            <SensitivitySelector value={sensitivityLevel} onChange={handleSensitivityChange} />
+          </View>
+        ) : null}
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>홈 Wi-Fi</Text>
+          <Pressable onPress={handleRegisterWifi}>
+            <Text style={styles.calendarSettingsLink}>{homeBssid ? '재등록' : '등록'}</Text>
+          </Pressable>
+        </View>
+        {wifiRegisterStatus === 'success' ? (
+          <Text style={styles.wifiStatusSuccess}>지금 연결된 Wi-Fi를 홈으로 등록했어요.</Text>
+        ) : null}
+        {wifiRegisterStatus === 'error' ? (
+          <Text style={styles.wifiStatusError}>Wi-Fi에 연결돼 있지 않아요.</Text>
+        ) : null}
 
         <View style={styles.row}>
           <Text style={styles.rowLabel}>캘린더 연동</Text>
@@ -245,6 +304,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.indigo600,
+  },
+  sensitivityEditArea: {
+    paddingTop: 14,
+    paddingBottom: 4,
+  },
+  wifiStatusSuccess: {
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 11,
+    color: Colors.emerald600,
+  },
+  wifiStatusError: {
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 11,
+    color: Colors.red500,
   },
   timeEditRow: {
     flexDirection: 'row',

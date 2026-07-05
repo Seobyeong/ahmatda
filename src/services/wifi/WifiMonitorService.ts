@@ -35,6 +35,15 @@ export const WifiMonitorService = {
     return (state.details as { bssid?: string })?.bssid ?? null;
   },
 
+  // 현재 연결된 Wi-Fi를 홈 Wi-Fi로 재등록 (설정 화면의 "재등록" 액션용).
+  // 연결된 Wi-Fi가 없으면 null을 반환하고 아무것도 등록하지 않는다.
+  async registerCurrentWifiAsHome(): Promise<string | null> {
+    const bssid = await WifiMonitorService.getCurrentBssid();
+    if (!bssid) return null;
+    await WifiMonitorService.registerHomeBssid(bssid);
+    return bssid;
+  },
+
   // 1회성 Wi-Fi 확인 (백그라운드 폴링용) — 리스너/디바운스 없이 즉시 판정.
   // 집 밖이고 미체크 항목이 있으면 긴급 알림을 보내고 그 목록을 반환한다.
   // 하루에 한 번만 알리도록 날짜 기준으로 중복 알림을 막는다.
