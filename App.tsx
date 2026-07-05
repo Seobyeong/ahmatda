@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import notifee, { EventType } from '@notifee/react-native';
+import NetInfo from '@react-native-community/netinfo';
 
 import AppNavigator from '@/navigation/AppNavigator';
 import { NotificationService, handleNotificationBackgroundEvent } from '@/services/notification/NotificationService';
@@ -18,6 +19,10 @@ export default function App() {
   const checklist      = useAppStore(state => state.checklist);
 
   useEffect(() => {
+    // iOS에서 SSID/BSSID 조회를 시도하려면 이 설정이 반드시 필요함
+    // (설정 안 하면 entitlements/위치권한과 무관하게 네이티브 조회 자체를 안 함)
+    NetInfo.configure({ shouldFetchWiFiSSID: true });
+
     // 앱 시작 시 알림 채널 생성
     NotificationService.setupChannels();
 
