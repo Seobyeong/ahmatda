@@ -110,6 +110,7 @@ export function DashboardScreen() {
   const todayFeedback = useAppStore((s) => s.todayFeedback);
   const statusDismissed = useAppStore((s) => s.statusDismissed);
   const toast = useAppStore((s) => s.toast);
+  const scrollToChecklistRequested = useAppStore((s) => s.scrollToChecklistRequested);
 
   const setAutoDetected = useAppStore((s) => s.setAutoDetected);
   const setWeather = useAppStore((s) => s.setWeather);
@@ -128,6 +129,7 @@ export function DashboardScreen() {
   const dismissStatus = useAppStore((s) => s.dismissStatus);
   const showToast = useAppStore((s) => s.showToast);
   const clearToast = useAppStore((s) => s.clearToast);
+  const clearScrollToChecklistRequest = useAppStore((s) => s.clearScrollToChecklistRequest);
 
   const [refreshing, setRefreshing] = useState(false);
   const cancelledRef = useRef(false);
@@ -193,6 +195,20 @@ export function DashboardScreen() {
     await loadDashboardData();
     setRefreshing(false);
   };
+
+  useEffect(() => {
+    // 알림(출발 알림/긴급 알림) 본문을 탭해서 앱을 열었을 때 체크리스트로 스크롤한다.
+    // checklistYRef는 체크리스트 카드의 onLayout에서 채워지는데, 콜드스타트 직후에는
+    // 아직 레이아웃 측정 전일 수 있어서 한 프레임 미뤄서 실행한다.
+    if (!scrollToChecklistRequested) return;
+
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: checklistYRef.current, animated: true });
+    });
+    clearScrollToChecklistRequest();
+
+    return () => cancelAnimationFrame(frame);
+  }, [scrollToChecklistRequested, clearScrollToChecklistRequest]);
 
   const handlePurposeSelect = (id: PurposeId | null) => {
     setPurpose(id);

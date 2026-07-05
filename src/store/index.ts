@@ -43,6 +43,7 @@ interface AppState {
   // UI 상태
   statusDismissed: boolean;
   toast: string | null;
+  scrollToChecklistRequested: boolean; // 알림 탭(딥링크)으로 체크리스트 스크롤 요청
 }
 
 interface AppActions {
@@ -82,6 +83,8 @@ interface AppActions {
   dismissStatus: () => void;
   showToast: (message: string) => void;
   clearToast: () => void;
+  requestScrollToChecklist: () => void;
+  clearScrollToChecklistRequest: () => void;
 }
 
 type AppStore = AppState & AppActions;
@@ -126,6 +129,7 @@ const defaultState: AppState = {
 
   statusDismissed: false,
   toast: null,
+  scrollToChecklistRequested: false,
 };
 
 export const useAppStore = create<AppStore>()(
@@ -436,6 +440,8 @@ export const useAppStore = create<AppStore>()(
       dismissStatus: () => set({ statusDismissed: true }),
       showToast: (message) => set({ toast: message }),
       clearToast: () => set({ toast: null }),
+      requestScrollToChecklist: () => set({ scrollToChecklistRequested: true }),
+      clearScrollToChecklistRequest: () => set({ scrollToChecklistRequested: false }),
     }),
     {
       name: 'ahmatda-storage',

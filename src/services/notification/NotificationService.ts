@@ -180,10 +180,9 @@ export const NotificationService = {
   },
 };
 
-// 백그라운드 이벤트 핸들러 (index.js 또는 App.tsx에서 등록)
-// notifee.onBackgroundEvent(async ({ type, detail }) => { ... })
-// 여기서는 함수만 export, 등록은 App.tsx에서
-export async function handleNotificationBackgroundEvent(
+// 알림 이벤트 핸들러 — App.tsx의 onForegroundEvent(포그라운드)와
+// notifee.onBackgroundEvent(백그라운드) 양쪽에서 공유해서 쓴다.
+export async function handleNotificationEvent(
   type: number,
   detail: { notification?: { id?: string }; pressAction?: { id?: string } }
 ): Promise<void> {
@@ -199,5 +198,9 @@ export async function handleNotificationBackgroundEvent(
       // TODO: 서버 전송이 필요하면 여기서 axios 호출
       // await axios.post('/api/v1/weather/feedback', { val: actionId });
     }
+  } else if (type === EventType.PRESS && detail.pressAction?.id === 'open-checklist') {
+    // 출발 알림/긴급 알림 본문을 탭해서 앱을 연 경우 — 체크리스트 섹션으로 스크롤 요청
+    const { useAppStore } = await import('@/store');
+    useAppStore.getState().requestScrollToChecklist();
   }
 }

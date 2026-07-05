@@ -5,14 +5,14 @@ import notifee, { EventType } from '@notifee/react-native';
 import NetInfo from '@react-native-community/netinfo';
 
 import AppNavigator from '@/navigation/AppNavigator';
-import { NotificationService, handleNotificationBackgroundEvent } from '@/services/notification/NotificationService';
+import { NotificationService, handleNotificationEvent } from '@/services/notification/NotificationService';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskService';
 import { useAppStore } from '@/store';
 
 // 백그라운드 이벤트 핸들러 등록 (앱 실행 전 최상단에 등록 필수)
 notifee.onBackgroundEvent(async ({ type, detail }) => {
-  await handleNotificationBackgroundEvent(type, detail);
+  await handleNotificationEvent(type, detail);
 });
 
 export default function App() {
@@ -30,14 +30,16 @@ export default function App() {
     // 앱 시작 시 1회 백그라운드 폴링 등록 (react-native-background-fetch)
     BackgroundTaskService.configure();
 
-    // 포그라운드 알림 이벤트 핸들러
+    // 앱이 완전히 종료된 상태에서 알림을 탭해 콜드스타트된 경우 —
+    // onForegroundEvent/onBackgroundEvent 둘 다 이 최초 실행 시점에는 아직
+    // 이벤트를 전달해주지 않으므로 별도로 확인해야 한다.
+    notifee.getInitialNotification().then((initial) => {
+      if (initial) handleNotificationEvent(EventType.PRESS, initial);
+    });
+
+    // 포그라운드 알림 이벤트 핸들러 — 백그라운드와 동일한 로직을 공유한다.
     const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {
-      if (type === EventType.ACTION_PRESS) {
-        const actionId = detail.pressAction?.id;
-        if (actionId && ['cold', 'good', 'hot'].includes(actionId)) {
-          useAppStore.getState().applyFeedback(actionId as 'cold' | 'good' | 'hot');
-        }
-      }
+      handleNotificationEvent(type, detail);
     });
 
     return () => { unsubscribe(); };
