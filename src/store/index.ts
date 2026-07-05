@@ -91,6 +91,15 @@ interface AppActions {
 
 type AppStore = AppState & AppActions;
 
+// 체크리스트/루틴 아이템 id 생성 — 세션 내에서 항상 유일하도록 단조 증가 카운터를 쓴다.
+// 이전에는 각 액션(임시 항목 추가/루틴 추가/체크리스트 재빌드)이 각자
+// `Date.now() + 로컬 인덱스`로 독립 계산했는데, 서로 다른 액션이 같은 밀리초에
+// 우연히 같은 값을 계산할 수 있어 이론상 id 충돌이 가능했다.
+let nextItemId = Date.now();
+function generateItemId(): number {
+  return nextItemId++;
+}
+
 // 기본 제공 루틴 — permanentRoutines의 초기 시드값. 다른 커스텀 루틴과 동일하게
 // 설정 화면 "내 루틴" 목록에서 사용자가 자유롭게 삭제할 수 있다.
 // 목적별(tier2) 준비물은 같은 라벨이 여러 목적에 중복 등장하므로(예: '노트북'이 출근/공부
@@ -163,7 +172,7 @@ export const useAppStore = create<AppStore>()(
           checklist: [
             ...state.checklist,
             {
-              id: Date.now() + state.checklist.length,
+              id: generateItemId(),
               label,
               icon: 'sparkles',
               tier: 0,
@@ -180,7 +189,7 @@ export const useAppStore = create<AppStore>()(
           permanentRoutines: [
             ...state.permanentRoutines,
             {
-              id: Date.now() + state.permanentRoutines.length,
+              id: generateItemId(),
               label,
               icon: 'check-circle',
               tier: 3,
@@ -245,9 +254,7 @@ export const useAppStore = create<AppStore>()(
 
       buildChecklist: () => {
         const { currentWeather, purposeId, permanentRoutines, userSettings, checklist: prevChecklist } = get();
-        const now = Date.now();
-        let index = 0;
-        const nextId = () => now + index++;
+        const nextId = generateItemId;
 
         // 라벨별 체크 상태를 기억해뒀다가 재빌드 후에도 유지한다 (목적 변경 등으로
         // 인한 재빌드 시 이미 챙긴 항목의 체크가 풀리는 것을 방지).
