@@ -52,20 +52,8 @@ function buildPath(points: { x: number; y: number }[]): string {
 }
 
 export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
-  const futureSlots = slots.slice(currentSlot + 1);
-  const rainLater = futureSlots.some((s) => s.alert === 'rain');
-  const futureTemps = futureSlots.map((s) => s.temp);
-  const minFutureTemp = futureTemps.length > 0 ? Math.min(...futureTemps) : slots[currentSlot]?.temp ?? 0;
-  const tempDrop = (slots[currentSlot]?.temp ?? 0) - minFutureTemp;
-  const coldLater = futureSlots.some((s) => s.alert === 'cold') && tempDrop >= 5;
-
-  let alertText: string | null = null;
-  if (rainLater) {
-    alertText = '오늘 오후 비 소식이 있어요 — 우산을 챙기세요.';
-  } else if (coldLater) {
-    alertText = `저녁 기온이 ${tempDrop}°C 낮아져요 — 겉옷을 준비하세요.`;
-  }
-
+  // 강수/기온급강하 힌트 문구는 DashboardScreen이 WeatherService.getTimelineHint()로
+  // 이미 상단 카드에 표시하고 있어서, 여기서 같은 판정을 다시 구현해 중복 표시하지 않는다.
   const temps = slots.map((s) => s.temp);
   const minTemp = Math.min(...temps);
   const maxTemp = Math.max(...temps);
@@ -85,12 +73,6 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
         <Text style={styles.title}>오늘 시간대별 날씨</Text>
         <Text style={styles.subtitle}>3시간 간격</Text>
       </View>
-
-      {alertText ? (
-        <View style={styles.alertBox}>
-          <Text style={styles.alertText}>{alertText}</Text>
-        </View>
-      ) : null}
 
       <View style={styles.row}>
         {slots.map((slot, i) => {
@@ -160,18 +142,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 11,
     color: Colors.slate400,
-  },
-  alertBox: {
-    backgroundColor: Colors.sky50,
-    borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginBottom: 8,
-  },
-  alertText: {
-    fontSize: 12,
-    color: Colors.sky600,
-    fontWeight: '500',
   },
   row: {
     flexDirection: 'row',
