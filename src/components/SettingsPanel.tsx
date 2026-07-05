@@ -3,6 +3,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 
 import RNCalendarEvents from 'react-native-calendar-events';
 import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { PURPOSES } from '../constants/purposes';
 import { useAppStore } from '../store';
 import { TimeInput } from './TimeInput';
 import type { FeedbackType } from '../types';
@@ -39,11 +40,14 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
   const deltaOffset = useAppStore((s) => s.userSettings.deltaOffset);
   const disabledWeatherItems = useAppStore((s) => s.userSettings.disabledWeatherItems);
+  const disabledPurposeItems = useAppStore((s) => s.userSettings.disabledPurposeItems);
+  const purposeId = useAppStore((s) => s.purposeId);
   const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const removePermanentRoutine = useAppStore((s) => s.removePermanentRoutine);
   const setWeatherItemEnabled = useAppStore((s) => s.setWeatherItemEnabled);
+  const setPurposeItemEnabled = useAppStore((s) => s.setPurposeItemEnabled);
 
   const [editingTime, setEditingTime] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
@@ -119,6 +123,29 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
             </View>
           );
         })}
+
+        {purposeId && (
+          <>
+            <Text style={styles.sectionTitle}>{PURPOSES[purposeId].label} 준비물</Text>
+            {PURPOSES[purposeId].items.map((purposeItem) => {
+              const enabled = !disabledPurposeItems.includes(`${purposeId}:${purposeItem.label}`);
+              return (
+                <View key={purposeItem.label} style={styles.weatherRow}>
+                  <View style={styles.weatherTextArea}>
+                    <Text style={styles.routineLabel}>{purposeItem.label}</Text>
+                    <Text style={styles.weatherDescription}>{purposeItem.note}</Text>
+                  </View>
+                  <Switch
+                    value={enabled}
+                    onValueChange={(value) => setPurposeItemEnabled(purposeId, purposeItem.label, value)}
+                    trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
+                    thumbColor={Colors.white}
+                  />
+                </View>
+              );
+            })}
+          </>
+        )}
 
         <Text style={styles.sectionTitle}>내 루틴</Text>
         {permanentRoutines.length === 0 ? (

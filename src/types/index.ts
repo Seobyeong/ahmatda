@@ -89,6 +89,8 @@ export interface UserSettings {
   sensitivityLevel: 1 | 2 | 3 | 4 | 5;
   onboarded: boolean;
   disabledWeatherItems: string[]; // 사용자가 영구적으로 끈 날씨 트리거 항목 라벨 (예: '우산')
+  disabledPurposeItems: string[]; // 사용자가 영구적으로 끈 목적별 준비물 — "purposeId:라벨" 형식
+                                   // (같은 라벨이 여러 목적에 중복 등장해서 목적별로 구분 필요)
 }
 
 // 피드백 기록

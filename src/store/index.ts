@@ -73,6 +73,7 @@ interface AppActions {
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   completeOnboarding: () => void;
   setWeatherItemEnabled: (label: string, enabled: boolean) => void;
+  setPurposeItemEnabled: (purposeId: PurposeId, label: string, enabled: boolean) => void;
 
   // 피드백
   applyFeedback: (val: FeedbackType) => void;
@@ -87,6 +88,10 @@ type AppStore = AppState & AppActions;
 
 // 기본 제공 루틴 — permanentRoutines의 초기 시드값. 다른 커스텀 루틴과 동일하게
 // 설정 화면 "내 루틴" 목록에서 사용자가 자유롭게 삭제할 수 있다.
+// 목적별(tier2) 준비물은 같은 라벨이 여러 목적에 중복 등장하므로(예: '노트북'이 출근/공부
+// 둘 다에 있음) 목적별로 구분해서 끄고 켤 수 있게 "purposeId:라벨" 형식의 키를 쓴다.
+const purposeItemKey = (purposeId: PurposeId, label: string) => `${purposeId}:${label}`;
+
 const DEFAULT_ROUTINES: ChecklistItem[] = [
   { id: 1, label: '집 열쇠', icon: 'key', tier: 3, badge: null, checked: false, temp: false, permanent: true },
   { id: 2, label: '지갑', icon: 'wallet', tier: 3, badge: null, checked: false, temp: false, permanent: true },
@@ -113,6 +118,7 @@ const defaultState: AppState = {
     sensitivityLevel: 3,
     onboarded: false,
     disabledWeatherItems: [],
+    disabledPurposeItems: [],
   },
 
   feedbackHistory: [],
@@ -195,9 +201,9 @@ export const useAppStore = create<AppStore>()(
           }));
         }
 
-        // tier 1(날씨 트리거) 항목은 매번 새로 생성되므로, 여기서 지우면 그 순간만
-        // 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를 지속시키려면
-        // 영구적으로 비활성화해야 한다.
+        // tier 1(날씨 트리거)·tier 2(목적별) 항목은 매번 새로 생성되므로, 여기서 지우면
+        // 그 순간만 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를
+        // 지속시키려면 영구적으로 비활성화해야 한다.
         if (item.tier === 1) {
           set((state) => ({
             userSettings: {
@@ -207,6 +213,21 @@ export const useAppStore = create<AppStore>()(
                 : [...state.userSettings.disabledWeatherItems, item.label],
             },
           }));
+        }
+
+        if (item.tier === 2) {
+          const { purposeId } = get();
+          if (purposeId) {
+            const key = purposeItemKey(purposeId, item.label);
+            set((state) => ({
+              userSettings: {
+                ...state.userSettings,
+                disabledPurposeItems: state.userSettings.disabledPurposeItems.includes(key)
+                  ? state.userSettings.disabledPurposeItems
+                  : [...state.userSettings.disabledPurposeItems, key],
+              },
+            }));
+          }
         }
       },
 
@@ -286,7 +307,10 @@ export const useAppStore = create<AppStore>()(
             ? `${matchedEvent.time} '${matchedEvent.title}' 연동됨`
             : null;
 
-          purpose.items.forEach((purposeItem) => {
+          const isPurposeItemEnabled = (label: string) =>
+            !userSettings.disabledPurposeItems.includes(purposeItemKey(purposeId, label));
+
+          purpose.items.filter((purposeItem) => isPurposeItemEnabled(purposeItem.label)).forEach((purposeItem) => {
             items.push({
               id: nextId(),
               label: purposeItem.label,
@@ -368,6 +392,21 @@ export const useAppStore = create<AppStore>()(
           },
         })),
 
+      setPurposeItemEnabled: (purposeId, label, enabled) =>
+        set((state) => {
+          const key = purposeItemKey(purposeId, label);
+          return {
+            userSettings: {
+              ...state.userSettings,
+              disabledPurposeItems: enabled
+                ? state.userSettings.disabledPurposeItems.filter((k) => k !== key)
+                : state.userSettings.disabledPurposeItems.includes(key)
+                  ? state.userSettings.disabledPurposeItems
+                  : [...state.userSettings.disabledPurposeItems, key],
+            },
+          };
+        }),
+
       // 피드백
       // 오늘 이미 준 피드백과 같은 값이면 무시하고, 다른 값으로 바꾸는 경우 이전
       // 보정치를 먼저 되돌린 뒤 새로 적용한다 — 그래야 앱 재시작이나 재선택으로
@@ -401,6 +440,17 @@ export const useAppStore = create<AppStore>()(
     {
       name: 'ahmatda-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // 기본 merge는 최상위 키만 얕게 합치기 때문에, 예전 버전에 저장된 userSettings에
+      // 새로 추가된 필드(예: disabledPurposeItems)가 없으면 그대로 undefined가 된다.
+      // userSettings만 defaultState 기준으로 한 겹 더 깊게 합쳐서 항상 완전한 형태를 보장한다.
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AppStore> | undefined;
+        return {
+          ...currentState,
+          ...persisted,
+          userSettings: { ...currentState.userSettings, ...persisted?.userSettings },
+        };
+      },
       partialize: (state) => ({
         checklist: state.checklist,
         checklistDate: state.checklistDate,
