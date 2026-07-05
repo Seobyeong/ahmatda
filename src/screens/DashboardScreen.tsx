@@ -25,6 +25,7 @@ import { WeatherService } from '../services/weather/WeatherService';
 import { calcPerceivedTemp, formatPerceivedFormula, formatTemp } from '../utils/temperature';
 import { getAlertTime, getCurrentSlotIndex, getTodayString } from '../utils/time';
 import { getCurrentCoords } from '../utils/location';
+import { isWithinKorea } from '../utils/kmaGrid';
 import { ChecklistItem } from '../components/ChecklistItem';
 import { ProgressBar } from '../components/ProgressBar';
 import { PurposeSelector } from '../components/PurposeSelector';
@@ -105,6 +106,7 @@ export function DashboardScreen() {
   const autoDetectedEvent = useAppStore((s) => s.autoDetectedEvent);
   const currentWeather = useAppStore((s) => s.currentWeather);
   const weatherLoading = useAppStore((s) => s.weatherLoading);
+  const weatherOutOfArea = useAppStore((s) => s.weatherOutOfArea);
   const weatherTimeline = useAppStore((s) => s.weatherTimeline);
   const userSettings = useAppStore((s) => s.userSettings);
   const todayFeedback = useAppStore((s) => s.todayFeedback);
@@ -116,6 +118,7 @@ export function DashboardScreen() {
   const setWeather = useAppStore((s) => s.setWeather);
   const setTimeline = useAppStore((s) => s.setTimeline);
   const setWeatherLoading = useAppStore((s) => s.setWeatherLoading);
+  const setWeatherOutOfArea = useAppStore((s) => s.setWeatherOutOfArea);
   const buildChecklist = useAppStore((s) => s.buildChecklist);
   const startNewDay = useAppStore((s) => s.startNewDay);
   const setPurpose = useAppStore((s) => s.setPurpose);
@@ -156,6 +159,18 @@ export function DashboardScreen() {
     const coords = await getCurrentCoords();
     const lat = coords?.lat ?? FALLBACK_LAT;
     const lon = coords?.lon ?? FALLBACK_LON;
+
+    // 기상청 API는 국내 전용 — 좌표 확인이 된 상태에서 명백히 해외라면 API를
+    // 호출해봤자 항상 실패(또는 무의미한 값)라서, 조용히 실패하는 대신 이유를
+    // 알려주고 조회 자체를 건너뛴다. (위치 조회 실패로 fallback 좌표를 쓴
+    // 경우는 이 판정에서 제외 — 그건 별개의 위치 권한 문제)
+    if (coords && !isWithinKorea(coords.lat, coords.lon)) {
+      setWeatherOutOfArea(true);
+      setWeatherLoading(false);
+      return;
+    }
+    setWeatherOutOfArea(false);
+
     const [weather, timeline] = await Promise.all([
       WeatherService.getCurrentWeather(lat, lon),
       WeatherService.getTimeline(lat, lon),
@@ -400,6 +415,10 @@ export function DashboardScreen() {
                 ))}
               </View>
             </>
+          ) : weatherOutOfArea ? (
+            <Text style={styles.loadingText}>
+              기상청 API는 국내 전용이에요 — 해외에서는 날씨 정보를 제공할 수 없어요.
+            </Text>
           ) : weatherLoading ? (
             <Text style={styles.loadingText}>날씨 정보를 불러오는 중...</Text>
           ) : (

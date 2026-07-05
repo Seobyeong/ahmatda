@@ -42,3 +42,18 @@ export function latLonToGrid(lat: number, lon: number): { nx: number; ny: number
 
   return { nx, ny };
 }
+
+// 기상청 API는 국내 전용이라, 격자 좌표 자체는 계산되지만 응답은 항상 실패하거나
+// 무의미한 값이 된다. 정확한 국경 판정이 아니라 "명백히 해외"인 경우만 걸러내는
+// 대략적인 사각 범위(제주 포함, 독도 등 부속 도서 포함해 여유 있게 잡음).
+const KOREA_LAT_MIN = 33.0;
+const KOREA_LAT_MAX = 38.7;
+const KOREA_LON_MIN = 124.5;
+const KOREA_LON_MAX = 131.9;
+
+export function isWithinKorea(lat: number, lon: number): boolean {
+  return (
+    lat >= KOREA_LAT_MIN && lat <= KOREA_LAT_MAX &&
+    lon >= KOREA_LON_MIN && lon <= KOREA_LON_MAX
+  );
+}

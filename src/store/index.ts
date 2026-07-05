@@ -32,6 +32,7 @@ interface AppState {
   currentWeather: CurrentWeather | null;
   weatherTimeline: WeatherSlot[];
   weatherLoading: boolean;
+  weatherOutOfArea: boolean; // 기상청 API 서비스 지역(국내) 밖에 있어서 조회를 시도하지 않음
 
   // 유저 설정
   userSettings: UserSettings;
@@ -66,6 +67,7 @@ interface AppActions {
   setWeather: (weather: CurrentWeather) => void;
   setTimeline: (slots: WeatherSlot[]) => void;
   setWeatherLoading: (loading: boolean) => void;
+  setWeatherOutOfArea: (outOfArea: boolean) => void;
 
   // 유저 설정
   updateDepartureTime: (time: string) => void;
@@ -113,6 +115,7 @@ const defaultState: AppState = {
   currentWeather: null,
   weatherTimeline: [],
   weatherLoading: false,
+  weatherOutOfArea: false,
 
   userSettings: {
     departureTime: '08:15',
@@ -357,6 +360,7 @@ export const useAppStore = create<AppStore>()(
       setTimeline: (slots) => set({ weatherTimeline: slots }),
 
       setWeatherLoading: (loading) => set({ weatherLoading: loading }),
+      setWeatherOutOfArea: (outOfArea) => set({ weatherOutOfArea: outOfArea }),
 
       // 유저 설정
       updateDepartureTime: (time) =>
