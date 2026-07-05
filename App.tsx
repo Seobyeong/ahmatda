@@ -5,6 +5,7 @@ import notifee, { EventType } from '@notifee/react-native';
 import NetInfo from '@react-native-community/netinfo';
 
 import AppNavigator from '@/navigation/AppNavigator';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { NotificationService, handleNotificationEvent } from '@/services/notification/NotificationService';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskService';
@@ -96,9 +97,9 @@ export default function App() {
   }, [userSettings.onboarded, userSettings.departureTime]);
 
   return (
-    <>
+    <ErrorBoundary>
       <StatusBar style="dark" />
       <AppNavigator />
-    </>
+    </ErrorBoundary>
   );
 }
