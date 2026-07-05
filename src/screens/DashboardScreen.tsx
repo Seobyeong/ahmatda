@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Animated,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import {
   CloudFog,
   Droplets,
@@ -95,6 +104,7 @@ export function DashboardScreen() {
   const autoDetected = useAppStore((s) => s.autoDetected);
   const autoDetectedEvent = useAppStore((s) => s.autoDetectedEvent);
   const currentWeather = useAppStore((s) => s.currentWeather);
+  const weatherLoading = useAppStore((s) => s.weatherLoading);
   const weatherTimeline = useAppStore((s) => s.weatherTimeline);
   const userSettings = useAppStore((s) => s.userSettings);
   const todayFeedback = useAppStore((s) => s.todayFeedback);
@@ -119,34 +129,50 @@ export function DashboardScreen() {
   const showToast = useAppStore((s) => s.showToast);
   const clearToast = useAppStore((s) => s.clearToast);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const cancelledRef = useRef(false);
+
+  // 캘린더 일정 → 목적 감지, 날씨/타임라인 조회. 최초 마운트와 pull-to-refresh
+  // 양쪽에서 재사용한다 — 날씨 API가 실패하고 캐시도 없으면 currentWeather가
+  // 계속 null로 남아 "불러오는 중" 문구가 무한히 떠 있었는데, 재시도 수단이
+  // 없어서 사용자가 앱을 재시작하는 것 말고는 복구할 방법이 없었음.
+  const loadDashboardData = async () => {
+    // 초기 state의 weatherLoading 기본값은 false라서, 이 함수가 시작되자마자
+    // (캘린더 조회를 기다리는 동안에도) true로 먼저 세팅해둬야 "아직 로딩을 시작하지도
+    // 않은 순간"이 "실패"로 잘못 표시되는 걸 막을 수 있다.
+    setWeatherLoading(true);
+
+    const events = await CalendarService.getTodayEvents();
+    if (cancelledRef.current) return;
+
+    const detectedId = detectPurposeFromEvents(events, userSettings.departureTime);
+    const matchedEvent = detectedId
+      ? findMatchingEvent(detectedId, events, userSettings.departureTime)
+      : null;
+    setAutoDetected(detectedId, matchedEvent);
+
+    const coords = await getCurrentCoords();
+    const lat = coords?.lat ?? FALLBACK_LAT;
+    const lon = coords?.lon ?? FALLBACK_LON;
+    const [weather, timeline] = await Promise.all([
+      WeatherService.getCurrentWeather(lat, lon),
+      WeatherService.getTimeline(lat, lon),
+    ]);
+    if (cancelledRef.current) return;
+    setWeatherLoading(false);
+
+    if (weather) {
+      setWeather({ ...weather, calendarEvents: events });
+    }
+    setTimeline(timeline);
+  };
+
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
 
     (async () => {
-      const events = await CalendarService.getTodayEvents();
-      if (cancelled) return;
-
-      const detectedId = detectPurposeFromEvents(events, userSettings.departureTime);
-      const matchedEvent = detectedId
-        ? findMatchingEvent(detectedId, events, userSettings.departureTime)
-        : null;
-      setAutoDetected(detectedId, matchedEvent);
-
-      setWeatherLoading(true);
-      const coords = await getCurrentCoords();
-      const lat = coords?.lat ?? FALLBACK_LAT;
-      const lon = coords?.lon ?? FALLBACK_LON;
-      const [weather, timeline] = await Promise.all([
-        WeatherService.getCurrentWeather(lat, lon),
-        WeatherService.getTimeline(lat, lon),
-      ]);
-      if (cancelled) return;
-      setWeatherLoading(false);
-
-      if (weather) {
-        setWeather({ ...weather, calendarEvents: events });
-      }
-      setTimeline(timeline);
+      await loadDashboardData();
+      if (cancelledRef.current) return;
 
       // 오늘 이미 빌드된 체크리스트가 있으면(=재실행/재오픈) 체크 상태를 보존하고
       // 새로 만들지 않는다. 날짜가 바뀌었거나 최초 실행이면 새로 빌드하고
@@ -157,10 +183,16 @@ export function DashboardScreen() {
     })();
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
+  };
 
   const handlePurposeSelect = (id: PurposeId | null) => {
     setPurpose(id);
@@ -267,6 +299,9 @@ export function DashboardScreen() {
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.indigo600} />
+        }
       >
         {!statusDismissed ? (
           <View style={styles.statusBar}>
@@ -349,8 +384,15 @@ export function DashboardScreen() {
                 ))}
               </View>
             </>
-          ) : (
+          ) : weatherLoading ? (
             <Text style={styles.loadingText}>날씨 정보를 불러오는 중...</Text>
+          ) : (
+            <View>
+              <Text style={styles.loadingText}>날씨 정보를 가져오지 못했어요.</Text>
+              <Pressable style={styles.retryButton} onPress={handleRefresh}>
+                <Text style={styles.retryButtonText}>다시 시도</Text>
+              </Pressable>
+            </View>
           )}
         </View>
 
@@ -657,6 +699,19 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 13,
     color: Colors.slate400,
+  },
+  retryButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 50,
+    backgroundColor: Colors.white,
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.indigo600,
   },
   sectionSpacing: {
     marginTop: 16,
