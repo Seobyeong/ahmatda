@@ -91,6 +91,10 @@ export function PurposeSelector({
           );
         })}
       </ScrollView>
+
+      {purposeId ? (
+        <Text style={styles.clothingHint}>{PURPOSES[purposeId].clothingHint}</Text>
+      ) : null}
     </View>
   );
 }
@@ -133,6 +137,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     gap: 8,
     paddingVertical: 2,
+  },
+  clothingHint: {
+    marginTop: 10,
+    fontSize: 12,
+    color: Colors.slate500,
   },
   chip: {
     paddingVertical: 8,
