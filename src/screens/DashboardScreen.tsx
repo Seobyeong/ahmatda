@@ -211,6 +211,22 @@ export function DashboardScreen() {
     setRefreshing(false);
   };
 
+  // buildChecklist()는 그동안 목적 수동 선택/영구 루틴 추가 같은 사용자 액션에서만
+  // 호출됐다. 그래서 같은 날 안에 날씨가 갱신되거나(pull-to-refresh, 재실행 시 새 예보),
+  // 캘린더 기반 자동감지 목적이 바뀌거나, 설정 화면에서 날씨/목적 항목 스위치를 다시
+  // 켜도 체크리스트에 반영되지 않는 문제가 있었다. 이 값들이 바뀔 때마다 재빌드해서
+  // 항상 최신 상태를 반영하게 한다. 최초 마운트 시 1회는 위 useEffect(마운트 시
+  // loadDashboardData+startNewDay)가 이미 처리하므로 건너뛴다.
+  const skipRebuildRef = useRef(true);
+  useEffect(() => {
+    if (skipRebuildRef.current) {
+      skipRebuildRef.current = false;
+      return;
+    }
+    buildChecklist();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWeather, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems]);
+
   useEffect(() => {
     // 알림(출발 알림/긴급 알림) 본문을 탭해서 앱을 열었을 때 체크리스트로 스크롤한다.
     // checklistYRef는 체크리스트 카드의 onLayout에서 채워지는데, 콜드스타트 직후에는
