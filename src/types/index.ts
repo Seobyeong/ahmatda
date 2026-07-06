@@ -98,6 +98,12 @@ export interface FeedbackRecord {
   val: FeedbackType;
 }
 
+// 외출(Wi-Fi 이탈) 시점에 미체크였던 항목 기록 — "자주 까먹는 항목" 학습용
+export interface ForgottenRecord {
+  date: string;     // "YYYY-MM-DD"
+  labels: string[]; // 그날 안 챙기고 나간 항목 라벨들
+}
+
 // 타임라인 힌트 (착장 추천 연동)
 export interface TimelineHint {
   text: string;

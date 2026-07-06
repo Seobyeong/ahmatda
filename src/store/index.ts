@@ -7,12 +7,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getTodayString } from '../utils/time';
+import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import type {
   CalendarEvent,
   ChecklistItem,
   CurrentWeather,
   FeedbackRecord,
   FeedbackType,
+  ForgottenRecord,
   PurposeId,
   UserSettings,
   WeatherSlot,
@@ -41,6 +43,9 @@ interface AppState {
   // 피드백
   feedbackHistory: FeedbackRecord[];
   todayFeedback: FeedbackType | null;
+
+  // 자주 까먹는 항목 학습 — 외출(Wi-Fi 이탈) 시점에 미체크였던 항목 기록
+  forgottenHistory: ForgottenRecord[];
 
   // UI 상태
   statusDismissed: boolean;
@@ -81,6 +86,9 @@ interface AppActions {
 
   // 피드백
   applyFeedback: (val: FeedbackType) => void;
+
+  // 자주 까먹는 항목
+  recordForgotten: (labels: string[]) => void;
 
   // UI
   dismissStatus: () => void;
@@ -139,6 +147,8 @@ const defaultState: AppState = {
 
   feedbackHistory: [],
   todayFeedback: null,
+
+  forgottenHistory: [],
 
   statusDismissed: false,
   toast: null,
@@ -254,8 +264,14 @@ export const useAppStore = create<AppStore>()(
         })),
 
       buildChecklist: () => {
-        const { currentWeather, purposeId, permanentRoutines, userSettings, checklist: prevChecklist } = get();
+        const { currentWeather, purposeId, permanentRoutines, userSettings, checklist: prevChecklist, forgottenHistory } = get();
         const nextId = generateItemId;
+
+        // 최근 7일간 2회 이상 안 챙기고 나간 항목에 "이번 주 N번 놓침" 뱃지를 단다.
+        // 날씨/일정 뱃지가 이미 있는 항목은 그쪽이 더 시급한 정보라 덮어쓰지 않는다.
+        const forgottenCounts = countRecentForgotten(forgottenHistory, getTodayString());
+        const withForgottenBadge = (item: ChecklistItem): ChecklistItem =>
+          item.badge ? item : { ...item, badge: getForgottenBadge(forgottenCounts.get(item.label)) };
 
         // 라벨별 체크 상태를 기억해뒀다가 재빌드 후에도 유지한다 (목적 변경 등으로
         // 인한 재빌드 시 이미 챙긴 항목의 체크가 풀리는 것을 방지).
@@ -345,7 +361,7 @@ export const useAppStore = create<AppStore>()(
           items.push({ ...routine, id: nextId(), checked: wasChecked.get(routine.label) ?? false });
         });
 
-        set({ checklist: items, checklistDate: getTodayString() });
+        set({ checklist: items.map(withForgottenBadge), checklistDate: getTodayString() });
       },
 
       // 날짜가 바뀌었을 때 호출 — 체크리스트를 새로 빌드하고, 자정을 넘겨도 리셋되지
@@ -448,6 +464,22 @@ export const useAppStore = create<AppStore>()(
           };
         }),
 
+      // 자주 까먹는 항목 — 외출(Wi-Fi 이탈) 감지 시점의 미체크 라벨을 기록한다.
+      // WifiMonitorService.checkOnce()가 날짜 기준으로 하루 1회만 부르지만, 같은 날
+      // 중복 호출돼도 안전하도록 그날 기록은 교체한다. 뱃지 집계는 최근 7일만 쓰므로
+      // 30일치만 남긴다.
+      recordForgotten: (labels) =>
+        set((state) => {
+          if (labels.length === 0) return {};
+          const today = getTodayString();
+          return {
+            forgottenHistory: [
+              ...state.forgottenHistory.filter((r) => r.date !== today),
+              { date: today, labels },
+            ].slice(-30),
+          };
+        }),
+
       // UI
       dismissStatus: () => set({ statusDismissed: true }),
       showToast: (message) => set({ toast: message }),
@@ -475,6 +507,7 @@ export const useAppStore = create<AppStore>()(
         permanentRoutines: state.permanentRoutines,
         userSettings: state.userSettings,
         feedbackHistory: state.feedbackHistory,
+        forgottenHistory: state.forgottenHistory,
         // 같은 날 앱이 재시작돼도(기기 재부팅, 강제 종료 등) 오늘 이미 준 피드백을
         // 기억해야 applyFeedback의 재선택 방지 로직이 제대로 동작한다.
         todayFeedback: state.todayFeedback,

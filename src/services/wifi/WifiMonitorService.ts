@@ -65,6 +65,9 @@ export const WifiMonitorService = {
 
     await NotificationService.triggerUrgentAlert(unchecked);
     await AsyncStorage.setItem(ALERT_DATE_KEY, today);
+    // "자주 까먹는 항목" 학습 — 안 챙기고 나간 항목을 기록해두면 다음 재빌드 때
+    // 최근 7일간 2회 이상 놓친 항목에 "이번 주 N번 놓침" 뱃지가 붙는다.
+    useAppStore.getState().recordForgotten(unchecked.map((i) => i.label));
     return unchecked;
   },
 
