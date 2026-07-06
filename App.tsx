@@ -18,7 +18,10 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 export default function App() {
   const userSettings   = useAppStore(state => state.userSettings);
-  const checklist      = useAppStore(state => state.checklist);
+  // 알림 문구에 실제로 쓰이는 값은 "미체크 개수"뿐이므로 개수만 구독한다 —
+  // checklist 배열 전체를 구독하면 개수가 그대로여도(재빌드로 배열 identity만
+  // 바뀌는 경우, 체크된 항목 삭제 등) 네이티브 알림 취소+재예약이 매번 일어난다.
+  const uncheckedCount = useAppStore(state => state.checklist.filter(i => !i.checked).length);
 
   useEffect(() => {
     // iOS에서 SSID/BSSID 조회를 시도하려면 이 설정이 반드시 필요함
@@ -49,26 +52,20 @@ export default function App() {
   useEffect(() => {
     // 온보딩 완료 또는 출발시각 변경 시 알림 전체 재예약 (전날 알림/출발 알림/피드백 알림)
     if (userSettings.onboarded) {
-      NotificationService.rescheduleAll(
-        userSettings.departureTime,
-        checklist.filter(i => !i.checked).length
-      );
+      NotificationService.rescheduleAll(userSettings.departureTime, uncheckedCount);
       // 출발 알림 시각에 맞춰 백그라운드 확인 태스크도 함께 예약
       BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
     }
   }, [userSettings.onboarded, userSettings.departureTime]);
 
   useEffect(() => {
-    // 체크리스트가 바뀔 때마다(체크/추가/삭제) 이미 예약된 출발 알림의 "N개" 문구를
-    // 최신 미체크 개수로 갱신한다. 위 effect는 온보딩/출발시각이 바뀔 때만 실행되므로
-    // 그 사이의 체크리스트 변경은 예약 시점 스냅샷 그대로 남는 문제가 있었음.
+    // 미체크 개수가 바뀔 때마다 이미 예약된 출발 알림의 "N개" 문구를 갱신한다.
+    // 위 effect는 온보딩/출발시각이 바뀔 때만 실행되므로 그 사이의 체크리스트
+    // 변경은 예약 시점 스냅샷 그대로 남는 문제가 있었음.
     if (!userSettings.onboarded) return;
 
-    NotificationService.scheduleDepartureAlert(
-      userSettings.departureTime,
-      checklist.filter(i => !i.checked).length
-    );
-  }, [userSettings.onboarded, checklist]);
+    NotificationService.scheduleDepartureAlert(userSettings.departureTime, uncheckedCount);
+  }, [userSettings.onboarded, userSettings.departureTime, uncheckedCount]);
 
   useEffect(() => {
     // 온보딩 완료 후 출발 시각 감시 창에 맞춰 Wi-Fi 이탈 모니터링을 매일 재arm
