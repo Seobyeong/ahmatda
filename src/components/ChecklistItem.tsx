@@ -85,7 +85,7 @@ export function ChecklistItem({ item, onToggle, onDelete, purposeColor }: Checkl
 
   const Icon = ICONS[item.icon] ?? Circle;
   const iconColor = getTierColor(item.tier, purposeColor);
-  const showDelete = item.temp || item.permanent || item.tier === 1;
+  const showDelete = item.temp || item.permanent || item.tier === 1 || item.tier === 2;
 
   return (
     <Animated.View
