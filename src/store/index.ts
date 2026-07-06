@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
-import { getTodayString } from '../utils/time';
+import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import type {
   CalendarEvent,
@@ -62,6 +62,7 @@ interface AppActions {
   addPermanentRoutine: (label: string) => void;
   deleteItem: (id: number) => void;
   removePermanentRoutine: (id: number) => void;
+  setRoutineDays: (id: number, days: number[] | undefined) => void;
   buildChecklist: () => void;
   startNewDay: () => void;
 
@@ -263,6 +264,17 @@ export const useAppStore = create<AppStore>()(
           permanentRoutines: state.permanentRoutines.filter((routine) => routine.id !== id),
         })),
 
+      // 루틴 요일 조건 설정 — 7일 전부 선택은 undefined(매일)로 정규화해서
+      // "매일"과 "월~일 전부 체크"가 다른 상태로 남지 않게 한다.
+      setRoutineDays: (id, days) =>
+        set((state) => ({
+          permanentRoutines: state.permanentRoutines.map((routine) =>
+            routine.id === id
+              ? { ...routine, days: days && days.length < 7 ? days : undefined }
+              : routine
+          ),
+        })),
+
       buildChecklist: () => {
         const { currentWeather, purposeId, permanentRoutines, userSettings, checklist: prevChecklist, forgottenHistory } = get();
         const nextId = generateItemId;
@@ -357,9 +369,13 @@ export const useAppStore = create<AppStore>()(
         }
 
         // tier 3 — 영구 루틴 (기본 제공 + 사용자 커스텀, 설정 화면에서 자유롭게 삭제 가능)
-        permanentRoutines.forEach((routine) => {
-          items.push({ ...routine, id: nextId(), checked: wasChecked.get(routine.label) ?? false });
-        });
+        // 요일 조건(days)이 있는 루틴은 오늘 요일에 해당할 때만 포함한다.
+        const todayDow = new Date().getDay();
+        permanentRoutines
+          .filter((routine) => isRoutineActiveOnDay(routine.days, todayDow))
+          .forEach((routine) => {
+            items.push({ ...routine, id: nextId(), checked: wasChecked.get(routine.label) ?? false });
+          });
 
         set({ checklist: items.map(withForgottenBadge), checklistDate: getTodayString() });
       },

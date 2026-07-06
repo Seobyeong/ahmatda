@@ -22,6 +22,8 @@ const FEEDBACK_LABELS: Record<FeedbackType, string> = {
   hot: '더웠음',
 };
 
+const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
 // tier1 날씨 트리거 항목 — buildChecklist()에서 생성하는 라벨과 반드시 일치해야 한다.
 const WEATHER_ITEMS: { label: string; description: string }[] = [
   { label: '우산', description: '비 예보 시 표시' },
@@ -54,6 +56,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const updateDeltaOffset = useAppStore((s) => s.updateDeltaOffset);
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const removePermanentRoutine = useAppStore((s) => s.removePermanentRoutine);
+  const setRoutineDays = useAppStore((s) => s.setRoutineDays);
   const setWeatherItemEnabled = useAppStore((s) => s.setWeatherItemEnabled);
   const setPurposeItemEnabled = useAppStore((s) => s.setPurposeItemEnabled);
 
@@ -104,6 +107,13 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const handleSensitivityChange = (level: 1 | 2 | 3 | 4 | 5) => {
     setSensitivity(level);
     updateDeltaOffset(SENSITIVITY_DELTA[level]);
+  };
+
+  // 요일 칩 토글 — days가 없으면(매일) 해당 요일 하나만 끈 6일짜리 배열로 시작한다.
+  const handleToggleRoutineDay = (routineId: number, currentDays: number[] | undefined, day: number) => {
+    const days = currentDays ?? [0, 1, 2, 3, 4, 5, 6];
+    const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
+    setRoutineDays(routineId, next);
   };
 
   const handleRegisterWifi = async () => {
@@ -241,14 +251,36 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
         {permanentRoutines.length === 0 ? (
           <Text style={styles.emptyText}>등록된 루틴이 없어요.</Text>
         ) : (
-          permanentRoutines.map((routine) => (
-            <View key={routine.id} style={styles.routineRow}>
-              <Text style={styles.routineLabel}>{routine.label}</Text>
-              <Pressable onPress={() => removePermanentRoutine(routine.id)} hitSlop={8}>
-                <X size={16} color={Colors.slate400} />
-              </Pressable>
-            </View>
-          ))
+          permanentRoutines.map((routine) => {
+            const activeDays = routine.days ?? [0, 1, 2, 3, 4, 5, 6];
+            return (
+              <View key={routine.id} style={styles.routineBlock}>
+                <View style={styles.routineRow}>
+                  <Text style={styles.routineLabel}>{routine.label}</Text>
+                  <Pressable onPress={() => removePermanentRoutine(routine.id)} hitSlop={8}>
+                    <X size={16} color={Colors.slate400} />
+                  </Pressable>
+                </View>
+                <View style={styles.dayChipRow}>
+                  {DAY_LABELS.map((label, day) => {
+                    const active = activeDays.includes(day);
+                    return (
+                      <Pressable
+                        key={day}
+                        style={[styles.dayChip, active && styles.dayChipActive]}
+                        onPress={() => handleToggleRoutineDay(routine.id, routine.days, day)}
+                        hitSlop={4}
+                      >
+                        <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })
         )}
 
         <Text style={styles.sectionTitle}>최근 피드백 기록</Text>
@@ -360,11 +392,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.slate400,
   },
+  routineBlock: {
+    paddingVertical: 4,
+  },
   routineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
+  },
+  dayChipRow: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingBottom: 8,
+  },
+  dayChip: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.slate100,
+  },
+  dayChipActive: {
+    backgroundColor: Colors.indigo600,
+  },
+  dayChipText: {
+    fontSize: 11,
+    color: Colors.slate400,
+    fontWeight: '600',
+  },
+  dayChipTextActive: {
+    color: Colors.white,
   },
   routineLabel: {
     fontSize: 13,

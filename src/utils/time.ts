@@ -57,6 +57,14 @@ export function isWithinDepartureWindow(departureTime: string, now: Date = new D
   return false;
 }
 
+// 루틴이 주어진 요일(0=일 ~ 6=토)에 활성인지 판정 — days가 없거나 비어 있으면 매일 활성.
+// 빈 배열을 "매일"로 취급하는 이유: 설정 UI에서 요일을 전부 껐다가 다시 켜는 과도기에
+// 루틴이 영영 사라진 것처럼 보이는 혼란을 막기 위해.
+export function isRoutineActiveOnDay(days: number[] | undefined, dayOfWeek: number): boolean {
+  if (!days || days.length === 0) return true;
+  return days.includes(dayOfWeek);
+}
+
 // 오늘 자정 epoch millis (로컬 타임존 기준)
 export function getTodayStartMs(): number {
   const now = new Date();

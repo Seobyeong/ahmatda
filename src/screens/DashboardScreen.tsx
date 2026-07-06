@@ -220,6 +220,7 @@ export function DashboardScreen() {
   // 켜도 체크리스트에 반영되지 않는 문제가 있었다. 이 값들이 바뀔 때마다 재빌드해서
   // 항상 최신 상태를 반영하게 한다. 최초 마운트 시 1회는 위 useEffect(마운트 시
   // loadDashboardData+startNewDay)가 이미 처리하므로 건너뛴다.
+  const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const skipRebuildRef = useRef(true);
   useEffect(() => {
     if (skipRebuildRef.current) {
@@ -228,7 +229,7 @@ export function DashboardScreen() {
     }
     buildChecklist();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWeather, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems]);
+  }, [currentWeather, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, permanentRoutines]);
 
   useEffect(() => {
     // 알림(출발 알림/긴급 알림) 본문을 탭해서 앱을 열었을 때 체크리스트로 스크롤한다.

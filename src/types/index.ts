@@ -27,6 +27,7 @@ export interface ChecklistItem {
   checked: boolean;
   temp: boolean;       // 오늘만 임시 항목
   permanent: boolean;  // 영구 루틴 항목
+  days?: number[];     // 루틴이 나타날 요일 (0=일 ~ 6=토). 없으면 매일
 }
 
 // 외출 목적 아이템 (PURPOSE 내 items 배열 원소)
