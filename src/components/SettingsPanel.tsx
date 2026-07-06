@@ -58,6 +58,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const setPurposeItemEnabled = useAppStore((s) => s.setPurposeItemEnabled);
 
   const [editingTime, setEditingTime] = useState(false);
+  const [timeDraft, setTimeDraft] = useState(departureTime);
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -81,10 +82,24 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
 
   useEffect(() => {
     if (!visible) {
+      setEditingTime(false);
       setEditingSensitivity(false);
       setWifiRegisterStatus('idle');
     }
   }, [visible]);
+
+  // 출발 시각 입력 — 매 키 입력마다 store에 바로 커밋하면 그때마다 App.tsx의
+  // 알림 재예약 + Wi-Fi 재arm effect가 함께 실행돼 불필요하게 잦다. 로컬 임시값에만
+  // 반영하다가 "완료"를 눌렀을 때 한 번만 커밋한다.
+  const handleTimeEditStart = () => {
+    setTimeDraft(departureTime);
+    setEditingTime(true);
+  };
+
+  const handleTimeDone = () => {
+    updateDepartureTime(timeDraft);
+    setEditingTime(false);
+  };
 
   const handleSensitivityChange = (level: 1 | 2 | 3 | 4 | 5) => {
     setSensitivity(level);
@@ -121,17 +136,17 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
           <Text style={styles.rowLabel}>외출 시간</Text>
           {editingTime ? (
             <View style={styles.timeEditRow}>
-              <TimeInput value={departureTime} onChange={updateDepartureTime} compact autoFocus />
+              <TimeInput value={timeDraft} onChange={setTimeDraft} compact autoFocus />
               <Pressable
                 style={styles.timeDoneButton}
-                onPress={() => setEditingTime(false)}
+                onPress={handleTimeDone}
                 hitSlop={8}
               >
                 <Check size={14} color={Colors.emerald600} />
               </Pressable>
             </View>
           ) : (
-            <Pressable onPress={() => setEditingTime(true)}>
+            <Pressable onPress={handleTimeEditStart}>
               <Text style={styles.rowValue}>{departureTime}</Text>
             </Pressable>
           )}
