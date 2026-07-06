@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   AppState,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -109,7 +110,13 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     setPermissions((p) => ({ ...p, calendar: status === 'authorized' ? 'granted' : 'denied' }));
   };
 
+  // 한 번 거부되면 OS가 앱 내 재요청 다이얼로그를 다시 띄워주지 않으므로,
+  // 이미 거부된 상태에서 다시 누르면 요청 대신 설정 화면으로 보낸다.
   const requestNotificationPermission = async () => {
+    if (permissions.notification === 'denied') {
+      await Linking.openSettings();
+      return;
+    }
     try {
       const settings = await notifee.requestPermission();
       setPermissions((p) => ({
@@ -121,12 +128,42 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     }
   };
 
+  // 설정 화면에서 돌아왔을 때 반영하기 위한 재조회. Android에서는 notifee가
+  // "아직 한 번도 안 물어봄"과 "거부됨"을 구분해주지 않고 항상 DENIED로 응답하므로,
+  // 허용된 경우만 승격시키고 그 외에는 현재 로컬 상태를 그대로 둔다(막 시작한
+  // 사용자가 버튼을 누르기도 전에 거부 상태로 잘못 표시되는 것을 방지).
+  const checkNotificationPermission = async () => {
+    try {
+      const settings = await notifee.getNotificationSettings();
+      if (settings.authorizationStatus >= 1) {
+        setPermissions((p) => ({ ...p, notification: 'granted' }));
+      }
+    } catch {
+      // 조회 실패 시 현재 상태 유지
+    }
+  };
+
   const requestLocationPermission = async () => {
+    if (permissions.location === 'denied') {
+      await Linking.openSettings();
+      return;
+    }
     try {
       const result = await Location.requestForegroundPermissionsAsync();
       setPermissions((p) => ({ ...p, location: result.granted ? 'granted' : 'denied' }));
     } catch {
       setPermissions((p) => ({ ...p, location: 'denied' }));
+    }
+  };
+
+  // 설정 화면에서 돌아왔을 때 최신 상태를 반영하기 위한 재조회
+  const checkLocationPermission = async () => {
+    try {
+      const result = await Location.getForegroundPermissionsAsync();
+      if (result.status === 'undetermined') return; // 아직 한 번도 물어본 적 없으면 idle 유지
+      setPermissions((p) => ({ ...p, location: result.granted ? 'granted' : 'denied' }));
+    } catch {
+      // 조회 실패 시 현재 상태 유지
     }
   };
 
@@ -160,6 +197,8 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
       if (nextState === 'active') {
         checkExactAlarmPermission();
         checkCalendarPermission();
+        checkNotificationPermission();
+        checkLocationPermission();
       }
     });
     return () => subscription.remove();
@@ -228,6 +267,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             description="외출 전 체크리스트와 피드백 알림을 받아요"
             status={permissions.notification}
             onRequest={requestNotificationPermission}
+            deniedActionLabel="설정에서 허용"
           />
           <PermissionRow
             icon={<MapPin size={20} color={Colors.indigo600} />}
@@ -235,6 +275,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             description="집 Wi-Fi를 등록하고 외출을 감지해요"
             status={permissions.location}
             onRequest={requestLocationPermission}
+            deniedActionLabel="설정에서 허용"
           />
           <PermissionRow
             icon={<AlarmClock size={20} color={Colors.indigo600} />}
