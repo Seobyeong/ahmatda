@@ -439,10 +439,12 @@ export const useAppStore = create<AppStore>()(
           return {
             userSettings: { ...state.userSettings, deltaOffset },
             todayFeedback: val,
+            // 하루 1건씩 영구 누적되는 persist 데이터라 캡이 없으면 무한 성장한다.
+            // 화면(설정 패널)에서는 최근 3건만 쓰므로 최근 90건이면 충분하다.
             feedbackHistory: [
               ...state.feedbackHistory.filter((r) => r.date !== today),
               { date: today, val },
-            ],
+            ].slice(-90),
           };
         }),
 
