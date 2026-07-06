@@ -38,12 +38,20 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+  <!-- 체크리스트 항목 음성 추가 (expo-speech-recognition) -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
   <queries>
     <!-- Support checking for http(s) links via the Linking API -->
     <intent>
       <action android:name="android.intent.action.VIEW" />
       <category android:name="android.intent.category.BROWSABLE" />
       <data android:scheme="https" />
+    </intent>
+    <!-- expo-speech-recognition: Android 11+ 패키지 가시성 — 기기의 음성 인식 서비스 조회 -->
+    <package android:name="com.google.android.googlequicksearchbox" />
+    <intent>
+      <action android:name="android.speech.RecognitionService" />
     </intent>
   </queries>
 

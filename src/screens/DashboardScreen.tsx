@@ -12,10 +12,15 @@ import {
 import {
   CloudFog,
   Droplets,
+  Mic,
   Settings,
   Wind,
   X,
 } from 'lucide-react-native';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 import { Colors, PurposeColors } from '../constants/colors';
 import { PURPOSES, detectPurposeFromEvents, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_MESSAGES } from '../constants/feedback';
@@ -31,7 +36,6 @@ import { ProgressBar } from '../components/ProgressBar';
 import { PurposeSelector } from '../components/PurposeSelector';
 import { Toast } from '../components/Toast';
 import { WeatherTimeline } from '../components/WeatherTimeline';
-import { QuickAddModal } from '../components/QuickAddModal';
 import { SettingsPanel } from '../components/SettingsPanel';
 import type { ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
 
@@ -97,7 +101,6 @@ export function DashboardScreen() {
 
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [quickAddText, setQuickAddText] = useState('');
-  const [quickAddLabel, setQuickAddLabel] = useState<string | null>(null);
 
   const checklist = useAppStore((s) => s.checklist);
   const checklistDate = useAppStore((s) => s.checklistDate);
@@ -247,24 +250,60 @@ export function DashboardScreen() {
     scrollRef.current?.scrollTo({ y: checklistYRef.current, animated: true });
   };
 
-  const handleQuickAddSubmit = () => {
+  // 실사용 빈도상 "오늘만 추가"가 압도적으로 많을 거라 보고, 매번 "오늘만/매일 루틴"을
+  // 고르는 모달 없이 Enter 한 번으로 바로 오늘만 추가되게 한다. 매일 루틴으로 남기고
+  // 싶을 때만 입력 중에 나타나는 별도 링크를 쓴다.
+  const handleQuickAddToday = () => {
     const trimmed = quickAddText.trim();
     if (!trimmed) return;
-    setQuickAddLabel(trimmed);
+    addTempItem(trimmed);
     setQuickAddText('');
   };
 
-  const handleQuickAddToday = () => {
-    if (quickAddLabel) addTempItem(quickAddLabel);
-    setQuickAddLabel(null);
+  const handleQuickAddPermanent = () => {
+    const trimmed = quickAddText.trim();
+    if (!trimmed) return;
+    addPermanentRoutine(trimmed);
+    buildChecklist();
+    setQuickAddText('');
   };
 
-  const handleQuickAddPermanent = () => {
-    if (quickAddLabel) {
-      addPermanentRoutine(quickAddLabel);
-      buildChecklist();
+  // 음성 인식 결과를 입력창에 실시간 반영하고, 최종 인식 결과가 나오면 바로
+  // "오늘만" 추가까지 마친다 — 마이크 버튼 한 번 + 말하기로 손 안 대고 추가 가능.
+  const [isListening, setIsListening] = useState(false);
+
+  useSpeechRecognitionEvent('start', () => setIsListening(true));
+  useSpeechRecognitionEvent('end', () => setIsListening(false));
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript ?? '';
+    setQuickAddText(transcript);
+    if (event.isFinal) {
+      const trimmed = transcript.trim();
+      if (trimmed) {
+        addTempItem(trimmed);
+        setQuickAddText('');
+      }
     }
-    setQuickAddLabel(null);
+  });
+  useSpeechRecognitionEvent('error', () => {
+    showToast('음성 인식에 실패했어요. 다시 시도해주세요.');
+  });
+
+  const handleVoiceAdd = async () => {
+    if (isListening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+    const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!permission.granted) {
+      showToast('마이크/음성 인식 권한이 필요해요.');
+      return;
+    }
+    ExpoSpeechRecognitionModule.start({
+      lang: 'ko-KR',
+      interimResults: true,
+      continuous: false,
+    });
   };
 
   const handleFeedback = (val: FeedbackType) => {
@@ -508,15 +547,30 @@ export function DashboardScreen() {
             ) : null
           )}
 
-          <TextInput
-            style={styles.quickAddInput}
-            value={quickAddText}
-            onChangeText={setQuickAddText}
-            placeholder="더 챙길 것이 있나요? 오늘만 추가하기..."
-            placeholderTextColor={Colors.slate400}
-            onSubmitEditing={handleQuickAddSubmit}
-            returnKeyType="done"
-          />
+          <View style={styles.quickAddRow}>
+            <TextInput
+              style={styles.quickAddInput}
+              value={quickAddText}
+              onChangeText={setQuickAddText}
+              placeholder="더 챙길 것이 있나요? 오늘만 추가하기..."
+              placeholderTextColor={Colors.slate400}
+              onSubmitEditing={handleQuickAddToday}
+              returnKeyType="done"
+            />
+            <Pressable
+              style={[styles.micButton, isListening && styles.micButtonActive]}
+              onPress={handleVoiceAdd}
+              hitSlop={8}
+            >
+              <Mic size={18} color={isListening ? Colors.white : Colors.slate500} />
+            </Pressable>
+          </View>
+
+          {quickAddText.trim() ? (
+            <Pressable onPress={handleQuickAddPermanent} hitSlop={8}>
+              <Text style={styles.quickAddPermanentLink}>📌 매일 루틴으로 추가</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {currentWeather ? (
@@ -557,15 +611,6 @@ export function DashboardScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      {quickAddLabel ? (
-        <QuickAddModal
-          label={quickAddLabel}
-          onTodayOnly={handleQuickAddToday}
-          onPermanent={handleQuickAddPermanent}
-          onCancel={() => setQuickAddLabel(null)}
-        />
-      ) : null}
 
       {toast ? <Toast message={toast} onDone={clearToast} /> : null}
     </View>
@@ -814,8 +859,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textTransform: 'uppercase',
   },
-  quickAddInput: {
+  quickAddRow: {
     marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickAddInput: {
+    flex: 1,
     borderWidth: 1,
     borderColor: Colors.slate200,
     borderRadius: 12,
@@ -823,6 +874,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 13,
     color: Colors.slate800,
+  },
+  micButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.slate100,
+  },
+  micButtonActive: {
+    backgroundColor: Colors.indigo600,
+  },
+  quickAddPermanentLink: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.indigo600,
   },
   envStrip: {
     flexDirection: 'row',
