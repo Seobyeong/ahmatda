@@ -285,7 +285,14 @@ export function DashboardScreen() {
       }
     }
   });
-  useSpeechRecognitionEvent('error', () => {
+  useSpeechRecognitionEvent('error', (event) => {
+    // 'end' 이벤트가 안 오는 플랫폼 케이스에 대비해 여기서도 안전하게 내린다.
+    setIsListening(false);
+    // 침묵(no-speech/speech-timeout)이나 사용자가 직접 중지(aborted)한 경우는
+    // 실패가 아니라 정상 시나리오라 굳이 에러 토스트를 띄우지 않는다.
+    if (event.error === 'no-speech' || event.error === 'speech-timeout' || event.error === 'aborted') {
+      return;
+    }
     showToast('음성 인식에 실패했어요. 다시 시도해주세요.');
   });
 
@@ -556,6 +563,7 @@ export function DashboardScreen() {
               placeholderTextColor={Colors.slate400}
               onSubmitEditing={handleQuickAddToday}
               returnKeyType="done"
+              submitBehavior="submit"
             />
             <Pressable
               style={[styles.micButton, isListening && styles.micButtonActive]}
