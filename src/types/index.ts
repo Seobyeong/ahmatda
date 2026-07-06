@@ -65,7 +65,6 @@ export interface CurrentWeather {
   humidity: number;
   wind: number;
   dustLevel: '좋음' | '보통' | '나쁨' | '매우나쁨';
-  basePerceived: number;
   rainAlert: boolean;
   heatAlert: boolean;
   recommendation: string;

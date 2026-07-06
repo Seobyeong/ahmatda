@@ -2,7 +2,6 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrentWeather, WeatherAlert, WeatherSlot, WeatherType, TimelineHint } from '@/types';
 import { getCurrentSlotIndex } from '@/utils/time';
-import { calcPerceivedTemp } from '@/utils/temperature';
 import { latLonToGrid } from '@/utils/kmaGrid';
 import { getSidoFromCoords } from '@/utils/sido';
 import { AirQualityService } from '@/services/airQuality/AirQualityService';
@@ -141,7 +140,6 @@ export const WeatherService = {
         humidity,
         wind,
         dustLevel,
-        basePerceived: calcPerceivedTemp(temp, humidity, wind, 0),
         rainAlert: pty !== 0,
         heatAlert: isHeat,
         recommendation: text,

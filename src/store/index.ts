@@ -5,6 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
+import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getTodayString } from '../utils/time';
 import type {
   CalendarEvent,
@@ -431,10 +432,8 @@ export const useAppStore = create<AppStore>()(
           if (state.todayFeedback === val) return {};
 
           let deltaOffset = state.userSettings.deltaOffset;
-          if (state.todayFeedback === 'cold') deltaOffset += 1;
-          else if (state.todayFeedback === 'hot') deltaOffset -= 1;
-          if (val === 'cold') deltaOffset -= 1;
-          else if (val === 'hot') deltaOffset += 1;
+          if (state.todayFeedback) deltaOffset -= FEEDBACK_DELTA[state.todayFeedback];
+          deltaOffset += FEEDBACK_DELTA[val];
 
           const today = getTodayString();
           return {
