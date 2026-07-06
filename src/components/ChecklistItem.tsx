@@ -60,27 +60,21 @@ function getTierColor(tier: ChecklistItemType['tier'], purposeColor?: string): s
 }
 
 export function ChecklistItem({ item, onToggle, onDelete, purposeColor }: ChecklistItemProps) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
+  // 체크 반응성이 이 앱의 핵심 사용성 요건이라, 탭하면 상태를 바로 바꾸고(딜레이 없음)
+  // 옅어지는 효과는 그 위에 얹는 순수 시각 효과로만 재생한다. 예전엔 슬라이드+페이드
+  // 애니메이션이 끝난 뒤에야 실제 토글이 일어나서 체크할 때마다 220ms 딜레이가 있었다.
+  const opacity = useRef(new Animated.Value(item.checked ? 0.4 : 1)).current;
 
   useEffect(() => {
-    if (item.checked) {
-      translateX.setValue(0);
-      opacity.setValue(1);
-    }
-  }, [item.checked, translateX, opacity]);
+    Animated.timing(opacity, {
+      toValue: item.checked ? 0.4 : 1,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
+  }, [item.checked, opacity]);
 
   const handlePress = () => {
-    if (item.checked) {
-      onToggle(item.id);
-      return;
-    }
-    Animated.parallel([
-      Animated.timing(translateX, { toValue: 80, duration: 220, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => {
-      onToggle(item.id);
-    });
+    onToggle(item.id);
   };
 
   const Icon = ICONS[item.icon] ?? Circle;
@@ -88,15 +82,7 @@ export function ChecklistItem({ item, onToggle, onDelete, purposeColor }: Checkl
   const showDelete = item.temp || item.permanent || item.tier === 1 || item.tier === 2;
 
   return (
-    <Animated.View
-      style={[
-        styles.wrapper,
-        {
-          opacity: Animated.multiply(opacity, item.checked ? 0.4 : 1),
-          transform: [{ translateX }],
-        },
-      ]}
-    >
+    <Animated.View style={[styles.wrapper, { opacity }]}>
       <Pressable style={styles.row} onPress={handlePress}>
         <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
           {item.checked && <Check size={14} color={Colors.white} />}
