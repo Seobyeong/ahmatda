@@ -84,6 +84,8 @@ interface AppActions {
   completeOnboarding: () => void;
   setWeatherItemEnabled: (label: string, enabled: boolean) => void;
   setPurposeItemEnabled: (purposeId: PurposeId, label: string, enabled: boolean) => void;
+  addCustomKeyword: (purposeId: PurposeId, keyword: string) => void;
+  removeCustomKeyword: (purposeId: PurposeId, keyword: string) => void;
 
   // 피드백
   applyFeedback: (val: FeedbackType) => void;
@@ -144,6 +146,7 @@ const defaultState: AppState = {
     onboarded: false,
     disabledWeatherItems: [],
     disabledPurposeItems: [],
+    customKeywords: {},
   },
 
   feedbackHistory: [],
@@ -344,7 +347,12 @@ export const useAppStore = create<AppStore>()(
         if (purposeId) {
           const purpose = PURPOSES[purposeId];
           const matchedEvent = currentWeather
-            ? findMatchingEvent(purposeId, currentWeather.calendarEvents, userSettings.departureTime)
+            ? findMatchingEvent(
+                purposeId,
+                currentWeather.calendarEvents,
+                userSettings.departureTime,
+                userSettings.customKeywords
+              )
             : null;
           const badge = matchedEvent
             ? `${matchedEvent.time} '${matchedEvent.title}' 연동됨`
@@ -451,6 +459,36 @@ export const useAppStore = create<AppStore>()(
                 : state.userSettings.disabledPurposeItems.includes(key)
                   ? state.userSettings.disabledPurposeItems
                   : [...state.userSettings.disabledPurposeItems, key],
+            },
+          };
+        }),
+
+      addCustomKeyword: (purposeId, keyword) =>
+        set((state) => {
+          const trimmed = keyword.trim();
+          const existing = state.userSettings.customKeywords[purposeId] ?? [];
+          if (!trimmed || existing.includes(trimmed)) return state;
+          return {
+            userSettings: {
+              ...state.userSettings,
+              customKeywords: {
+                ...state.userSettings.customKeywords,
+                [purposeId]: [...existing, trimmed],
+              },
+            },
+          };
+        }),
+
+      removeCustomKeyword: (purposeId, keyword) =>
+        set((state) => {
+          const existing = state.userSettings.customKeywords[purposeId] ?? [];
+          return {
+            userSettings: {
+              ...state.userSettings,
+              customKeywords: {
+                ...state.userSettings.customKeywords,
+                [purposeId]: existing.filter((k) => k !== keyword),
+              },
             },
           };
         }),

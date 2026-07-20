@@ -90,18 +90,27 @@ function sortEventsByRelevance<T extends { time: string }>(events: T[], departur
   return [...futureEvents, ...pastEvents];
 }
 
+// 사용자가 설정에서 목적별로 추가한 커스텀 키워드 — 기본 calKeywords에 병합해서 쓴다.
+export type CustomKeywords = Partial<Record<PurposeId, string[]>>;
+
+function keywordsFor(purposeId: PurposeId, custom?: CustomKeywords): string[] {
+  const extra = custom?.[purposeId] ?? [];
+  return extra.length > 0 ? [...PURPOSES[purposeId].calKeywords, ...extra] : PURPOSES[purposeId].calKeywords;
+}
+
 // 캘린더 이벤트 제목으로 목적 감지
 // 외출 시각과 가장 가까운 미래 이벤트 우선
 export function detectPurposeFromEvents(
   events: { title: string; time: string }[],
-  departureTime: string
+  departureTime: string,
+  customKeywords?: CustomKeywords
 ): PurposeId | null {
   const ordered = sortEventsByRelevance(events, departureTime);
 
   for (const ev of ordered) {
-    for (const [pid, p] of Object.entries(PURPOSES)) {
-      if (p.calKeywords.some(kw => ev.title.includes(kw))) {
-        return pid as PurposeId;
+    for (const pid of Object.keys(PURPOSES) as PurposeId[]) {
+      if (keywordsFor(pid, customKeywords).some(kw => ev.title.includes(kw))) {
+        return pid;
       }
     }
   }
@@ -112,9 +121,10 @@ export function detectPurposeFromEvents(
 export function findMatchingEvent<T extends { title: string; time: string }>(
   purposeId: PurposeId,
   events: T[],
-  departureTime: string
+  departureTime: string,
+  customKeywords?: CustomKeywords
 ): T | null {
-  const purpose = PURPOSES[purposeId];
+  const keywords = keywordsFor(purposeId, customKeywords);
   const ordered = sortEventsByRelevance(events, departureTime);
-  return ordered.find(ev => purpose.calKeywords.some(kw => ev.title.includes(kw))) ?? null;
+  return ordered.find(ev => keywords.some(kw => ev.title.includes(kw))) ?? null;
 }

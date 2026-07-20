@@ -1,5 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  Animated,
+  AppState,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
@@ -48,6 +58,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const homeBssid = useAppStore((s) => s.userSettings.homeBssid);
   const disabledWeatherItems = useAppStore((s) => s.userSettings.disabledWeatherItems);
   const disabledPurposeItems = useAppStore((s) => s.userSettings.disabledPurposeItems);
+  const customKeywords = useAppStore((s) => s.userSettings.customKeywords);
   const purposeId = useAppStore((s) => s.purposeId);
   const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
@@ -59,8 +70,11 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const setRoutineDays = useAppStore((s) => s.setRoutineDays);
   const setWeatherItemEnabled = useAppStore((s) => s.setWeatherItemEnabled);
   const setPurposeItemEnabled = useAppStore((s) => s.setPurposeItemEnabled);
+  const addCustomKeyword = useAppStore((s) => s.addCustomKeyword);
+  const removeCustomKeyword = useAppStore((s) => s.removeCustomKeyword);
 
   const [editingTime, setEditingTime] = useState(false);
+  const [keywordDraft, setKeywordDraft] = useState('');
   const [timeDraft, setTimeDraft] = useState(departureTime);
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
@@ -88,6 +102,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
       setEditingTime(false);
       setEditingSensitivity(false);
       setWifiRegisterStatus('idle');
+      setKeywordDraft('');
     }
   }, [visible]);
 
@@ -114,6 +129,12 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     const days = currentDays ?? [0, 1, 2, 3, 4, 5, 6];
     const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
     setRoutineDays(routineId, next);
+  };
+
+  const handleAddKeyword = () => {
+    if (!purposeId || !keywordDraft.trim()) return;
+    addCustomKeyword(purposeId, keywordDraft);
+    setKeywordDraft('');
   };
 
   const handleRegisterWifi = async () => {
@@ -244,6 +265,43 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
                 </View>
               );
             })}
+
+            <Text style={styles.sectionTitle}>{PURPOSES[purposeId].label} 자동감지 키워드</Text>
+            <Text style={styles.weatherDescription}>
+              캘린더 일정 제목에 이 단어가 있으면 자동으로 "{PURPOSES[purposeId].label}"로 인식해요.
+            </Text>
+            <View style={styles.keywordChipRow}>
+              {PURPOSES[purposeId].calKeywords.map((kw) => (
+                <View key={kw} style={styles.keywordChipReadonly}>
+                  <Text style={styles.keywordChipText}>{kw}</Text>
+                </View>
+              ))}
+              {(customKeywords[purposeId] ?? []).map((kw) => (
+                <Pressable
+                  key={kw}
+                  style={styles.keywordChip}
+                  onPress={() => removeCustomKeyword(purposeId, kw)}
+                  hitSlop={4}
+                >
+                  <Text style={styles.keywordChipText}>{kw}</Text>
+                  <X size={10} color={Colors.indigo600} />
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.keywordAddRow}>
+              <TextInput
+                style={styles.keywordInput}
+                value={keywordDraft}
+                onChangeText={setKeywordDraft}
+                placeholder="키워드 추가 (예: 회의)"
+                placeholderTextColor={Colors.slate400}
+                onSubmitEditing={handleAddKeyword}
+                returnKeyType="done"
+              />
+              <Pressable style={styles.timeDoneButton} onPress={handleAddKeyword} hitSlop={8}>
+                <Check size={14} color={Colors.emerald600} />
+              </Pressable>
+            </View>
           </>
         )}
 
@@ -442,6 +500,46 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: Colors.slate400,
+  },
+  keywordChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  keywordChipReadonly: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.slate100,
+  },
+  keywordChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.emerald100,
+  },
+  keywordChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.slate700,
+  },
+  keywordAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  keywordInput: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.slate800,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: Colors.slate50,
   },
   feedbackRow: {
     flexDirection: 'row',

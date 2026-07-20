@@ -153,9 +153,13 @@ export function DashboardScreen() {
     const events = await CalendarService.getTodayEvents();
     if (cancelledRef.current) return;
 
-    const detectedId = detectPurposeFromEvents(events, userSettings.departureTime);
+    const detectedId = detectPurposeFromEvents(
+      events,
+      userSettings.departureTime,
+      userSettings.customKeywords
+    );
     const matchedEvent = detectedId
-      ? findMatchingEvent(detectedId, events, userSettings.departureTime)
+      ? findMatchingEvent(detectedId, events, userSettings.departureTime, userSettings.customKeywords)
       : null;
     setAutoDetected(detectedId, matchedEvent);
 

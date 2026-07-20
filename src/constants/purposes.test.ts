@@ -33,6 +33,14 @@ describe('detectPurposeFromEvents', () => {
     // 09:00(스터디)이 10:00(회의)보다 먼저 오므로 study가 반환돼야 한다.
     expect(detectPurposeFromEvents(events, '08:00')).toBe('study');
   });
+
+  it('기본 키워드에 없어도 customKeywords에 있으면 매칭한다', () => {
+    const events = [{ title: '농구 동아리', time: '10:00' }];
+    expect(detectPurposeFromEvents(events, '08:00')).toBeNull();
+    expect(
+      detectPurposeFromEvents(events, '08:00', { workout: ['농구'] })
+    ).toBe('workout');
+  });
 });
 
 describe('findMatchingEvent', () => {
@@ -48,5 +56,13 @@ describe('findMatchingEvent', () => {
   it('매칭되는 이벤트가 없으면 null을 반환한다', () => {
     const events = [{ title: '아무 일정', time: '10:00' }];
     expect(findMatchingEvent('work', events, '08:00')).toBeNull();
+  });
+
+  it('customKeywords로 매칭되는 이벤트도 찾는다', () => {
+    const events = [{ title: '농구 동아리', time: '10:00' }];
+    expect(findMatchingEvent('workout', events, '08:00')).toBeNull();
+    expect(
+      findMatchingEvent('workout', events, '08:00', { workout: ['농구'] })
+    ).toEqual({ title: '농구 동아리', time: '10:00' });
   });
 });
