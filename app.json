@@ -8,6 +8,10 @@
       "bundleIdentifier": "com.ahmatda",
       "entitlements": {
         "com.apple.developer.networking.wifi-info": true
+      },
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "말한 내용을 텍스트로 변환해 체크리스트에 추가하려면 음성 인식 접근이 필요해요.",
+        "NSMicrophoneUsageDescription": "체크리스트 항목을 음성으로 추가하려면 마이크 접근이 필요해요."
       }
     },
     "android": {
@@ -15,7 +19,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#7c3aed"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -26,9 +33,17 @@
         {
           "microphonePermission": "체크리스트 항목을 음성으로 추가하려면 마이크 접근이 필요해요.",
           "speechRecognitionPermission": "말한 내용을 텍스트로 변환해 체크리스트에 추가하려면 음성 인식 접근이 필요해요.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f8ae05bf-0d48-4ed2-80ed-1c4952c0047b"
+      }
+    },
+    "owner": "byeongseo"
   }
 }
