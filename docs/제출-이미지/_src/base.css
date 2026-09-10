@@ -1,0 +1,24 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1200px; height: 900px; }
+body {
+  font-family: 'Pretendard', 'Malgun Gothic', '맑은 고딕', system-ui, sans-serif;
+  background: #f8fafc;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.page { width: 1200px; height: 900px; padding: 56px 60px; display: flex; flex-direction: column; }
+.kicker { font-size: 20px; font-weight: 700; color: #7c3aed; letter-spacing: -0.2px; }
+h1 { font-size: 46px; font-weight: 800; letter-spacing: -1.4px; line-height: 1.2; margin-top: 10px; }
+h1 .hl { color: #4f46e5; }
+.sub { font-size: 21px; color: #64748b; margin-top: 14px; line-height: 1.5; font-weight: 500; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 20px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 9px 18px; font-size: 17px; font-weight: 700; }
+.c-done { background: #ecfdf5; color: #047857; }
+.c-plan { background: #f5f3ff; color: #7c3aed; }
+.footer { margin-top: auto; }
+.band { background: #1e293b; color: #fff; border-radius: 18px; padding: 24px 30px; font-size: 24px; font-weight: 700; letter-spacing: -0.6px; display: flex; align-items: center; gap: 14px; }
+.band .em { color: #a5b4fc; }
+.muted { color: #94a3b8; }
+
+.chip b { font-weight: 900; margin-right: 8px; }

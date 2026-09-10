@@ -1,0 +1,98 @@
+<meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; flex: 1; margin-top: 34px; }
+.side { display: flex; flex-direction: column; align-items: center; }
+.cap { font-size: 20px; font-weight: 800; margin-bottom: 16px; letter-spacing: -0.5px; }
+.cap small { display: block; font-size: 16px; color: #94a3b8; font-weight: 600; margin-top: 5px; }
+.phone { width: 330px; border-radius: 34px; border: 9px solid #1e293b; background: #f8fafc; overflow: hidden; flex: 1; display: flex; flex-direction: column; }
+.status { height: 26px; background: #1e293b; color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-weight: 700; }
+.body { padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.w { background: #4f46e5; color: #fff; border-radius: 16px; padding: 14px; }
+.w .t1 { font-size: 12px; opacity: .8; font-weight: 700; }
+.w .t2 { font-size: 30px; font-weight: 900; letter-spacing: -1px; margin-top: 2px; }
+.w .t3 { font-size: 12px; opacity: .85; margin-top: 4px; font-weight: 600; }
+.w .f { font-size: 11px; opacity: .7; margin-top: 8px; font-family: ui-monospace, Consolas, monospace; }
+.chips { display: flex; gap: 6px; }
+.pc { border-radius: 999px; padding: 7px 11px; font-size: 12px; font-weight: 800; background: #fff; border: 1px solid #e2e8f0; color: #94a3b8; }
+.pc.on { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.sec { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; }
+.sh { font-size: 12px; font-weight: 800; color: #64748b; display: flex; justify-content: space-between; }
+.row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-top: 1px solid #f1f5f9; }
+.row:first-of-type { border-top: 0; }
+.bx { width: 19px; height: 19px; border-radius: 6px; border: 2px solid #cbd5e1; flex: 0 0 auto; }
+.bx.on { background: #10b981; border-color: #10b981; position: relative; }
+.bx.on::after { content: "✓"; position: absolute; left: 3px; top: -3px; color: #fff; font-size: 13px; font-weight: 900; }
+.add { margin-top: auto; display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 11px 12px; }
+.add .ph { font-size: 13px; color: #94a3b8; font-weight: 700; }
+.add .mic { margin-left: auto; width: 26px; height: 26px; border-radius: 8px; background: #4f46e5; color: #fff; font-size: 13px; display: flex; align-items: center; justify-content: center; }
+.lb { font-size: 14px; font-weight: 700; }
+.tg { margin-left: auto; font-size: 10px; font-weight: 800; padding: 3px 6px; border-radius: 5px; }
+.tg.blue { background: #f0f9ff; color: #0284c7; } .tg.ind { background: #eef2ff; color: #4f46e5; } .tg.red { background: #fef2f2; color: #ef4444; }
+.prog { height: 7px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+.prog i { display: block; height: 7px; width: 50%; background: #10b981; }
+/* lock screen */
+.lock { background: #312e81; }
+.lockbody { flex: 1; padding: 16px; display: flex; flex-direction: column; align-items: center; }
+.clock { color: #fff; font-size: 54px; font-weight: 800; letter-spacing: -2px; margin-top: 26px; }
+.date { color: rgba(255,255,255,.7); font-size: 14px; font-weight: 700; margin-top: 2px; }
+.noti { width: 100%; background: rgba(255,255,255,.96); border-radius: 16px; padding: 13px; margin-top: 30px; }
+.nh { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 800; color: #64748b; }
+.ic { width: 17px; height: 17px; border-radius: 5px; background: #4f46e5; color: #fff; font-size: 12px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+.nt { font-size: 15px; font-weight: 800; margin-top: 7px; }
+.nb { font-size: 13px; color: #475569; margin-top: 4px; line-height: 1.45; font-weight: 600; }
+.acts { display: flex; gap: 6px; margin-top: 10px; }
+.act { flex: 1; text-align: center; font-size: 11px; font-weight: 800; background: #f1f5f9; border-radius: 8px; padding: 7px 0; color: #334155; }
+.why { margin-top: 14px; background: rgba(255,255,255,.12); border-radius: 12px; padding: 11px 13px; color: #e0e7ff; font-size: 12px; font-weight: 700; line-height: 1.5; text-align: center; }
+</style>
+<div class="page">
+  <div class="kicker">화면</div>
+  <h1>확인은 <span class="hl">5초</span>, 알림은 <span class="hl">현관에서</span></h1>
+  <div class="wrap">
+    <div class="side">
+      <div class="cap">오늘의 체크리스트<small>날씨 · 목적 · 루틴이 자동으로 합쳐진 하나의 목록</small></div>
+      <div class="phone">
+        <div class="status"><span>08:11</span><span>LTE ▮▮▮</span></div>
+        <div class="body">
+          <div class="w"><div class="t1">서울 · 지금</div><div class="t2">체감 12.4°</div>
+            <div class="t3">오전에 비 · 미세먼지 나쁨</div>
+            <div class="f">14.0 − 0.6(습도) − 1.0(바람) + 0.0(내 보정)</div></div>
+          <div class="chips"><div class="pc on">💼 출근</div><div class="pc">🏋️ 운동</div><div class="pc">📚 공부</div></div>
+          <div class="prog"><i></i></div>
+          <div class="sec">
+            <div class="sh"><span>날씨 알림</span><span>2</span></div>
+            <div class="row"><div class="bx on"></div><div class="lb">우산</div><div class="tg blue">강수 60%</div></div>
+            <div class="row"><div class="bx"></div><div class="lb">마스크</div><div class="tg red">이번 주 3번 놓침</div></div>
+          </div>
+          <div class="sec">
+            <div class="sh"><span>목적 준비물 · 출근</span><span>3</span></div>
+            <div class="row"><div class="bx on"></div><div class="lb">노트북</div><div class="tg ind">10:00 팀 미팅</div></div>
+            <div class="row"><div class="bx"></div><div class="lb">명함</div></div>
+            <div class="row"><div class="bx on"></div><div class="lb">충전기</div></div>
+          </div>
+          <div class="add"><span class="ph">빠르게 추가…</span><span class="mic">🎙</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="cap">집 Wi-Fi를 벗어나는 순간<small>앱을 열지 않아도, 현관에서 먼저 말을 겁니다</small></div>
+      <div class="phone lock">
+        <div class="status"><span>08:15</span><span>LTE ▮▮▮</span></div>
+        <div class="lockbody">
+          <div class="clock">8:15</div>
+          <div class="date">9월 17일 목요일</div>
+          <div class="noti">
+            <div class="nh"><div class="ic">!</div><span>아맞다 · 지금</span></div>
+            <div class="nt">아직 안 챙긴 것이 있어요</div>
+            <div class="nb">마스크, 명함 — 2개가 남았습니다.<br>지금이면 30초면 돌아갈 수 있어요.</div>
+          </div>
+          <div class="noti" style="margin-top:12px">
+            <div class="nh"><div class="ic">!</div><span>아맞다 · 어제 20:00</span></div>
+            <div class="nt">오늘 어땠어요?</div>
+            <div class="acts"><div class="act">추웠음</div><div class="act">적당함</div><div class="act">더웠음</div></div>
+          </div>
+          <div class="why">앱을 열지 않고 알림에서 바로 응답 →<br>내 체감 기준을 앱이 조금씩 조정합니다</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

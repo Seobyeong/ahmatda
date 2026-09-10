@@ -1,0 +1,60 @@
+<meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.flow { display: grid; grid-template-columns: 330px 56px 296px 56px 1fr; align-items: center; gap: 0; flex: 1; margin-top: 30px; }
+.src { display: flex; flex-direction: column; gap: 12px; }
+.s { padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+.s .d { width: 12px; height: 12px; border-radius: 4px; }
+.s .t { font-size: 19px; font-weight: 700; }
+.s .n { font-size: 15px; color: #94a3b8; font-weight: 600; margin-top: 3px; }
+.arrow { display: flex; align-items: center; justify-content: center; font-size: 30px; color: #cbd5e1; font-weight: 800; }
+.engine { background: #4f46e5; color: #fff; border-radius: 22px; padding: 30px 26px; text-align: center; }
+.engine .h { font-size: 27px; font-weight: 800; letter-spacing: -0.8px; }
+.engine .l { font-size: 16px; opacity: .85; margin-top: 6px; font-weight: 600; }
+.tiers { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.tier { background: rgba(255,255,255,.14); border-radius: 10px; padding: 9px 12px; font-size: 16px; font-weight: 700; text-align: left; }
+.list { padding: 24px 26px; }
+.list .lh { font-size: 19px; font-weight: 800; display: flex; justify-content: space-between; align-items: baseline; white-space: nowrap; padding-bottom: 6px; }
+.list .lh span { font-size: 14px; color: #94a3b8; font-weight: 700; }
+.it { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-top: 1px solid #f1f5f9; }
+.box { width: 24px; height: 24px; border-radius: 8px; border: 2.5px solid #cbd5e1; }
+.box.on { background: #10b981; border-color: #10b981; position: relative; }
+.box.on::after { content: '✓'; color: #fff; font-size: 16px; font-weight: 900; position: absolute; left: 4px; top: -3px; }
+.it .lbl { font-size: 19px; font-weight: 700; }
+.it .b { margin-left: auto; font-size: 14px; font-weight: 800; border-radius: 7px; padding: 4px 9px; }
+.b1 { background: #f0f9ff; color: #0284c7; } .b2 { background: #eef2ff; color: #4f46e5; } .b3 { background: #f1f5f9; color: #64748b; }
+</style>
+<div class="page">
+  <div class="kicker">작동 원리 · 구현 완료</div>
+  <h1>목록을 사람이 아니라 <span class="hl">앱이 만듭니다</span></h1>
+  <div class="sub">기상청·에어코리아·캘린더·기기 상태를 읽어, 오늘의 체크리스트를 매일 아침 다시 조립합니다.</div>
+  <div class="flow">
+    <div class="src">
+      <div class="card s"><div class="d" style="background:#0ea5e9"></div><div><div class="t">기상청 단기예보</div><div class="n">기온 · 강수 · 습도 · 바람</div></div></div>
+      <div class="card s"><div class="d" style="background:#f97316"></div><div><div class="t">에어코리아 대기질</div><div class="n">PM10 · PM2.5 등급</div></div></div>
+      <div class="card s"><div class="d" style="background:#4f46e5"></div><div><div class="t">캘린더 일정</div><div class="n">제목 키워드 → 오늘의 목적</div></div></div>
+      <div class="card s"><div class="d" style="background:#7c3aed"></div><div><div class="t">기기 상태</div><div class="n">집 Wi-Fi 연결 · 시각</div></div></div>
+    </div>
+    <div class="arrow">›</div>
+    <div class="engine">
+      <div class="h">아맞다 엔진</div>
+      <div class="l">4계층 자동 조립 · 서버 없음</div>
+      <div class="tiers">
+        <div class="tier">0 · 오늘만 추가한 것</div>
+        <div class="tier">1 · 날씨가 만든 항목</div>
+        <div class="tier">2 · 목적별 준비물</div>
+        <div class="tier">3 · 매일 쓰는 루틴</div>
+      </div>
+    </div>
+    <div class="arrow">›</div>
+    <div class="card list">
+      <div class="lh">오늘의 체크리스트 <span>08:15 외출 예정</span></div>
+      <div class="it"><div class="box on"></div><div class="lbl">우산</div><div class="b b1">비 60%</div></div>
+      <div class="it"><div class="box"></div><div class="lbl">마스크</div><div class="b b1">미세먼지 나쁨</div></div>
+      <div class="it"><div class="box on"></div><div class="lbl">노트북</div><div class="b b2">출근</div></div>
+      <div class="it"><div class="box"></div><div class="lbl">명함</div><div class="b b2">10:00 팀 미팅</div></div>
+      <div class="it"><div class="box on"></div><div class="lbl">지갑</div><div class="b b3">루틴</div></div>
+      <div class="it"><div class="box"></div><div class="lbl">집 열쇠</div><div class="b b3">루틴</div></div>
+    </div>
+  </div>
+  <div class="footer" style="margin-top:34px"><div class="band">사용자는 <span class="em">입력하지 않습니다.</span> 확인만 합니다.</div></div>
+</div>
