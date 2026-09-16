@@ -1,4 +1,4 @@
-import { migrateV0toV1, migrateV1toV2 } from './migrations';
+import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 
 // persist 마이그레이션은 실패해도 조용하다 — 앱이 안 켜지거나 사용자 데이터가
 // 사라지는 형태로만 드러난다. 그래서 각 단계를 순수 함수로 분리해 직접 검증한다.
@@ -99,5 +99,39 @@ describe('v0 → v2 연쇄 적용', () => {
 
     expect(result.permanentRoutines).toEqual([{ id: 'routine-default-key', label: '집 열쇠' }]);
     expect(result.userSettings).toEqual({ sensitivityLevel: 2, learnedDelta: -2 }); // -3 - (-1)
+  });
+});
+
+describe('seedUpdatedAt — 업그레이드 데이터에 동기화 타임스탬프 부여', () => {
+  it('비어 있는 updatedAt을 채운다', () => {
+    const before = Date.now();
+    const result = seedUpdatedAt({
+      userSettings: { departureTime: '08:15' },
+      permanentRoutines: [{ id: 'a', label: '지갑' }],
+      feedbackHistory: [{ date: '2026-09-15', val: 'cold' }],
+    });
+
+    const settings = result.userSettings as { updatedAt: number };
+    expect(settings.updatedAt).toBeGreaterThanOrEqual(before);
+    expect((result.permanentRoutines as Array<{ updatedAt: number }>)[0].updatedAt)
+      .toBeGreaterThanOrEqual(before);
+    expect((result.feedbackHistory as Array<{ updatedAt: number }>)[0].updatedAt)
+      .toBeGreaterThanOrEqual(before);
+  });
+
+  it('이미 있는 updatedAt은 덮어쓰지 않는다', () => {
+    const result = seedUpdatedAt({
+      userSettings: { departureTime: '08:15', updatedAt: 111 },
+      permanentRoutines: [{ id: 'a', updatedAt: 222 }],
+    });
+    expect((result.userSettings as { updatedAt: number }).updatedAt).toBe(111);
+    expect((result.permanentRoutines as Array<{ updatedAt: number }>)[0].updatedAt).toBe(222);
+  });
+
+  it('없는 키를 만들어내지 않는다', () => {
+    const result = seedUpdatedAt({ checklistDate: '2026-09-16' });
+    expect('permanentRoutines' in result).toBe(false);
+    expect('feedbackHistory' in result).toBe(false);
+    expect('userSettings' in result).toBe(false);
   });
 });

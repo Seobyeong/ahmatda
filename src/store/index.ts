@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
-import { migrateV0toV1, migrateV1toV2 } from './migrations';
+import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import type {
   CalendarEvent,
@@ -117,13 +117,34 @@ function generateItemId(): string {
   });
 }
 
+// 기기 로컬 전용 설정 — 계정 동기화 대상이 아니다.
+// 기기마다 붙는 AP가 다르므로 homeBssid는 기기에 남아야 하고, 따라서 이 값을 바꿨다고
+// userSettings 전체의 동기화 타임스탬프를 올리면 안 된다. 올리면 "집 Wi-Fi만 다시
+// 등록한 기기"가 실제로 설정을 바꾼 기기를 이겨서 출발시각·민감도를 덮어쓴다.
+const DEVICE_LOCAL_SETTING_KEYS: ReadonlySet<keyof UserSettings> = new Set(['homeBssid']);
+
 // userSettings를 바꾸는 모든 경로가 이 함수를 지나가게 해서 updatedAt을 빠뜨릴 수
 // 없게 한다. 동기화에서 뭐가 최신인지 판단하려면 예외 없이 기록돼 있어야 한다.
-function patchSettings(
-  state: AppStore,
-  patch: Partial<UserSettings>
-): Pick<AppState, 'userSettings'> {
-  return { userSettings: { ...state.userSettings, ...patch, updatedAt: Date.now() } };
+//
+// 반대로 "안 바뀌었는데 올리는 것"도 막아야 한다. 값이 그대로인데 타임스탬프만
+// 새로 찍히면, 아무것도 안 바꾼 기기가 실제로 바꾼 기기를 이긴다. 그래서 실제로
+// 달라진 키가 있을 때만 갱신한다.
+function patchSettings(state: AppStore, patch: Partial<UserSettings>): Partial<AppState> {
+  const current = state.userSettings;
+  const changedKeys = (Object.keys(patch) as Array<keyof UserSettings>).filter(
+    (key) => !Object.is(current[key], patch[key])
+  );
+
+  if (changedKeys.length === 0) return {};
+
+  const syncRelevant = changedKeys.some((key) => !DEVICE_LOCAL_SETTING_KEYS.has(key));
+  return {
+    userSettings: {
+      ...current,
+      ...patch,
+      updatedAt: syncRelevant ? Date.now() : current.updatedAt,
+    },
+  };
 }
 
 // 기본 제공 루틴 — permanentRoutines의 초기 시드값. 다른 커스텀 루틴과 동일하게
@@ -550,6 +571,9 @@ export const useAppStore = create<AppStore>()(
 
         if (version < 1) state = migrateV0toV1(state);
         if (version < 2) state = migrateV1toV2(state);
+
+        // 어느 경로로 올라왔든 updatedAt이 비어 있으면 채운다.
+        state = seedUpdatedAt(state);
 
         // 마이그레이션 결과는 "저장된 부분집합"이라 AppStore 전체를 만족하지 않는다.
         // 빠진 필드는 뒤이어 실행되는 merge가 defaultState에서 채운다.

@@ -73,3 +73,34 @@ export function migrateV1toV2(state: Record<string, unknown>): Record<string, un
     },
   };
 }
+
+// 마이그레이션 체인 끝에 항상 적용되는 정규화.
+//
+// updatedAt은 커밋 5e90bdc에서 새로 생긴 필드라, 그 이전에 저장된 데이터에는 전부
+// 비어 있다. 비워둔 채로 계정 동기화를 붙이면 "값이 없음"이 "아주 오래됨"으로
+// 해석되어, 몇 주간 쌓은 진짜 데이터가 새로 깐 기기의 기본값에 진다.
+// 업그레이드 시점을 기준 시각으로 한 번 찍어 비교 가능한 상태로 만든다.
+export function seedUpdatedAt(state: Record<string, unknown>): Record<string, unknown> {
+  const now = Date.now();
+
+  const stampEach = (items: unknown): unknown =>
+    Array.isArray(items)
+      ? items.map((item) =>
+          item && typeof item === 'object' && (item as { updatedAt?: unknown }).updatedAt == null
+            ? { ...(item as object), updatedAt: now }
+            : item
+        )
+      : items;
+
+  const next: Record<string, unknown> = { ...state };
+
+  const settings = state.userSettings;
+  if (settings && typeof settings === 'object' && (settings as { updatedAt?: unknown }).updatedAt == null) {
+    next.userSettings = { ...(settings as object), updatedAt: now };
+  }
+  // 없는 키를 만들어내지 않는다 (migrateV0toV1과 같은 이유).
+  if (Array.isArray(state.permanentRoutines)) next.permanentRoutines = stampEach(state.permanentRoutines);
+  if (Array.isArray(state.feedbackHistory)) next.feedbackHistory = stampEach(state.feedbackHistory);
+
+  return next;
+}
