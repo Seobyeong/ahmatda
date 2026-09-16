@@ -26,7 +26,7 @@
 | 4 | Implementation | 구현 (Prototyping) | — | ⚪ 대기 |
 | 5 | Implementation | 확인 (Testing) | — | ⚪ 대기 |
 | 6 | Diffusion | 적용 (Application) | — | ⚪ 대기 |
-| 7 | Diffusion | 시장확산 (Market Fit) | — | ⚪ 대기 |
+| 7 | Diffusion | 시장확산 (Market Fit) | — | ⚪ 대기 · **IoT 로드맵 재료 보류 중** ([`00` 4.1](00-주제-목표-범위.md)) |
 
 ## 이 과제의 특수 조건
 
