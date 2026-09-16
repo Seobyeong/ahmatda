@@ -55,14 +55,14 @@ interface AppState {
 
 interface AppActions {
   // 체크리스트
-  toggleCheck: (id: number) => void;
+  toggleCheck: (id: string) => void;
   checkAll: () => void;
   uncheckAll: () => void;
   addTempItem: (label: string) => void;
   addPermanentRoutine: (label: string) => void;
-  deleteItem: (id: number) => void;
-  removePermanentRoutine: (id: number) => void;
-  setRoutineDays: (id: number, days: number[] | undefined) => void;
+  deleteItem: (id: string) => void;
+  removePermanentRoutine: (id: string) => void;
+  setRoutineDays: (id: string, days: number[] | undefined) => void;
   buildChecklist: () => void;
   startNewDay: () => void;
 
@@ -103,13 +103,27 @@ interface AppActions {
 
 type AppStore = AppState & AppActions;
 
-// 체크리스트/루틴 아이템 id 생성 — 세션 내에서 항상 유일하도록 단조 증가 카운터를 쓴다.
-// 이전에는 각 액션(임시 항목 추가/루틴 추가/체크리스트 재빌드)이 각자
-// `Date.now() + 로컬 인덱스`로 독립 계산했는데, 서로 다른 액션이 같은 밀리초에
-// 우연히 같은 값을 계산할 수 있어 이론상 id 충돌이 가능했다.
-let nextItemId = Date.now();
-function generateItemId(): number {
-  return nextItemId++;
+// 체크리스트/루틴 아이템 id 생성.
+// 기기 로컬 카운터(Date.now 기반)를 쓰면 같은 앱을 깐 두 기기가 같은 id를 만들 수
+// 있어서, 나중에 계정 동기화나 공유 체크리스트를 붙이면 한쪽 항목이 조용히 덮어써진다.
+// expo-crypto를 추가하면 네이티브 재빌드가 필요하므로 의존성 없이 RFC 4122 v4 형식을
+// 만든다. Math.random은 암호학적으로 안전하진 않지만 여기서 필요한 건 유일성뿐이고,
+// 항목 수 규모에서 충돌 확률은 무시할 수 있다.
+function generateItemId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// userSettings를 바꾸는 모든 경로가 이 함수를 지나가게 해서 updatedAt을 빠뜨릴 수
+// 없게 한다. 동기화에서 뭐가 최신인지 판단하려면 예외 없이 기록돼 있어야 한다.
+function patchSettings(
+  state: AppStore,
+  patch: Partial<UserSettings>
+): Pick<AppState, 'userSettings'> {
+  return { userSettings: { ...state.userSettings, ...patch, updatedAt: Date.now() } };
 }
 
 // 기본 제공 루틴 — permanentRoutines의 초기 시드값. 다른 커스텀 루틴과 동일하게
@@ -118,10 +132,12 @@ function generateItemId(): number {
 // 둘 다에 있음) 목적별로 구분해서 끄고 켤 수 있게 "purposeId:라벨" 형식의 키를 쓴다.
 const purposeItemKey = (purposeId: PurposeId, label: string) => `${purposeId}:${label}`;
 
+// 기본 루틴은 랜덤 id가 아니라 고정 id를 쓴다. 두 기기가 각각 기본값에서 시작해도
+// 같은 항목이 같은 id를 갖게 되어, 동기화할 때 '집 열쇠'가 둘로 늘어나지 않는다.
 const DEFAULT_ROUTINES: ChecklistItem[] = [
-  { id: 1, label: '집 열쇠', icon: 'key', tier: 3, badge: null, checked: false, temp: false, permanent: true },
-  { id: 2, label: '지갑', icon: 'wallet', tier: 3, badge: null, checked: false, temp: false, permanent: true },
-  { id: 3, label: '에어팟', icon: 'headphones', tier: 3, badge: null, checked: false, temp: false, permanent: true },
+  { id: 'routine-default-key',      label: '집 열쇠', icon: 'key',        tier: 3, badge: null, checked: false, temp: false, permanent: true },
+  { id: 'routine-default-wallet',   label: '지갑',    icon: 'wallet',     tier: 3, badge: null, checked: false, temp: false, permanent: true },
+  { id: 'routine-default-airpods',  label: '에어팟',  icon: 'headphones', tier: 3, badge: null, checked: false, temp: false, permanent: true },
 ];
 
 const defaultState: AppState = {
@@ -212,6 +228,7 @@ export const useAppStore = create<AppStore>()(
               checked: false,
               temp: false,
               permanent: true,
+              updatedAt: Date.now(),
             },
           ],
         })),
@@ -236,28 +253,26 @@ export const useAppStore = create<AppStore>()(
         // 그 순간만 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를
         // 지속시키려면 영구적으로 비활성화해야 한다.
         if (item.tier === 1) {
-          set((state) => ({
-            userSettings: {
-              ...state.userSettings,
+          set((state) =>
+            patchSettings(state, {
               disabledWeatherItems: state.userSettings.disabledWeatherItems.includes(item.label)
                 ? state.userSettings.disabledWeatherItems
                 : [...state.userSettings.disabledWeatherItems, item.label],
-            },
-          }));
+            })
+          );
         }
 
         if (item.tier === 2) {
           const { purposeId } = get();
           if (purposeId) {
             const key = purposeItemKey(purposeId, item.label);
-            set((state) => ({
-              userSettings: {
-                ...state.userSettings,
+            set((state) =>
+              patchSettings(state, {
                 disabledPurposeItems: state.userSettings.disabledPurposeItems.includes(key)
                   ? state.userSettings.disabledPurposeItems
                   : [...state.userSettings.disabledPurposeItems, key],
-              },
-            }));
+              })
+            );
           }
         }
       },
@@ -273,7 +288,7 @@ export const useAppStore = create<AppStore>()(
         set((state) => ({
           permanentRoutines: state.permanentRoutines.map((routine) =>
             routine.id === id
-              ? { ...routine, days: days && days.length < 7 ? days : undefined }
+              ? { ...routine, days: days && days.length < 7 ? days : undefined, updatedAt: Date.now() }
               : routine
           ),
         })),
@@ -411,86 +426,64 @@ export const useAppStore = create<AppStore>()(
       setWeatherOutOfArea: (outOfArea) => set({ weatherOutOfArea: outOfArea }),
 
       // 유저 설정
-      updateDepartureTime: (time) =>
-        set((state) => ({
-          userSettings: { ...state.userSettings, departureTime: time },
-        })),
+      updateDepartureTime: (time) => set((state) => patchSettings(state, { departureTime: time })),
 
-      updateDeltaOffset: (delta) =>
-        set((state) => ({
-          userSettings: { ...state.userSettings, deltaOffset: delta },
-        })),
+      updateDeltaOffset: (delta) => set((state) => patchSettings(state, { deltaOffset: delta })),
 
-      setHomeBssid: (bssid) =>
-        set((state) => ({
-          userSettings: { ...state.userSettings, homeBssid: bssid },
-        })),
+      setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
 
-      setSensitivity: (level) =>
-        set((state) => ({
-          userSettings: { ...state.userSettings, sensitivityLevel: level },
-        })),
+      setSensitivity: (level) => set((state) => patchSettings(state, { sensitivityLevel: level })),
 
-      completeOnboarding: () =>
-        set((state) => ({
-          userSettings: { ...state.userSettings, onboarded: true },
-        })),
+      completeOnboarding: () => set((state) => patchSettings(state, { onboarded: true })),
 
       setWeatherItemEnabled: (label, enabled) =>
-        set((state) => ({
-          userSettings: {
-            ...state.userSettings,
+        set((state) =>
+          patchSettings(state, {
             disabledWeatherItems: enabled
               ? state.userSettings.disabledWeatherItems.filter((l) => l !== label)
               : state.userSettings.disabledWeatherItems.includes(label)
                 ? state.userSettings.disabledWeatherItems
                 : [...state.userSettings.disabledWeatherItems, label],
-          },
-        })),
+          })
+        ),
 
       setPurposeItemEnabled: (purposeId, label, enabled) =>
         set((state) => {
           const key = purposeItemKey(purposeId, label);
-          return {
-            userSettings: {
-              ...state.userSettings,
-              disabledPurposeItems: enabled
-                ? state.userSettings.disabledPurposeItems.filter((k) => k !== key)
-                : state.userSettings.disabledPurposeItems.includes(key)
-                  ? state.userSettings.disabledPurposeItems
-                  : [...state.userSettings.disabledPurposeItems, key],
-            },
-          };
+          return patchSettings(state, {
+            disabledPurposeItems: enabled
+              ? state.userSettings.disabledPurposeItems.filter((k) => k !== key)
+              : state.userSettings.disabledPurposeItems.includes(key)
+                ? state.userSettings.disabledPurposeItems
+                : [...state.userSettings.disabledPurposeItems, key],
+          });
         }),
 
       addCustomKeyword: (purposeId, keyword) =>
         set((state) => {
           const trimmed = keyword.trim();
           const existing = state.userSettings.customKeywords[purposeId] ?? [];
+          // 변화가 없으면 updatedAt도 건드리지 않는다 — 실제 변경이 없는데 수정 시각만
+          // 올라가면 동기화에서 엉뚱한 쪽이 최신으로 이긴다.
           if (!trimmed || existing.includes(trimmed)) return state;
-          return {
-            userSettings: {
-              ...state.userSettings,
-              customKeywords: {
-                ...state.userSettings.customKeywords,
-                [purposeId]: [...existing, trimmed],
-              },
+          return patchSettings(state, {
+            customKeywords: {
+              ...state.userSettings.customKeywords,
+              [purposeId]: [...existing, trimmed],
             },
-          };
+          });
         }),
 
       removeCustomKeyword: (purposeId, keyword) =>
         set((state) => {
           const existing = state.userSettings.customKeywords[purposeId] ?? [];
-          return {
-            userSettings: {
-              ...state.userSettings,
-              customKeywords: {
-                ...state.userSettings.customKeywords,
-                [purposeId]: existing.filter((k) => k !== keyword),
-              },
+          if (!existing.includes(keyword)) return state;
+          return patchSettings(state, {
+            customKeywords: {
+              ...state.userSettings.customKeywords,
+              [purposeId]: existing.filter((k) => k !== keyword),
             },
-          };
+          });
         }),
 
       // 피드백
@@ -507,13 +500,13 @@ export const useAppStore = create<AppStore>()(
 
           const today = getTodayString();
           return {
-            userSettings: { ...state.userSettings, deltaOffset },
+            ...patchSettings(state, { deltaOffset }),
             todayFeedback: val,
             // 하루 1건씩 영구 누적되는 persist 데이터라 캡이 없으면 무한 성장한다.
             // 화면(설정 패널)에서는 최근 3건만 쓰므로 최근 90건이면 충분하다.
             feedbackHistory: [
               ...state.feedbackHistory.filter((r) => r.date !== today),
-              { date: today, val },
+              { date: today, val, updatedAt: Date.now() },
             ].slice(-90),
           };
         }),
@@ -544,6 +537,47 @@ export const useAppStore = create<AppStore>()(
     {
       name: 'ahmatda-storage',
       storage: createJSONStorage(() => AsyncStorage),
+
+      // 저장 스키마 버전. 앞으로 필드 이름이나 구조가 바뀔 때마다 올리고 migrate에
+      // 변환을 추가한다. version 없이 출시하면 이미 기기에 깔린 데이터를 나중에
+      // 구분할 방법이 없어져서, 출시 전에 반드시 잡아둬야 하는 값이다.
+      version: 1,
+
+      // v0 → v1: 아이템 id를 number에서 string으로 바꿨다. 이전 빌드가 설치된 기기에
+      // 남아 있는 숫자 id를 문자열로 변환해줘야 체크/삭제가 동작한다(비교가 === 라서
+      // 타입이 다르면 아무 항목도 안 잡힌다).
+      migrate: (persistedState, version) => {
+        if (version >= 1) return persistedState as AppStore;
+
+        const state = (persistedState ?? {}) as Record<string, unknown>;
+
+        // 기본 루틴은 예전에 id 1·2·3으로 고정돼 있었다. 그냥 "1"·"2"·"3"으로 바꾸면
+        // 새로 깐 기기의 기본 루틴(routine-default-*)과 id가 달라져서, 나중에 동기화할 때
+        // 같은 '집 열쇠'가 둘로 늘어난다. 라벨까지 일치할 때만 고정 id로 맞춰준다.
+        const LEGACY_DEFAULT_IDS: Record<string, { label: string; id: string }> = {
+          '1': { label: '집 열쇠', id: 'routine-default-key' },
+          '2': { label: '지갑', id: 'routine-default-wallet' },
+          '3': { label: '에어팟', id: 'routine-default-airpods' },
+        };
+
+        const toStringId = (items: unknown): unknown =>
+          Array.isArray(items)
+            ? items.map((item) => {
+                if (!item || typeof item !== 'object') return item;
+                const { id, label } = item as { id: unknown; label?: unknown };
+                const legacy = LEGACY_DEFAULT_IDS[String(id)];
+                const nextId = legacy && legacy.label === label ? legacy.id : String(id);
+                return { ...(item as object), id: nextId };
+              })
+            : items;
+
+        return {
+          ...state,
+          checklist: toStringId(state.checklist),
+          permanentRoutines: toStringId(state.permanentRoutines),
+        } as AppStore;
+      },
+
       // 기본 merge는 최상위 키만 얕게 합치기 때문에, 예전 버전에 저장된 userSettings에
       // 새로 추가된 필드(예: disabledPurposeItems)가 없으면 그대로 undefined가 된다.
       // userSettings만 defaultState 기준으로 한 겹 더 깊게 합쳐서 항상 완전한 형태를 보장한다.
@@ -555,6 +589,12 @@ export const useAppStore = create<AppStore>()(
           userSettings: { ...currentState.userSettings, ...persisted?.userSettings },
         };
       },
+      // 나중에 계정을 붙일 때를 위한 구분:
+      //   [계정 동기화 대상]  permanentRoutines, userSettings(homeBssid 제외),
+      //                      feedbackHistory, forgottenHistory
+      //   [기기 로컬 전용]    checklist/checklistDate(오늘 것), todayFeedback,
+      //                      userSettings.homeBssid(기기가 붙는 AP는 기기마다 다름),
+      //                      WeatherService 날씨 캐시, WifiMonitorService 알림 dedup 키
       partialize: (state) => ({
         checklist: state.checklist,
         checklistDate: state.checklistDate,

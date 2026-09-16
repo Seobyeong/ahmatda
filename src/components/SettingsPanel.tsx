@@ -125,7 +125,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   };
 
   // 요일 칩 토글 — days가 없으면(매일) 해당 요일 하나만 끈 6일짜리 배열로 시작한다.
-  const handleToggleRoutineDay = (routineId: number, currentDays: number[] | undefined, day: number) => {
+  const handleToggleRoutineDay = (routineId: string, currentDays: number[] | undefined, day: number) => {
     const days = currentDays ?? [0, 1, 2, 3, 4, 5, 6];
     const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
     setRoutineDays(routineId, next);

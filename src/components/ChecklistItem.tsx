@@ -24,8 +24,8 @@ import type { ChecklistItem as ChecklistItemType } from '../types';
 
 interface ChecklistItemProps {
   item: ChecklistItemType;
-  onToggle: (id: number) => void;
-  onDelete?: (id: number) => void;
+  onToggle: (id: string) => void;
+  onDelete?: (id: string) => void;
   purposeColor?: string;
 }
 

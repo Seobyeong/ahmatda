@@ -17,8 +17,10 @@ export type WeatherType = 'sunny' | 'cloudy' | 'rainy' | 'drizzle' | 'hot';
 export type WeatherAlert = 'rain' | 'cold' | 'heat' | null;
 
 // 체크리스트 아이템
+// id가 string인 이유: 나중에 계정/기기 동기화를 붙일 때 두 기기에서 만든 항목의
+// id가 겹치면 한쪽이 조용히 덮어써진다. 기기 로컬 카운터로는 이걸 막을 수 없다.
 export interface ChecklistItem {
-  id: number;
+  id: string;
   label: string;
   icon: string;
   tier: ItemTier;
@@ -28,6 +30,10 @@ export interface ChecklistItem {
   temp: boolean;       // 오늘만 임시 항목
   permanent: boolean;  // 영구 루틴 항목
   days?: number[];     // 루틴이 나타날 요일 (0=일 ~ 6=토). 없으면 매일
+  // 동기화 충돌 해결(last-write-wins)용 수정 시각. permanentRoutines처럼 사용자가
+  // 직접 만들고 고치는 항목에만 의미가 있고, tier 1·2 항목은 매 빌드마다 새로
+  // 생성되는 파생 데이터라 설정하지 않는다.
+  updatedAt?: number;
 }
 
 // 외출 목적 아이템 (PURPOSE 내 items 배열 원소)
@@ -92,15 +98,21 @@ export interface UserSettings {
   disabledPurposeItems: string[]; // 사용자가 영구적으로 끈 목적별 준비물 — "purposeId:라벨" 형식
                                    // (같은 라벨이 여러 목적에 중복 등장해서 목적별로 구분 필요)
   customKeywords: Partial<Record<PurposeId, string[]>>; // 목적 자동감지에 추가할 사용자 키워드
+  updatedAt?: number; // 동기화 충돌 해결용 — userSettings를 바꾸는 모든 경로가 갱신한다
 }
 
 // 피드백 기록
+// 같은 날 두 기기에서 서로 다른 응답을 하면 date만으로는 뭐가 최신인지 알 수 없어서
+// updatedAt으로 판단한다.
 export interface FeedbackRecord {
   date: string;
   val: FeedbackType;
+  updatedAt?: number;
 }
 
 // 외출(Wi-Fi 이탈) 시점에 미체크였던 항목 기록 — "자주 까먹는 항목" 학습용
+// updatedAt이 없는 건 의도적이다. 이건 사용자가 고치는 값이 아니라 기기가 관측한
+// 사실이라, 기기별 기록을 date 기준으로 합치면 되고 충돌 해결이 필요 없다.
 export interface ForgottenRecord {
   date: string;     // "YYYY-MM-DD"
   labels: string[]; // 그날 안 챙기고 나간 항목 라벨들
