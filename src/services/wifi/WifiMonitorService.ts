@@ -2,6 +2,7 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '@/services/notification/NotificationService';
 import { getTodayString, isWithinDepartureWindow } from '@/utils/time';
+import { classifyPresence } from './presence';
 import type { ChecklistItem } from '@/types';
 
 const BSSID_KEY         = 'home_bssid';
@@ -56,10 +57,23 @@ export const WifiMonitorService = {
     if (alreadyAlerted === today) return null;
 
     const state = await NetInfo.fetch();
-    const isHome = state.type === 'wifi' && (state.details as { bssid?: string })?.bssid === homeBssid;
-    if (isHome) return null;
+    const presence = classifyPresence(state, homeBssid);
+    // 'unknown'이면 아무것도 하지 않는다 — 알림도, dedup 키 소진도, 놓침 기록도 없다.
+    // 다음 폴링에서 판정이 가능해지면 그때 처리된다.
+    if (presence !== 'away') return null;
 
     const { useAppStore } = await import('@/store');
+
+    // 백그라운드 폴링은 앱을 한 번도 열지 않은 날에도 돈다. 그때 checklist는 아직
+    // 어제 것이라, 그대로 쓰면 어제 항목으로 알림을 보내고 어제 라벨을 오늘 날짜로
+    // 기록해 "이번 주 N번 놓침" 집계를 오염시킨다. 날짜가 밀렸으면 먼저 하루를 넘긴다.
+    // (buildChecklist가 아니라 startNewDay를 쓰는 이유: checklistDate만 오늘로 바꿔두면
+    //  나중에 앱을 열었을 때 DashboardScreen이 하루 전환을 건너뛰어 todayFeedback 같은
+    //  당일 한정 상태가 어제 값으로 남는다.)
+    if (useAppStore.getState().checklistDate !== today) {
+      useAppStore.getState().startNewDay();
+    }
+
     const unchecked = useAppStore.getState().checklist.filter((i) => !i.checked);
     if (unchecked.length === 0) return null;
 
@@ -87,29 +101,40 @@ export const WifiMonitorService = {
     // 이미 실행 중이면 중복 등록 방지
     WifiMonitorService.stopMonitoring();
 
+    // stopMonitoring()이 세대 번호를 한 번 더 올리므로, 지금 설치하는 리스너의
+    // 세대는 위에서 잡아둔 generation이 아니라 그 이후 값이다. 아래 디바운스
+    // 콜백은 이 값과 비교해야 한다 (generation과 비교하면 항상 불일치라 알림이
+    // 영영 안 나간다).
+    const listenerGeneration = monitorGeneration;
+
     // 2시간 후 자동 종료 (Wi-Fi 미이탈 시 배터리 보호)
     timeoutTimer = setTimeout(() => {
       WifiMonitorService.stopMonitoring();
     }, TIMEOUT_MS);
 
     unsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
-      const isWifi       = state.type === 'wifi';
-      const currentBssid = (state.details as { bssid?: string })?.bssid;
-      const isHome       = isWifi && currentBssid === homeBssid;
-      const isConnected  = state.isConnected ?? false;
+      const presence    = classifyPresence(state, homeBssid);
+      const isConnected = state.isConnected ?? false;
+
+      // 판정 불가 상태에서는 디바운스를 걸지도, 걸려 있던 것을 취소하지도 않는다.
+      // 위치 권한이 잠깐 빠졌다고 진짜 이탈 감지를 취소해버리면 안 되기 때문이다.
+      if (presence === 'unknown') return;
 
       // 집 Wi-Fi 끊김 감지
-      if (!isHome || !isConnected) {
+      if (presence === 'away' || !isConnected) {
         // 10초 디바운스 — 일시적 끊김 무시
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
           // 재확인
           const rechecked = await NetInfo.fetch();
-          const stillAway =
-            rechecked.type !== 'wifi' ||
-            (rechecked.details as { bssid?: string })?.bssid !== homeBssid;
 
-          if (stillAway) {
+          // stopMonitoring()은 아직 대기 중인 타이머만 지울 수 있다. 이미 실행에 들어간
+          // 콜백은 위 await에서 멈춰 있다가 그대로 재개되므로, 감시 창이 닫혔거나
+          // disarm된 뒤에 알림이 나가고 당일 dedup 키까지 소진될 수 있다.
+          // 리스너 설치 시점의 세대와 달라졌으면 이 콜백은 무효다.
+          if (listenerGeneration !== monitorGeneration) return;
+
+          if (classifyPresence(rechecked, homeBssid) === 'away') {
             // checkOnce()가 미체크 항목 조회, 알림 전송, 당일 중복 알림 방지까지 처리한다.
             // BackgroundTaskService의 주기적 폴링과 동일한 dedup 키를 공유해 이중 알림을 막는다.
             const unchecked = await WifiMonitorService.checkOnce();
