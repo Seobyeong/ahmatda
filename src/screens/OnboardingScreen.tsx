@@ -87,7 +87,6 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const [wifiStatus, setWifiStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const setSensitivity = useAppStore((s) => s.setSensitivity);
-  const updateDeltaOffset = useAppStore((s) => s.updateDeltaOffset);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
@@ -220,7 +219,6 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
 
   const handleSensitivityNext = () => {
     setSensitivity(sensitivity);
-    updateDeltaOffset(SENSITIVITY_DELTA[sensitivity]);
     setStep(2);
   };
 

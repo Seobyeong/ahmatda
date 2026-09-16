@@ -13,7 +13,7 @@ import {
 import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
-import { SENSITIVITY_DELTA } from '../constants/feedback';
+import { getEffectiveDelta } from '../utils/temperature';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
@@ -53,7 +53,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   }, [visible, translateY]);
 
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
-  const deltaOffset = useAppStore((s) => s.userSettings.deltaOffset);
+  const learnedDelta = useAppStore((s) => s.userSettings.learnedDelta);
   const sensitivityLevel = useAppStore((s) => s.userSettings.sensitivityLevel);
   const homeBssid = useAppStore((s) => s.userSettings.homeBssid);
   const disabledWeatherItems = useAppStore((s) => s.userSettings.disabledWeatherItems);
@@ -64,7 +64,6 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const setSensitivity = useAppStore((s) => s.setSensitivity);
-  const updateDeltaOffset = useAppStore((s) => s.updateDeltaOffset);
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const removePermanentRoutine = useAppStore((s) => s.removePermanentRoutine);
   const setRoutineDays = useAppStore((s) => s.setRoutineDays);
@@ -119,9 +118,10 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     setEditingTime(false);
   };
 
+  // 기준값만 바꾼다. 일일 피드백으로 쌓인 learnedDelta는 그대로 두므로,
+  // 민감도를 다시 골라도 그동안의 학습이 사라지지 않는다.
   const handleSensitivityChange = (level: 1 | 2 | 3 | 4 | 5) => {
     setSensitivity(level);
-    updateDeltaOffset(SENSITIVITY_DELTA[level]);
   };
 
   // 요일 칩 토글 — days가 없으면(매일) 해당 요일 하나만 끈 6일짜리 배열로 시작한다.
@@ -147,9 +147,11 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     }
   };
 
+  // 화면에는 실제 적용되는 Δt(기준값 + 학습값)를 보여준다.
+  const effectiveDelta = getEffectiveDelta(sensitivityLevel, learnedDelta);
   const deltaColor =
-    deltaOffset > 0 ? Colors.red500 : deltaOffset < 0 ? Colors.blue500 : Colors.slate600;
-  const deltaLabel = deltaOffset > 0 ? `+${deltaOffset}` : `${deltaOffset}`;
+    effectiveDelta > 0 ? Colors.red500 : effectiveDelta < 0 ? Colors.blue500 : Colors.slate600;
+  const deltaLabel = effectiveDelta > 0 ? `+${effectiveDelta}` : `${effectiveDelta}`;
 
   const recentFeedback = feedbackHistory.slice(-3).reverse();
 

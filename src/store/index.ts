@@ -5,7 +5,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
-import { FEEDBACK_DELTA } from '../constants/feedback';
+import { FEEDBACK_DELTA, SENSITIVITY_DELTA } from '../constants/feedback';
 import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import type {
@@ -78,7 +78,6 @@ interface AppActions {
 
   // 유저 설정
   updateDepartureTime: (time: string) => void;
-  updateDeltaOffset: (delta: number) => void;
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   completeOnboarding: () => void;
@@ -140,6 +139,72 @@ const DEFAULT_ROUTINES: ChecklistItem[] = [
   { id: 'routine-default-airpods',  label: '에어팟',  icon: 'headphones', tier: 3, badge: null, checked: false, temp: false, permanent: true },
 ];
 
+// ── persist 마이그레이션 ──────────────────────────────────────────────
+// 각 단계는 "그 버전에서 저장된 모양"을 받아 다음 버전 모양으로 바꾼다.
+// 순서대로 연쇄 적용되므로 단계마다 한 가지 변환만 책임진다.
+
+// v0 → v1: 아이템 id를 number에서 string으로 바꿨다. 이전 빌드가 설치된 기기에
+// 남아 있는 숫자 id를 문자열로 변환해줘야 체크/삭제가 동작한다(비교가 === 라서
+// 타입이 다르면 아무 항목도 안 잡힌다).
+function migrateV0toV1(state: Record<string, unknown>): Record<string, unknown> {
+  // 기본 루틴은 예전에 id 1·2·3으로 고정돼 있었다. 그냥 "1"·"2"·"3"으로 바꾸면
+  // 새로 깐 기기의 기본 루틴(routine-default-*)과 id가 달라져서, 나중에 동기화할 때
+  // 같은 '집 열쇠'가 둘로 늘어난다. 라벨까지 일치할 때만 고정 id로 맞춰준다.
+  const LEGACY_DEFAULT_IDS: Record<string, { label: string; id: string }> = {
+    '1': { label: '집 열쇠', id: 'routine-default-key' },
+    '2': { label: '지갑', id: 'routine-default-wallet' },
+    '3': { label: '에어팟', id: 'routine-default-airpods' },
+  };
+
+  const toStringId = (items: unknown): unknown =>
+    Array.isArray(items)
+      ? items.map((item) => {
+          if (!item || typeof item !== 'object') return item;
+          const { id, label } = item as { id: unknown; label?: unknown };
+          const legacy = LEGACY_DEFAULT_IDS[String(id)];
+          const nextId = legacy && legacy.label === label ? legacy.id : String(id);
+          return { ...(item as object), id: nextId };
+        })
+      : items;
+
+  return {
+    ...state,
+    checklist: toStringId(state.checklist),
+    permanentRoutines: toStringId(state.permanentRoutines),
+  };
+}
+
+// v1 → v2: deltaOffset 하나에 "사용자가 고른 기준값 + 피드백 학습값"이 섞여 있었다.
+// 그 탓에 설정에서 민감도를 다시 고르면 절대값 덮어쓰기가 일어나 그동안의 학습이
+// 통째로 사라졌다. 두 성분을 분리하면서, 저장된 값에서 학습분만 역산해 보존한다.
+//   기존 deltaOffset = SENSITIVITY_DELTA[sensitivityLevel] + 학습분
+//   → learnedDelta   = deltaOffset - SENSITIVITY_DELTA[sensitivityLevel]
+function migrateV1toV2(state: Record<string, unknown>): Record<string, unknown> {
+  const settings = state.userSettings;
+  if (!settings || typeof settings !== 'object') return state;
+
+  const { deltaOffset, sensitivityLevel, ...rest } = settings as Record<string, unknown> & {
+    deltaOffset?: unknown;
+    sensitivityLevel?: unknown;
+  };
+
+  // 저장된 민감도가 없거나 범위를 벗어나면 기준값 0(보통)으로 본다.
+  const level =
+    typeof sensitivityLevel === 'number' && sensitivityLevel >= 1 && sensitivityLevel <= 5
+      ? (sensitivityLevel as 1 | 2 | 3 | 4 | 5)
+      : 3;
+  const previousDelta = typeof deltaOffset === 'number' ? deltaOffset : 0;
+
+  return {
+    ...state,
+    userSettings: {
+      ...rest,
+      sensitivityLevel: level,
+      learnedDelta: previousDelta - SENSITIVITY_DELTA[level],
+    },
+  };
+}
+
 const defaultState: AppState = {
   checklist: [],
   checklistDate: null,
@@ -156,9 +221,9 @@ const defaultState: AppState = {
 
   userSettings: {
     departureTime: '08:15',
-    deltaOffset: 0,
     homeBssid: null,
     sensitivityLevel: 3,
+    learnedDelta: 0,
     onboarded: false,
     disabledWeatherItems: [],
     disabledPurposeItems: [],
@@ -428,8 +493,6 @@ export const useAppStore = create<AppStore>()(
       // 유저 설정
       updateDepartureTime: (time) => set((state) => patchSettings(state, { departureTime: time })),
 
-      updateDeltaOffset: (delta) => set((state) => patchSettings(state, { deltaOffset: delta })),
-
       setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
 
       setSensitivity: (level) => set((state) => patchSettings(state, { sensitivityLevel: level })),
@@ -489,18 +552,20 @@ export const useAppStore = create<AppStore>()(
       // 피드백
       // 오늘 이미 준 피드백과 같은 값이면 무시하고, 다른 값으로 바꾸는 경우 이전
       // 보정치를 먼저 되돌린 뒤 새로 적용한다 — 그래야 앱 재시작이나 재선택으로
-      // deltaOffset이 중복 조정되지 않는다.
+      // learnedDelta가 중복 조정되지 않는다.
+      // 조정 대상은 learnedDelta(학습값)뿐이다. 사용자가 고른 기준값(sensitivityLevel)은
+      // 건드리지 않으므로, 나중에 민감도를 다시 골라도 여기 쌓인 학습이 사라지지 않는다.
       applyFeedback: (val) =>
         set((state) => {
           if (state.todayFeedback === val) return {};
 
-          let deltaOffset = state.userSettings.deltaOffset;
-          if (state.todayFeedback) deltaOffset -= FEEDBACK_DELTA[state.todayFeedback];
-          deltaOffset += FEEDBACK_DELTA[val];
+          let learnedDelta = state.userSettings.learnedDelta;
+          if (state.todayFeedback) learnedDelta -= FEEDBACK_DELTA[state.todayFeedback];
+          learnedDelta += FEEDBACK_DELTA[val];
 
           const today = getTodayString();
           return {
-            ...patchSettings(state, { deltaOffset }),
+            ...patchSettings(state, { learnedDelta }),
             todayFeedback: val,
             // 하루 1건씩 영구 누적되는 persist 데이터라 캡이 없으면 무한 성장한다.
             // 화면(설정 패널)에서는 최근 3건만 쓰므로 최근 90건이면 충분하다.
@@ -541,41 +606,19 @@ export const useAppStore = create<AppStore>()(
       // 저장 스키마 버전. 앞으로 필드 이름이나 구조가 바뀔 때마다 올리고 migrate에
       // 변환을 추가한다. version 없이 출시하면 이미 기기에 깔린 데이터를 나중에
       // 구분할 방법이 없어져서, 출시 전에 반드시 잡아둬야 하는 값이다.
-      version: 1,
+      version: 2,
 
-      // v0 → v1: 아이템 id를 number에서 string으로 바꿨다. 이전 빌드가 설치된 기기에
-      // 남아 있는 숫자 id를 문자열로 변환해줘야 체크/삭제가 동작한다(비교가 === 라서
-      // 타입이 다르면 아무 항목도 안 잡힌다).
+      // v0 → v1: 아이템 id를 number에서 string으로 바꿈.
+      // v1 → v2: deltaOffset(기준값+학습값 혼합)을 learnedDelta(학습값만)로 분리.
       migrate: (persistedState, version) => {
-        if (version >= 1) return persistedState as AppStore;
+        let state = (persistedState ?? {}) as Record<string, unknown>;
 
-        const state = (persistedState ?? {}) as Record<string, unknown>;
+        if (version < 1) state = migrateV0toV1(state);
+        if (version < 2) state = migrateV1toV2(state);
 
-        // 기본 루틴은 예전에 id 1·2·3으로 고정돼 있었다. 그냥 "1"·"2"·"3"으로 바꾸면
-        // 새로 깐 기기의 기본 루틴(routine-default-*)과 id가 달라져서, 나중에 동기화할 때
-        // 같은 '집 열쇠'가 둘로 늘어난다. 라벨까지 일치할 때만 고정 id로 맞춰준다.
-        const LEGACY_DEFAULT_IDS: Record<string, { label: string; id: string }> = {
-          '1': { label: '집 열쇠', id: 'routine-default-key' },
-          '2': { label: '지갑', id: 'routine-default-wallet' },
-          '3': { label: '에어팟', id: 'routine-default-airpods' },
-        };
-
-        const toStringId = (items: unknown): unknown =>
-          Array.isArray(items)
-            ? items.map((item) => {
-                if (!item || typeof item !== 'object') return item;
-                const { id, label } = item as { id: unknown; label?: unknown };
-                const legacy = LEGACY_DEFAULT_IDS[String(id)];
-                const nextId = legacy && legacy.label === label ? legacy.id : String(id);
-                return { ...(item as object), id: nextId };
-              })
-            : items;
-
-        return {
-          ...state,
-          checklist: toStringId(state.checklist),
-          permanentRoutines: toStringId(state.permanentRoutines),
-        } as AppStore;
+        // 마이그레이션 결과는 "저장된 부분집합"이라 AppStore 전체를 만족하지 않는다.
+        // 빠진 필드는 뒤이어 실행되는 merge가 defaultState에서 채운다.
+        return state as unknown as AppStore;
       },
 
       // 기본 merge는 최상위 키만 얕게 합치기 때문에, 예전 버전에 저장된 userSettings에

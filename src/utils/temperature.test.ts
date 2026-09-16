@@ -1,4 +1,4 @@
-import { calcPerceivedTemp, formatPerceivedFormula, formatTemp } from './temperature';
+import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta } from './temperature';
 
 describe('calcPerceivedTemp', () => {
   it('보정 요인이 없으면 실제 온도를 그대로 반환한다', () => {
@@ -70,5 +70,28 @@ describe('formatPerceivedFormula', () => {
     expect(formatPerceivedFormula(20, 50, 2, -2, 18)).toBe(
       '20° + f(H:50%, W:2m/s) + Δt(-2°) ≒ 18°C'
     );
+  });
+});
+
+describe('getEffectiveDelta', () => {
+  it('민감도 기준값과 학습값을 합산한다', () => {
+    expect(getEffectiveDelta(3, 0)).toBe(0);   // 보통 + 학습 없음
+    expect(getEffectiveDelta(1, 0)).toBe(-2);  // 매우 추위 탐
+    expect(getEffectiveDelta(5, 0)).toBe(2);   // 매우 더위 탐
+  });
+
+  it('학습값이 기준값에 더해진다', () => {
+    expect(getEffectiveDelta(3, -3)).toBe(-3);
+    expect(getEffectiveDelta(4, -3)).toBe(-2); // 기준 +1, 학습 -3
+  });
+
+  // 이 분리의 존재 이유 — 민감도를 다시 골라도 학습값은 보존돼야 한다.
+  it('민감도를 바꿔도 학습값이 사라지지 않는다', () => {
+    const learned = -3; // 2주간 "추웠음" 누적
+    const before = getEffectiveDelta(3, learned);
+    const after = getEffectiveDelta(4, learned);
+    expect(before).toBe(-3);
+    expect(after).toBe(-2);       // 기준값만 +1 움직임
+    expect(after - before).toBe(1); // 학습분은 그대로 살아있음
   });
 });

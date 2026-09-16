@@ -90,9 +90,14 @@ export interface CalendarEvent {
 // 유저 설정
 export interface UserSettings {
   departureTime: string;    // "HH:mm" 형식
-  deltaOffset: number;      // 체감온도 보정치
   homeBssid: string | null; // 집 Wi-Fi BSSID
+  // 체감온도 보정치 Δt는 두 성분의 합이다. 한 필드에 섞으면 민감도를 다시 고를 때
+  // 그동안 쌓인 학습이 통째로 덮어써지므로 반드시 분리해서 보관한다.
+  //   기준값 = SENSITIVITY_DELTA[sensitivityLevel]  (사용자가 직접 고른 값)
+  //   학습값 = learnedDelta                          (일일 피드백으로 ±1씩 누적)
+  // 실제 Δt는 getEffectiveDelta()로 합산해서 쓴다.
   sensitivityLevel: 1 | 2 | 3 | 4 | 5;
+  learnedDelta: number;
   onboarded: boolean;
   disabledWeatherItems: string[]; // 사용자가 영구적으로 끈 날씨 트리거 항목 라벨 (예: '우산')
   disabledPurposeItems: string[]; // 사용자가 영구적으로 끈 목적별 준비물 — "purposeId:라벨" 형식

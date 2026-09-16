@@ -27,7 +27,7 @@ import { FEEDBACK_MESSAGES } from '../constants/feedback';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { WeatherService } from '../services/weather/WeatherService';
-import { calcPerceivedTemp, formatPerceivedFormula, formatTemp } from '../utils/temperature';
+import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta } from '../utils/temperature';
 import { getAlertTime, getCurrentSlotIndex, getTodayString } from '../utils/time';
 import { getCurrentCoords } from '../utils/location';
 import { isWithinKorea } from '../utils/kmaGrid';
@@ -347,7 +347,7 @@ export function DashboardScreen() {
         currentWeather.temp,
         currentWeather.humidity,
         currentWeather.wind,
-        userSettings.deltaOffset
+        getEffectiveDelta(userSettings.sensitivityLevel, userSettings.learnedDelta)
       )
     : null;
 
@@ -357,7 +357,7 @@ export function DashboardScreen() {
           currentWeather.temp,
           currentWeather.humidity,
           currentWeather.wind,
-          userSettings.deltaOffset,
+          getEffectiveDelta(userSettings.sensitivityLevel, userSettings.learnedDelta),
           perceivedTemp
         )
       : null;
