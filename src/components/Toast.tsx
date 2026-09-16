@@ -23,7 +23,10 @@ export function Toast({ message, onDone }: ToastProps) {
     }, 2600);
 
     return () => clearTimeout(timer);
-  }, [translateY, opacity, onDone]);
+    // message가 빠져 있으면 토스트가 연달아 뜰 때 컴포넌트가 재마운트되지 않아
+    // 타이머가 이어진다 — 두 번째 메시지가 남은 시간만큼만 보이고 사라진다.
+    // (피드백 버튼을 연속으로 누르면 바로 재현된다)
+  }, [message, translateY, opacity, onDone]);
 
   return (
     <View style={styles.container} pointerEvents="none">

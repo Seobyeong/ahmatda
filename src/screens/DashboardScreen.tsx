@@ -303,7 +303,11 @@ export function DashboardScreen() {
 
   const handleVoiceAdd = async () => {
     if (isListening) {
-      ExpoSpeechRecognitionModule.stop();
+      // 듣는 중에 마이크를 다시 누르는 건 "그만두겠다"는 뜻이다.
+      // stop()은 최종 결과를 확정해서 돌려주는 API라 result 핸들러가 isFinal로
+      // 항목을 추가해버린다 — 사용자가 방금 취소한 항목이 목록에 생긴다.
+      // 취소에는 결과를 버리는 abort()를 쓴다.
+      ExpoSpeechRecognitionModule.abort();
       return;
     }
     const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
