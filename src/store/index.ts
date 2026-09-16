@@ -5,8 +5,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
-import { FEEDBACK_DELTA, SENSITIVITY_DELTA } from '../constants/feedback';
+import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
+import { migrateV0toV1, migrateV1toV2 } from './migrations';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import type {
   CalendarEvent,
@@ -138,72 +139,6 @@ const DEFAULT_ROUTINES: ChecklistItem[] = [
   { id: 'routine-default-wallet',   label: '지갑',    icon: 'wallet',     tier: 3, badge: null, checked: false, temp: false, permanent: true },
   { id: 'routine-default-airpods',  label: '에어팟',  icon: 'headphones', tier: 3, badge: null, checked: false, temp: false, permanent: true },
 ];
-
-// ── persist 마이그레이션 ──────────────────────────────────────────────
-// 각 단계는 "그 버전에서 저장된 모양"을 받아 다음 버전 모양으로 바꾼다.
-// 순서대로 연쇄 적용되므로 단계마다 한 가지 변환만 책임진다.
-
-// v0 → v1: 아이템 id를 number에서 string으로 바꿨다. 이전 빌드가 설치된 기기에
-// 남아 있는 숫자 id를 문자열로 변환해줘야 체크/삭제가 동작한다(비교가 === 라서
-// 타입이 다르면 아무 항목도 안 잡힌다).
-function migrateV0toV1(state: Record<string, unknown>): Record<string, unknown> {
-  // 기본 루틴은 예전에 id 1·2·3으로 고정돼 있었다. 그냥 "1"·"2"·"3"으로 바꾸면
-  // 새로 깐 기기의 기본 루틴(routine-default-*)과 id가 달라져서, 나중에 동기화할 때
-  // 같은 '집 열쇠'가 둘로 늘어난다. 라벨까지 일치할 때만 고정 id로 맞춰준다.
-  const LEGACY_DEFAULT_IDS: Record<string, { label: string; id: string }> = {
-    '1': { label: '집 열쇠', id: 'routine-default-key' },
-    '2': { label: '지갑', id: 'routine-default-wallet' },
-    '3': { label: '에어팟', id: 'routine-default-airpods' },
-  };
-
-  const toStringId = (items: unknown): unknown =>
-    Array.isArray(items)
-      ? items.map((item) => {
-          if (!item || typeof item !== 'object') return item;
-          const { id, label } = item as { id: unknown; label?: unknown };
-          const legacy = LEGACY_DEFAULT_IDS[String(id)];
-          const nextId = legacy && legacy.label === label ? legacy.id : String(id);
-          return { ...(item as object), id: nextId };
-        })
-      : items;
-
-  return {
-    ...state,
-    checklist: toStringId(state.checklist),
-    permanentRoutines: toStringId(state.permanentRoutines),
-  };
-}
-
-// v1 → v2: deltaOffset 하나에 "사용자가 고른 기준값 + 피드백 학습값"이 섞여 있었다.
-// 그 탓에 설정에서 민감도를 다시 고르면 절대값 덮어쓰기가 일어나 그동안의 학습이
-// 통째로 사라졌다. 두 성분을 분리하면서, 저장된 값에서 학습분만 역산해 보존한다.
-//   기존 deltaOffset = SENSITIVITY_DELTA[sensitivityLevel] + 학습분
-//   → learnedDelta   = deltaOffset - SENSITIVITY_DELTA[sensitivityLevel]
-function migrateV1toV2(state: Record<string, unknown>): Record<string, unknown> {
-  const settings = state.userSettings;
-  if (!settings || typeof settings !== 'object') return state;
-
-  const { deltaOffset, sensitivityLevel, ...rest } = settings as Record<string, unknown> & {
-    deltaOffset?: unknown;
-    sensitivityLevel?: unknown;
-  };
-
-  // 저장된 민감도가 없거나 범위를 벗어나면 기준값 0(보통)으로 본다.
-  const level =
-    typeof sensitivityLevel === 'number' && sensitivityLevel >= 1 && sensitivityLevel <= 5
-      ? (sensitivityLevel as 1 | 2 | 3 | 4 | 5)
-      : 3;
-  const previousDelta = typeof deltaOffset === 'number' ? deltaOffset : 0;
-
-  return {
-    ...state,
-    userSettings: {
-      ...rest,
-      sensitivityLevel: level,
-      learnedDelta: previousDelta - SENSITIVITY_DELTA[level],
-    },
-  };
-}
 
 const defaultState: AppState = {
   checklist: [],
