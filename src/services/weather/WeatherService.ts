@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrentWeather, WeatherAlert, WeatherSlot, WeatherType, TimelineHint } from '@/types';
 import { getCurrentSlotIndex } from '@/utils/time';
 import { latLonToGrid } from '@/utils/kmaGrid';
+import { formatLocalDate, pickForecastDate } from './forecastDate';
 import { getSidoFromCoords } from '@/utils/sido';
 import { AirQualityService } from '@/services/airQuality/AirQualityService';
 
@@ -16,15 +17,8 @@ interface KmaItem {
   category: string;
   obsrValue?: string;
   fcstValue?: string;
+  fcstDate?: string;  // "YYYYMMDD" — 단기예보는 최대 +3일치를 함께 돌려주므로 반드시 본다
   fcstTime?: string;
-}
-
-// "YYYYMMDD" — toISOString()은 UTC 기준이라 자정 근처 KST에서 하루 어긋날 수 있어 로컬 값으로 직접 조립
-function formatLocalDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
 }
 
 // 초단기실황(getUltraSrtNcst) — 매시 40분에 해당 시각 데이터가 공개됨
@@ -188,9 +182,18 @@ export const WeatherService = {
 
       const items: KmaItem[] = response.data?.response?.body?.items?.item ?? [];
 
-      // fcstTime("HHmm") 기준으로 카테고리 맵 구성
+      // 단기예보는 최대 +3일치를 한 번에 돌려준다. fcstTime("1200")만으로 맵을 만들면
+      // 오늘·내일·모레의 같은 시각이 서로를 덮어써서, "오늘 시간대별 날씨" 자리에
+      // 내일이나 모레 값이 뜬다. 반드시 한 날짜의 예보만 골라 쓴다.
+      //
+      // 오늘 것이 있으면 오늘, 없으면 가장 이른 날짜를 쓴다. 23시 발표분은 예보가
+      // 다음 날 00시부터 시작해서 오늘 항목이 아예 없는데, 그 시각엔 5개 슬롯이
+      // 모두 지난 뒤라 다가오는 날을 보여주는 쪽이 맞다.
+      const targetDate = pickForecastDate(items, new Date());
+
       const byTime = new Map<string, Record<string, string>>();
       for (const item of items) {
+        if (item.fcstDate !== targetDate) continue;
         const time = item.fcstTime ?? '';
         if (!byTime.has(time)) byTime.set(time, {});
         byTime.get(time)![item.category] = item.fcstValue ?? '';
