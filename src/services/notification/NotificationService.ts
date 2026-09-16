@@ -165,13 +165,19 @@ export const NotificationService = {
     });
   },
 
-  // 모든 예약 알림 취소 후 재등록
-  // 외출 시간이 바뀌거나 날짜가 바뀔 때 호출
-  async rescheduleAll(departureTime: string, checklistCount: number): Promise<void> {
-    await notifee.cancelAllNotifications();
+  // 매일 도는 알림 재등록 — 온보딩이 끝났거나 외출 시각이 바뀌었을 때 호출.
+  //
+  // 출발 알림은 여기서 예약하지 않는다. 그 알림만 미체크 개수를 본문에 담아야 해서
+  // App.tsx가 개수 변화에 맞춰 따로 예약하는데, 여기서도 예약하면 앱을 켤 때마다
+  // 같은 알림을 두 번 취소·재생성하게 된다(두 effect의 의존성이 겹쳐 항상 함께 돈다).
+  //
+  // 예전에는 시작 전에 cancelAllNotifications()로 싹 지웠는데, 그건 예약분뿐 아니라
+  // 이미 표시 중인 알림까지 지운다 — Wi-Fi 이탈 긴급 알림이 알림창에 떠 있는 상태에서
+  // 앱을 열면 정작 확인해야 할 그 알림이 사라졌다. 각 schedule* 함수가 자기 id를 먼저
+  // 취소하므로 전체 취소는 처음부터 필요 없었다.
+  async rescheduleDailyAlerts(departureTime: string): Promise<void> {
     await Promise.all([
       NotificationService.scheduleDayBeforeAlert(departureTime),
-      NotificationService.scheduleDepartureAlert(departureTime, checklistCount),
       NotificationService.scheduleFeedbackAlert(),
     ]);
   },

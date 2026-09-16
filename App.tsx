@@ -50,18 +50,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // 온보딩 완료 또는 출발시각 변경 시 알림 전체 재예약 (전날 알림/출발 알림/피드백 알림)
-    if (userSettings.onboarded) {
-      NotificationService.rescheduleAll(userSettings.departureTime, uncheckedCount);
-      // 출발 알림 시각에 맞춰 백그라운드 확인 태스크도 함께 예약
-      BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
-    }
+    // 온보딩 완료 또는 출발시각 변경 시 전날 알림/피드백 알림을 재예약한다.
+    // 출발 알림은 아래 effect가 전담한다 — 여기서도 예약하면 앱을 켤 때마다
+    // 같은 알림을 두 번 취소·재생성하게 된다(의존성이 같아 항상 함께 실행됨).
+    if (!userSettings.onboarded) return;
+
+    NotificationService.rescheduleDailyAlerts(userSettings.departureTime);
+    // 출발 알림 시각에 맞춰 백그라운드 확인 태스크도 함께 예약
+    BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
   }, [userSettings.onboarded, userSettings.departureTime]);
 
   useEffect(() => {
-    // 미체크 개수가 바뀔 때마다 이미 예약된 출발 알림의 "N개" 문구를 갱신한다.
-    // 위 effect는 온보딩/출발시각이 바뀔 때만 실행되므로 그 사이의 체크리스트
-    // 변경은 예약 시점 스냅샷 그대로 남는 문제가 있었음.
+    // 출발 알림은 미체크 개수를 본문에 담으므로, 개수가 바뀔 때마다 다시 예약해
+    // "N개" 문구를 갱신한다. 위 effect에만 맡기면 온보딩/출발시각이 바뀔 때만
+    // 갱신돼서 그 사이의 체크리스트 변경이 반영되지 않는다.
     if (!userSettings.onboarded) return;
 
     NotificationService.scheduleDepartureAlert(userSettings.departureTime, uncheckedCount);
