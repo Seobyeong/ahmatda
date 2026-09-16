@@ -6,7 +6,7 @@ import notifee, {
   TimestampTrigger,
   RepeatFrequency,
 } from '@notifee/react-native';
-import { getAlertTime } from '@/utils/time';
+import { getNextAlertDate, getNextDailyDate } from '@/utils/time';
 import { ChecklistItem, FeedbackType } from '@/types';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
@@ -55,14 +55,15 @@ export const NotificationService = {
   },
 
   // 전날 22:00 — "내일도 출발하시나요?" 알림 예약
+  // 무조건 +1일로 잡으면 오늘 밤 22:00을 통째로 건너뛴다(아침에 온보딩하면 첫날 밤이
+  // 버려진다). 형제 알림들과 같이 "오늘로 잡고, 지났으면 내일" 규칙을 쓴다.
   async scheduleDayBeforeAlert(departureTime: string): Promise<void> {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(22, 0, 0, 0);
+    const target = getNextDailyDate(22, 0);
 
     const trigger: TimestampTrigger = {
       type:                    TriggerType.TIMESTAMP,
-      timestamp:               tomorrow.getTime(),
+      timestamp:               target.getTime(),
+      repeatFrequency:         RepeatFrequency.DAILY,
       alarmManager: {
         allowWhileIdle: true,  // Doze Mode 대응
       },
@@ -81,24 +82,23 @@ export const NotificationService = {
   },
 
   // 당일 외출 30분 전 — 체크리스트 알림 + 모니터링 시작 신호
+  //
+  // 일일 반복이라 본문의 "N개"는 예약 시점에 고정된다. 앱을 열거나 체크 개수가
+  // 바뀔 때마다 App.tsx가 다시 예약해서 갱신하지만, 앱을 하루 종일 안 연 날에는
+  // 마지막으로 알던 개수가 그대로 표시된다. 그래도 알림이 아예 안 오는 것보다는
+  // 낫다는 판단 — 반복을 안 걸면 앱을 안 연 다음 날부터 알림이 영영 멈춘다.
   async scheduleDepartureAlert(
     departureTime: string,
     checklistCount: number
   ): Promise<void> {
-    const alertTime = getAlertTime(departureTime);  // "07:45" 형식
-    const [hh, mm]  = alertTime.split(':').map(Number);
-
-    const today = new Date();
-    today.setHours(hh, mm, 0, 0);
-
-    // 이미 지난 시각이면 내일로
-    if (today.getTime() < Date.now()) {
-      today.setDate(today.getDate() + 1);
-    }
+    // 자정을 넘어가는 출발 시각("00:15" → 알림 "23:45")도 어긋나지 않게
+    // 출발 시각에서 역산한다. getNextAlertDate 주석 참고.
+    const target = getNextAlertDate(departureTime);
 
     const trigger: TimestampTrigger = {
-      type:      TriggerType.TIMESTAMP,
-      timestamp: today.getTime(),
+      type:            TriggerType.TIMESTAMP,
+      timestamp:       target.getTime(),
+      repeatFrequency: RepeatFrequency.DAILY,
       alarmManager: { allowWhileIdle: true },
     };
 
@@ -119,15 +119,12 @@ export const NotificationService = {
 
   // 당일 20:00 — 착장 피드백 알림 (액션 버튼 3개)
   async scheduleFeedbackAlert(): Promise<void> {
-    const today = new Date();
-    today.setHours(20, 0, 0, 0);
-    if (today.getTime() < Date.now()) {
-      today.setDate(today.getDate() + 1);
-    }
+    const target = getNextDailyDate(20, 0);
 
     const trigger: TimestampTrigger = {
-      type:      TriggerType.TIMESTAMP,
-      timestamp: today.getTime(),
+      type:            TriggerType.TIMESTAMP,
+      timestamp:       target.getTime(),
+      repeatFrequency: RepeatFrequency.DAILY,
       alarmManager: { allowWhileIdle: true },
     };
 

@@ -25,6 +25,44 @@ export function getAlertTime(departureTime: string): string {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
+// 다음 "출발 30분 전" 시각.
+//
+// 문자열("23:45")을 오늘 날짜에 앉히는 방식은 자정을 넘어가는 출발 시각에서 깨진다.
+// 예: 출발 "00:15" → 알림 "23:45". 지금이 23:50이면 오늘 23:45는 이미 지났으니
+// 내일 23:45로 밀리는데, 정작 지켜야 할 출발은 25분 뒤인 오늘 00:15라 알림이
+// 23시간 반 늦게 온다.
+//
+// 그래서 문자열이 아니라 출발 시각 자체를 먼저 날짜에 앉히고 거기서 30분을 뺀다.
+// 자정을 넘어가면 날짜도 같이 넘어가므로 어긋날 여지가 없다.
+export const DEPARTURE_ALERT_LEAD_MS = 30 * 60 * 1000;
+
+export function getNextAlertDate(departureTime: string, now: Date = new Date()): Date {
+  const [hh, mm] = departureTime.split(':').map(Number);
+
+  const departure = new Date(now);
+  departure.setHours(hh, mm, 0, 0);
+
+  // 알림 시각이 이미 지났으면 다음 날 출발을 기준으로 다시 잡는다.
+  // 출발은 미래인데 알림 시각만 지난 경우(출발 25분 전)도 여기서 한 번 더 밀린다 —
+  // 이미 놓친 알림을 지금 울리는 것보다 다음 날로 넘기는 쪽이 맞다.
+  let alert = new Date(departure.getTime() - DEPARTURE_ALERT_LEAD_MS);
+  while (alert.getTime() <= now.getTime()) {
+    departure.setDate(departure.getDate() + 1);
+    alert = new Date(departure.getTime() - DEPARTURE_ALERT_LEAD_MS);
+  }
+  return alert;
+}
+
+// 오늘의 특정 시각(없으면 내일) — 매일 같은 시각에 도는 알림들이 공유한다.
+export function getNextDailyDate(hour: number, minute: number, now: Date = new Date()): Date {
+  const target = new Date(now);
+  target.setHours(hour, minute, 0, 0);
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+  return target;
+}
+
 // 오늘 날짜 "YYYY-MM-DD" 반환 (로컬 타임존 기준)
 // toISOString()은 UTC 기준이라 자정 근처 KST(00:00~08:59)에서 하루 어긋날 수 있어 직접 조립한다.
 export function getTodayString(): string {
