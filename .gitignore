@@ -53,3 +53,6 @@ yarn-error.*
 
 # Claude Code local-only settings (machine-specific permission overrides)
 .claude/settings.local.json
+
+# 과제 강의 교재 (저작물, 원본은 Downloads에 보관)
+docs/과제/*.pdf
