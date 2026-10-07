@@ -66,10 +66,14 @@ export function getNextDailyDate(hour: number, minute: number, now: Date = new D
 // 오늘 날짜 "YYYY-MM-DD" 반환 (로컬 타임존 기준)
 // toISOString()은 UTC 기준이라 자정 근처 KST(00:00~08:59)에서 하루 어긋날 수 있어 직접 조립한다.
 export function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+  return toDateString(new Date());
+}
+
+// 임의 시각의 로컬 날짜 "YYYY-MM-DD"
+export function toDateString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
@@ -82,6 +86,12 @@ export const DEPARTURE_WINDOW_MS = 2 * 60 * 60 * 1000;
 // 오늘 날짜에 앉힌 창은 실제로는 어제 저녁에 시작된 창이므로, 오늘/어제 두 기준으로
 // 앉힌 창을 모두 확인해서 자정 근처 출발시각도 올바르게 판정한다.
 export function isWithinDepartureWindow(departureTime: string, now: Date = new Date()): boolean {
+  return getDepartureWindowRemainingMs(departureTime, now) !== null;
+}
+
+// 지금 감시 창 안이면 창이 닫힐 때까지 남은 ms, 밖이면 null.
+// 잠금화면 고정 알림이 창이 끝나면 저절로 사라지도록(timeoutAfter) 쓰인다.
+export function getDepartureWindowRemainingMs(departureTime: string, now: Date = new Date()): number | null {
   const alertTime = getAlertTime(departureTime);
   const [hh, mm] = alertTime.split(':').map(Number);
 
@@ -90,9 +100,9 @@ export function isWithinDepartureWindow(departureTime: string, now: Date = new D
     start.setDate(start.getDate() + dayOffset);
     start.setHours(hh, mm, 0, 0);
     const end = new Date(start.getTime() + DEPARTURE_WINDOW_MS);
-    if (now >= start && now <= end) return true;
+    if (now >= start && now <= end) return end.getTime() - now.getTime();
   }
-  return false;
+  return null;
 }
 
 // 루틴이 주어진 요일(0=일 ~ 6=토)에 활성인지 판정 — days가 없거나 비어 있으면 매일 활성.

@@ -62,6 +62,9 @@ export const WifiMonitorService = {
     // 다음 폴링에서 판정이 가능해지면 그때 처리된다.
     if (presence !== 'away') return null;
 
+    // 집을 나섰으니 잠금화면 출발 상태는 내린다 (다 챙기고 나간 날도 포함)
+    await NotificationService.clearDepartureStatus();
+
     const { useAppStore } = await import('@/store');
 
     // 백그라운드 폴링은 앱을 한 번도 열지 않은 날에도 돈다. 그때 checklist는 아직

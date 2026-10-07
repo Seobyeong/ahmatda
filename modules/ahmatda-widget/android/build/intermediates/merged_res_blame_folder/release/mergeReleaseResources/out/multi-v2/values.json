@@ -1,0 +1,48 @@
+{
+    "logs": [
+        {
+            "outputFile": "expo.modules.ahmatdawidget.ahmatda-widget-release-3:/values/values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\ko021\\ahmatda\\modules\\ahmatda-widget\\android\\src\\main\\res\\values\\strings.xml",
+                    "from": {
+                        "startLines": "3,2,4",
+                        "startColumns": "2,2,2",
+                        "startOffsets": "107,53,177",
+                        "endColumns": "69,53,67",
+                        "endOffsets": "174,104,242"
+                    },
+                    "to": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,127,183",
+                        "endColumns": "71,55,69",
+                        "endOffsets": "122,178,248"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "expo.modules.ahmatdawidget.ahmatda-widget-mergeReleaseResources-1:/values/values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\ko021\\ahmatda\\modules\\ahmatda-widget\\android\\src\\main\\res\\values\\strings.xml",
+                    "from": {
+                        "startLines": "3,2,4",
+                        "startColumns": "2,2,2",
+                        "startOffsets": "107,53,177",
+                        "endColumns": "69,53,67",
+                        "endOffsets": "174,104,242"
+                    },
+                    "to": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,127,183",
+                        "endColumns": "71,55,69",
+                        "endOffsets": "122,178,248"
+                    }
+                }
+            ]
+        }
+    ]
+}

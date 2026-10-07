@@ -10,6 +10,8 @@ import { NotificationService, handleNotificationEvent } from '@/services/notific
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskService';
 import { useAppStore } from '@/store';
+import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
+import { setWidgetSnapshot } from './modules/ahmatda-widget';
 
 // 백그라운드 이벤트 핸들러 등록 (앱 실행 전 최상단에 등록 필수)
 notifee.onBackgroundEvent(async ({ type, detail }) => {
@@ -18,10 +20,15 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 export default function App() {
   const userSettings   = useAppStore(state => state.userSettings);
-  // 알림 문구에 실제로 쓰이는 값은 "미체크 개수"뿐이므로 개수만 구독한다 —
-  // checklist 배열 전체를 구독하면 개수가 그대로여도(재빌드로 배열 identity만
+  // 앱 밖 표시(출발 알림·잠금화면·홈 위젯)에 쓰이는 요약만 문자열로 구독한다 —
+  // checklist 배열 전체를 구독하면 보이는 내용이 그대로여도(재빌드로 배열 identity만
   // 바뀌는 경우, 체크된 항목 삭제 등) 네이티브 알림 취소+재예약이 매번 일어난다.
-  const uncheckedCount = useAppStore(state => state.checklist.filter(i => !i.checked).length);
+  // 객체를 그대로 반환하면 매 호출마다 새 참조라 렌더 루프가 생기므로 직렬화한다.
+  // 날짜는 오늘이 아니라 checklistDate — 아직 하루 전환 전이면 위젯이 "앱을 열어
+  // 확인하세요"로 표시하게 한다.
+  const snapshotJson = useAppStore(state => JSON.stringify(
+    buildDepartureSnapshot(state.checklist, state.userSettings.departureTime, state.checklistDate ?? '')
+  ));
 
   useEffect(() => {
     // iOS에서 SSID/BSSID 조회를 시도하려면 이 설정이 반드시 필요함
@@ -61,13 +68,17 @@ export default function App() {
   }, [userSettings.onboarded, userSettings.departureTime]);
 
   useEffect(() => {
-    // 출발 알림은 미체크 개수를 본문에 담으므로, 개수가 바뀔 때마다 다시 예약해
-    // "N개" 문구를 갱신한다. 위 effect에만 맡기면 온보딩/출발시각이 바뀔 때만
-    // 갱신돼서 그 사이의 체크리스트 변경이 반영되지 않는다.
+    // 출발 알림은 아직 안 챙긴 것을 본문에 담으므로, 요약이 바뀔 때마다 다시 예약해
+    // 문구를 갱신한다. 위 effect에만 맡기면 온보딩/출발시각이 바뀔 때만 갱신돼서
+    // 그 사이의 체크리스트 변경이 반영되지 않는다. 이미 떠 있는 잠금화면 상태와
+    // 홈 위젯도 같은 요약으로 함께 갱신한다.
     if (!userSettings.onboarded) return;
 
-    NotificationService.scheduleDepartureAlert(userSettings.departureTime, uncheckedCount);
-  }, [userSettings.onboarded, userSettings.departureTime, uncheckedCount]);
+    const snapshot = JSON.parse(snapshotJson) as DepartureSnapshot;
+    NotificationService.scheduleDepartureAlert(userSettings.departureTime, snapshot);
+    NotificationService.updateDepartureStatus(userSettings.departureTime, snapshot);
+    setWidgetSnapshot(snapshot);
+  }, [userSettings.onboarded, userSettings.departureTime, snapshotJson]);
 
   useEffect(() => {
     // 온보딩 완료 후 출발 시각 감시 창에 맞춰 Wi-Fi 이탈 모니터링을 매일 재arm

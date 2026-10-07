@@ -6,12 +6,21 @@ import notifee, {
   TimestampTrigger,
   RepeatFrequency,
 } from '@notifee/react-native';
-import { getNextAlertDate, getNextDailyDate } from '@/utils/time';
+import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, getNextDailyDate, toDateString } from '@/utils/time';
+import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { ChecklistItem, FeedbackType } from '@/types';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
 const CHANNEL_CHECKLIST = 'ahmatda-checklist';
 const CHANNEL_FEEDBACK  = 'ahmatda-feedback';
+
+// 출발 알림은 울린 뒤 그대로 "잠금화면 출발 상태"로 남는다 (Android ongoing).
+// 앱이 같은 id로 내용을 갱신하고, 집을 나서거나 감시 창이 끝나면 사라진다.
+const DEPARTURE_ALERT_ID = 'departure-alert';
+
+function departureBody(detail: string): string {
+  return `출발 30분 전 · ${detail}`;
+}
 
 export const NotificationService = {
 
@@ -83,17 +92,25 @@ export const NotificationService = {
 
   // 당일 외출 30분 전 — 체크리스트 알림 + 모니터링 시작 신호
   //
-  // 일일 반복이라 본문의 "N개"는 예약 시점에 고정된다. 앱을 열거나 체크 개수가
+  // 일일 반복이라 본문(아직 안 챙긴 것)은 예약 시점에 고정된다. 체크리스트가
   // 바뀔 때마다 App.tsx가 다시 예약해서 갱신하지만, 앱을 하루 종일 안 연 날에는
-  // 마지막으로 알던 개수가 그대로 표시된다. 그래도 알림이 아예 안 오는 것보다는
+  // 마지막으로 알던 내용이 그대로 표시된다. 그래도 알림이 아예 안 오는 것보다는
   // 낫다는 판단 — 반복을 안 걸면 앱을 안 연 다음 날부터 알림이 영영 멈춘다.
+  //
+  // 아직 안 챙긴 게 있으면 울린 뒤 지우지 못하는 상태 알림(ongoing)으로 남아 잠금화면에서
+  // 계속 보인다. 다 챙겼다면 고정할 이유가 없어 일반 알림으로 둔다. 내일 울릴 예약에는
+  // 오늘 내용을 싣지 않는다 (departureAlertContent 참고).
+  // 앱이 한 번도 안 열려 갱신·정리가 안 돼도 감시 창이 끝나면(timeoutAfter) 사라진다.
+  // autoCancel을 끄는 이유: 기본값(true)이면 탭해서 앱을 여는 순간 지워지고,
+  // updateDepartureStatus는 떠 있는 알림만 갱신하므로 그날 아침엔 다시 안 나타난다.
   async scheduleDepartureAlert(
     departureTime: string,
-    checklistCount: number
+    snapshot: DepartureSnapshot
   ): Promise<void> {
     // 자정을 넘어가는 출발 시각("00:15" → 알림 "23:45")도 어긋나지 않게
     // 출발 시각에서 역산한다. getNextAlertDate 주석 참고.
     const target = getNextAlertDate(departureTime);
+    const content = departureAlertContent(snapshot, toDateString(target));
 
     const trigger: TimestampTrigger = {
       type:            TriggerType.TIMESTAMP,
@@ -102,19 +119,61 @@ export const NotificationService = {
       alarmManager: { allowWhileIdle: true },
     };
 
-    await notifee.cancelTriggerNotification('departure-alert');
+    await notifee.cancelTriggerNotification(DEPARTURE_ALERT_ID);
     await notifee.createTriggerNotification(
       {
-        id:      'departure-alert',
+        id:      DEPARTURE_ALERT_ID,
         title:   '아맞다 🎒',
-        body:    `출발 30분 전! 체크리스트 ${checklistCount}개 확인하세요.`,
+        body:    departureBody(content.detail),
         android: {
-          channelId:   CHANNEL_CHECKLIST,
-          pressAction: { id: 'open-checklist', launchActivity: 'default' },
+          channelId:     CHANNEL_CHECKLIST,
+          pressAction:   { id: 'open-checklist', launchActivity: 'default' },
+          ongoing:       content.ongoing,
+          autoCancel:    false,
+          onlyAlertOnce: true,
+          timeoutAfter:  DEPARTURE_WINDOW_MS,
         },
       },
       trigger
     );
+  },
+
+  // 잠금화면 출발 상태 갱신 — 이미 떠 있을 때만 내용을 바꾼다.
+  //
+  // 떠 있지 않으면 새로 띄우지 않는다: 집을 나서면서 지워졌거나(clearDepartureStatus)
+  // 아직 출발 알림 시각 전이라는 뜻이고, 어느 쪽이든 지하철에서 체크를 하나 했다고
+  // 다시 띄울 이유가 없다. 다 챙겼으면 고정을 풀어 사용자가 밀어서 지울 수 있게 한다.
+  //
+  // 떠 있는데 감시 창 밖이면 지난 상태다 — 출발 시각을 바꿔서 창이 옮겨갔거나 창이
+  // 이미 끝났다. 앱 말고는 고정 알림을 내릴 수단이 없으니 여기서 지운다.
+  async updateDepartureStatus(departureTime: string, snapshot: DepartureSnapshot): Promise<void> {
+    const displayed = await notifee.getDisplayedNotifications();
+    if (!displayed.some((n) => n.id === DEPARTURE_ALERT_ID)) return;
+
+    const remainingMs = getDepartureWindowRemainingMs(departureTime);
+    if (remainingMs === null) {
+      await NotificationService.clearDepartureStatus();
+      return;
+    }
+
+    await notifee.displayNotification({
+      id:    DEPARTURE_ALERT_ID,
+      title: '아맞다 🎒',
+      body:  departureBody(snapshot.detail),
+      android: {
+        channelId:     CHANNEL_CHECKLIST,
+        pressAction:   { id: 'open-checklist', launchActivity: 'default' },
+        ongoing:       snapshot.remaining > 0,
+        autoCancel:    false,
+        onlyAlertOnce: true,
+        timeoutAfter:  remainingMs,
+      },
+    });
+  },
+
+  // 집을 나섰을 때 — 출발 상태는 더 이상 의미가 없다. 예약(내일 것)은 그대로 둔다.
+  async clearDepartureStatus(): Promise<void> {
+    await notifee.cancelDisplayedNotification(DEPARTURE_ALERT_ID);
   },
 
   // 당일 20:00 — 착장 피드백 알림 (액션 버튼 3개)

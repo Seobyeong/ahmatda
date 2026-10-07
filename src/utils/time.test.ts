@@ -1,4 +1,4 @@
-import { getAlertTime, isRoutineActiveOnDay, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate } from './time';
+import { getAlertTime, isRoutineActiveOnDay, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs } from './time';
 
 describe('isRoutineActiveOnDay', () => {
   it('days가 없으면 매일 활성', () => {
@@ -108,5 +108,28 @@ describe('getNextDailyDate', () => {
   it('지났으면 내일', () => {
     expect(getNextDailyDate(22, 0, at('2026-09-16T23:00:00')))
       .toEqual(at('2026-09-17T22:00:00'));
+  });
+});
+
+describe('getDepartureWindowRemainingMs', () => {
+  const at = (dateStr: string) => new Date(dateStr);
+  const MIN = 60 * 1000;
+
+  it('창 밖이면 null', () => {
+    expect(getDepartureWindowRemainingMs('08:15', at('2026-07-07T07:00:00'))).toBeNull();
+    expect(getDepartureWindowRemainingMs('08:15', at('2026-07-07T10:00:00'))).toBeNull();
+  });
+
+  it('창이 열린 순간엔 2시간 남는다', () => {
+    expect(getDepartureWindowRemainingMs('08:15', at('2026-07-07T07:45:00'))).toBe(120 * MIN);
+  });
+
+  it('창 중간이면 끝(알림 + 2시간)까지 남은 시간', () => {
+    expect(getDepartureWindowRemainingMs('08:15', at('2026-07-07T08:45:00'))).toBe(60 * MIN);
+  });
+
+  it('자정을 넘긴 창도 어제 시작분으로 계산한다', () => {
+    // 출발 00:15 → 창 23:45 ~ 01:45
+    expect(getDepartureWindowRemainingMs('00:15', at('2026-07-08T00:45:00'))).toBe(60 * MIN);
   });
 });
