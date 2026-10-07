@@ -1,7 +1,0 @@
-expo.modules.ahmatdawidget.ahmatda-widget-pngs-0 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\build\generated\res\pngs\release
-expo.modules.ahmatdawidget.ahmatda-widget-resValues-1 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\build\generated\res\resValues\release
-expo.modules.ahmatdawidget.ahmatda-widget-mergeReleaseResources-2 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\build\intermediates\incremental\release\mergeReleaseResources\merged.dir
-expo.modules.ahmatdawidget.ahmatda-widget-mergeReleaseResources-3 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\build\intermediates\incremental\release\mergeReleaseResources\stripped.dir
-expo.modules.ahmatdawidget.ahmatda-widget-release-4 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\build\intermediates\merged_res\release\mergeReleaseResources
-expo.modules.ahmatdawidget.ahmatda-widget-main-5 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\src\main\res
-expo.modules.ahmatdawidget.ahmatda-widget-release-6 C:\Users\ko021\ahmatda\modules\ahmatda-widget\android\src\release\res
