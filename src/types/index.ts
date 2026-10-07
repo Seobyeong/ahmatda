@@ -85,7 +85,11 @@ export interface CalendarEvent {
   title: string;
   time: string;  // "HH:mm" 형식
   startDate: string;
+  location?: string; // 일정 장소 (자유 입력 문자열 — 좌표 아님, 화상회의 링크일 수도 있음)
 }
+
+// 길찾기를 넘길 지도 앱
+export type MapApp = 'kakao' | 'naver';
 
 // 유저 설정
 export interface UserSettings {
@@ -103,6 +107,7 @@ export interface UserSettings {
   disabledPurposeItems: string[]; // 사용자가 영구적으로 끈 목적별 준비물 — "purposeId:라벨" 형식
                                    // (같은 라벨이 여러 목적에 중복 등장해서 목적별로 구분 필요)
   customKeywords: Partial<Record<PurposeId, string[]>>; // 목적 자동감지에 추가할 사용자 키워드
+  mapApp: MapApp; // [길찾기]를 넘길 지도 앱
   updatedAt?: number; // 동기화 충돌 해결용 — userSettings를 바꾸는 모든 경로가 갱신한다
 }
 

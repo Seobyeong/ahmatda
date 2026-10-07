@@ -16,6 +16,7 @@ import type {
   FeedbackRecord,
   FeedbackType,
   ForgottenRecord,
+  MapApp,
   PurposeId,
   UserSettings,
   WeatherSlot,
@@ -81,6 +82,7 @@ interface AppActions {
   updateDepartureTime: (time: string) => void;
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
+  setMapApp: (app: MapApp) => void;
   completeOnboarding: () => void;
   setWeatherItemEnabled: (label: string, enabled: boolean) => void;
   setPurposeItemEnabled: (purposeId: PurposeId, label: string, enabled: boolean) => void;
@@ -184,6 +186,7 @@ const defaultState: AppState = {
     disabledWeatherItems: [],
     disabledPurposeItems: [],
     customKeywords: {},
+    mapApp: 'kakao',
   },
 
   feedbackHistory: [],
@@ -452,6 +455,7 @@ export const useAppStore = create<AppStore>()(
       setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
 
       setSensitivity: (level) => set((state) => patchSettings(state, { sensitivityLevel: level })),
+      setMapApp: (app) => set((state) => patchSettings(state, { mapApp: app })),
 
       completeOnboarding: () => set((state) => patchSettings(state, { onboarded: true })),
 

@@ -37,8 +37,11 @@
 
 ## 3. 캘린더 관련 (User Content > Other User Content)
 
-- react-native-calendar-events로 오늘 일정 제목·시각을 읽되, 기기 내
+- react-native-calendar-events로 오늘 일정 제목·시각·장소를 읽되, 기기 내
   메모리에서만 일시적으로 사용하고 저장·전송하지 않음.
+- 예외: 이용자가 [길찾기]를 누르면 장소 문자열을 검색어로 담아 지도 앱/웹을 연다.
+  [판단 필요: 이용자가 시작한 다른 앱 호출이 Apple "Collect" 정의에 해당하는지
+  App Store Connect 도움말로 확인 후 답변 확정]
 - Apple 공식 데이터 유형 목록에 "Calendar" 독립 카테고리는 없음 —
   **"User Content" > "Other User Content"**로 분류하고 "Not Collected"
   (전송·보관 없음)로 답변.

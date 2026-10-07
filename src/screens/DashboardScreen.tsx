@@ -12,6 +12,7 @@ import {
 import {
   CloudFog,
   Droplets,
+  MapPin,
   Mic,
   Settings,
   Wind,
@@ -26,9 +27,11 @@ import { PURPOSES, detectPurposeFromEvents, findMatchingEvent } from '../constan
 import { FEEDBACK_MESSAGES } from '../constants/feedback';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
+import { DirectionsService } from '../services/directions/DirectionsService';
 import { WeatherService } from '../services/weather/WeatherService';
 import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta } from '../utils/temperature';
-import { getAlertTime, getCurrentSlotIndex, getTodayString } from '../utils/time';
+import { getAlertTime, getCurrentSlotIndex, getTodayString, parseEventTime } from '../utils/time';
+import { pickNextPlaceEvent } from '../utils/directions';
 import { getCurrentCoords } from '../utils/location';
 import { isWithinKorea } from '../utils/kmaGrid';
 import { ChecklistItem } from '../components/ChecklistItem';
@@ -37,7 +40,7 @@ import { PurposeSelector } from '../components/PurposeSelector';
 import { Toast } from '../components/Toast';
 import { WeatherTimeline } from '../components/WeatherTimeline';
 import { SettingsPanel } from '../components/SettingsPanel';
-import type { ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
+import type { CalendarEvent, ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
 
 // 위치 권한이 없거나 좌표 조회에 실패했을 때만 쓰이는 폴백 좌표 (서울시청)
 const FALLBACK_LAT = 37.5665;
@@ -138,6 +141,9 @@ export function DashboardScreen() {
   const clearScrollToChecklistRequest = useAppStore((s) => s.clearScrollToChecklistRequest);
 
   const [refreshing, setRefreshing] = useState(false);
+  // 오늘 일정 — 길찾기 대상 고르기용. 개인정보처리방침상 캘린더 일정은 저장하지 않으므로
+  // store(persist)가 아니라 화면 상태로만 들고 있는다.
+  const [todayEvents, setTodayEvents] = useState<CalendarEvent[]>([]);
   const cancelledRef = useRef(false);
 
   // 캘린더 일정 → 목적 감지, 날씨/타임라인 조회. 최초 마운트와 pull-to-refresh
@@ -152,6 +158,7 @@ export function DashboardScreen() {
 
     const events = await CalendarService.getTodayEvents();
     if (cancelledRef.current) return;
+    setTodayEvents(events);
 
     const detectedId = detectPurposeFromEvents(
       events,
@@ -377,6 +384,15 @@ export function DashboardScreen() {
 
   const alertTime = getAlertTime(userSettings.departureTime);
 
+  // 렌더마다 현재 시각으로 다시 고른다 — 이미 시작한 일정은 길찾기 대상에서 빠진다.
+  const nextPlaceEvent = pickNextPlaceEvent(todayEvents, parseEventTime(new Date().toISOString()));
+
+  const handleOpenDirections = async () => {
+    if (!nextPlaceEvent?.location) return;
+    const opened = await DirectionsService.openPlace(userSettings.mapApp, nextPlaceEvent.location);
+    if (!opened) showToast('지도를 열 수 없어요.');
+  };
+
   return (
     <View style={styles.screen}>
       <View style={styles.headerWrapper}>
@@ -416,6 +432,23 @@ export function DashboardScreen() {
             </View>
             <Pressable onPress={dismissStatus} hitSlop={8}>
               <X size={18} color={Colors.slate400} />
+            </Pressable>
+          </View>
+        ) : null}
+
+        {nextPlaceEvent ? (
+          <View style={styles.placeCard}>
+            <MapPin size={16} color={Colors.indigo600} />
+            <View style={styles.placeTextArea}>
+              <Text style={styles.placeTitle} numberOfLines={1}>
+                {nextPlaceEvent.time} · {nextPlaceEvent.title}
+              </Text>
+              <Text style={styles.placeLocation} numberOfLines={1}>
+                {nextPlaceEvent.location}
+              </Text>
+            </View>
+            <Pressable style={styles.placeButton} onPress={handleOpenDirections} hitSlop={8}>
+              <Text style={styles.placeButtonText}>길찾기</Text>
             </Pressable>
           </View>
         ) : null}
@@ -724,6 +757,45 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: Colors.slate800,
+  },
+  placeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    shadowColor: Colors.slate800,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  placeTextArea: {
+    flex: 1,
+  },
+  placeTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.slate800,
+  },
+  placeLocation: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.slate500,
+  },
+  placeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 50,
+    backgroundColor: Colors.indigo50,
+  },
+  placeButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.indigo600,
   },
   curationCard: {
     borderRadius: 20,

@@ -59,11 +59,13 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const disabledWeatherItems = useAppStore((s) => s.userSettings.disabledWeatherItems);
   const disabledPurposeItems = useAppStore((s) => s.userSettings.disabledPurposeItems);
   const customKeywords = useAppStore((s) => s.userSettings.customKeywords);
+  const mapApp = useAppStore((s) => s.userSettings.mapApp);
   const purposeId = useAppStore((s) => s.purposeId);
   const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const setSensitivity = useAppStore((s) => s.setSensitivity);
+  const setMapApp = useAppStore((s) => s.setMapApp);
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const removePermanentRoutine = useAppStore((s) => s.removePermanentRoutine);
   const setRoutineDays = useAppStore((s) => s.setRoutineDays);
@@ -226,6 +228,15 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
               <Text style={styles.calendarSettingsLink}>권한 없음 · 설정 열기</Text>
             </Pressable>
           )}
+        </View>
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>길찾기 앱</Text>
+          <Pressable onPress={() => setMapApp(mapApp === 'kakao' ? 'naver' : 'kakao')}>
+            <Text style={styles.calendarSettingsLink}>
+              {mapApp === 'kakao' ? '카카오맵' : '네이버지도'} · 변경
+            </Text>
+          </Pressable>
         </View>
 
         <Text style={styles.sectionTitle}>날씨 알림 항목</Text>

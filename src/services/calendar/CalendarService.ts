@@ -48,6 +48,7 @@ export const CalendarService = {
         title:     ev.title ?? '제목 없음',
         time:      parseEventTime(ev.startDate),
         startDate: ev.startDate,
+        location:  ev.location?.trim() || undefined,
       }));
     } catch {
       return [];
