@@ -128,6 +128,47 @@ export interface ForgottenRecord {
   labels: string[]; // 그날 안 챙기고 나간 항목 라벨들
 }
 
+// ── AI 연결 (선택 기능, docs/AI-연결-설계.md) ──
+
+// 사용자가 자기 API 키를 넣는 제공자. 지금은 Anthropic만 구현돼 있다.
+export type AiProviderId = 'anthropic';
+
+// 키워드에 안 걸린 일정 제목 하나에 대한 AI 해석 결과
+export interface AiEventHint {
+  purposeId: PurposeId | null; // 기존 5개 목적 중 하나, 해당 없으면 null
+  items: string[];             // 이 일정 때문에 추가로 챙길 것 (최대 3개)
+}
+
+// AI 결과 캐시 항목. 키는 일정 제목 원문이 아니라 정규화한 제목의 해시다 —
+// 개인정보처리방침상 캘린더 일정은 기기에도 저장하지 않으므로 제목 원문을 남기지 않는다.
+export interface AiHintEntry {
+  hint: AiEventHint | null;    // null = AI도 해석 못 함 → 같은 제목을 다시 묻지 않는다
+  decision?: 'accepted' | 'rejected';
+  // 여러 제목을 묶어 보낸 요청이 통째로 못 쓰게 됐을 때(거절·잘림) 표시한다. 어느 제목
+  // 때문인지 알 수 없으니 "모름"으로 굳히지 않고, 다음에 한 제목씩 따로 다시 묻는다.
+  retrySingly?: boolean;
+  createdAt: number;
+}
+
+export interface AiUsage {
+  day: string;       // "YYYY-MM-DD" — dayCalls가 어느 날 기준인지
+  dayCalls: number;
+  month: string;     // "YYYY-MM"
+  monthCalls: number;
+}
+
+// AI 연결 상태 — 기기 로컬 전용(계정 동기화 대상 아님). 키는 기기 보안 저장소에
+// 있으므로, 키 없는 다른 기기에 "켜짐"이 동기화되면 안 된다.
+export interface AiState {
+  enabled: boolean;
+  provider: AiProviderId;
+  consentedProvider: AiProviderId | null; // 동의한 제공자 — 바뀌면 다시 동의를 받는다
+  status: 'ok' | 'invalidKey' | 'quotaExceeded';
+  pausedDay: string | null;              // quotaExceeded일 때 멈춘 날 — 다음 날 자동 재개
+  usage: AiUsage;
+  hintCache: Record<string, AiHintEntry>;
+}
+
 // 타임라인 힌트 (착장 추천 연동)
 export interface TimelineHint {
   text: string;

@@ -12,7 +12,9 @@
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "말한 내용을 텍스트로 변환해 체크리스트에 추가하려면 음성 인식 접근이 필요해요.",
         "NSMicrophoneUsageDescription": "체크리스트 항목을 음성으로 추가하려면 마이크 접근이 필요해요.",
-        "LSApplicationQueriesSchemes": ["nmap"]
+        "LSApplicationQueriesSchemes": [
+          "nmap"
+        ]
       }
     },
     "android": {
@@ -38,7 +40,8 @@
             "com.google.android.googlequicksearchbox"
           ]
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

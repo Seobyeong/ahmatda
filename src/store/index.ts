@@ -9,7 +9,11 @@ import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
+import { pruneHintCache, recordCall, type AiSuggestion } from '../services/ai/hints';
 import type {
+  AiHintEntry,
+  AiProviderId,
+  AiState,
   CalendarEvent,
   ChecklistItem,
   CurrentWeather,
@@ -48,6 +52,9 @@ interface AppState {
 
   // 자주 까먹는 항목 학습 — 외출(Wi-Fi 이탈) 시점에 미체크였던 항목 기록
   forgottenHistory: ForgottenRecord[];
+
+  // AI 연결 (선택 기능) — 기기 로컬 전용
+  ai: AiState;
 
   // UI 상태
   statusDismissed: boolean;
@@ -94,6 +101,15 @@ interface AppActions {
 
   // 자주 까먹는 항목
   recordForgotten: (labels: string[]) => void;
+
+  // AI 연결
+  setAiEnabled: (enabled: boolean) => void;
+  setAiConsent: (provider: AiProviderId | null) => void;
+  setAiStatus: (status: AiState['status']) => void;
+  recordAiCall: () => void;
+  putAiHints: (entries: Record<string, AiHintEntry>) => void;
+  rejectAiSuggestion: (key: string) => void;
+  acceptAiSuggestion: (suggestion: AiSuggestion) => void;
 
   // UI
   dismissStatus: () => void;
@@ -193,6 +209,16 @@ const defaultState: AppState = {
   todayFeedback: null,
 
   forgottenHistory: [],
+
+  ai: {
+    enabled: false,
+    provider: 'anthropic',
+    consentedProvider: null,
+    status: 'ok',
+    pausedDay: null,
+    usage: { day: '', dayCalls: 0, month: '', monthCalls: 0 },
+    hintCache: {},
+  },
 
   statusDismissed: false,
   toast: null,
@@ -552,6 +578,68 @@ export const useAppStore = create<AppStore>()(
           };
         }),
 
+      // AI 연결 — 동의 없이 켜지지 않게, 켜는 경로는 setAiConsent 이후에만 쓴다.
+      setAiEnabled: (enabled) => set((state) => ({ ai: { ...state.ai, enabled } })),
+
+      // 동의를 철회(null)하면 AI도 함께 끄고, 그동안 받은 해석 결과도 지운다 —
+      // 개인정보처리방침에 "끄거나 키를 삭제하면 동의도 철회"된다고 고지하므로, 철회 후에
+      // 호출이 나가거나 철회 전 결과가 남아 있으면 안 된다.
+      setAiConsent: (provider) =>
+        set((state) => ({
+          ai: {
+            ...state.ai,
+            consentedProvider: provider,
+            enabled: provider === null ? false : state.ai.enabled,
+            status: 'ok',
+            pausedDay: null,
+            hintCache: provider === null ? {} : state.ai.hintCache,
+          },
+        })),
+
+      setAiStatus: (status) =>
+        set((state) => ({
+          ai: { ...state.ai, status, pausedDay: status === 'quotaExceeded' ? getTodayString() : null },
+        })),
+
+      recordAiCall: () =>
+        set((state) => ({ ai: { ...state.ai, usage: recordCall(state.ai.usage, getTodayString()) } })),
+
+      putAiHints: (entries) =>
+        set((state) => ({
+          ai: { ...state.ai, hintCache: pruneHintCache({ ...state.ai.hintCache, ...entries }, Date.now()) },
+        })),
+
+      rejectAiSuggestion: (key) =>
+        set((state) => {
+          const entry = state.ai.hintCache[key];
+          if (!entry) return {};
+          return {
+            ai: { ...state.ai, hintCache: { ...state.ai.hintCache, [key]: { ...entry, decision: 'rejected' } } },
+          };
+        }),
+
+      // 수락 = 학습 승격(설계 3장 L2). 목적이 있으면 그 일정 제목을 자동감지 키워드로
+      // 추가해서 다음부터는 AI 없이 로컬에서 처리되게 하고, 준비물은 오늘만 항목으로 넣는다.
+      // 키워드는 사용자가 직접 수락한 것만, 설정 화면에서 보이고 지울 수 있는 형태로 저장된다.
+      // ⚠️ customKeywords는 userSettings 안에 있어 [계정 동기화 대상]이다. 즉 수락한 일정
+      // 제목은 계정 동기화를 붙이면 기기 밖으로 나간다. 동기화를 구현할 때 개인정보처리방침의
+      // "수락한 경우 일정 제목이 키워드로 저장" 고지에 동기화 사실도 함께 적어야 한다.
+      acceptAiSuggestion: (suggestion) => {
+        const { purposeId, items, key, title } = suggestion;
+        if (purposeId) get().addCustomKeyword(purposeId, title);
+
+        const existing = new Set(get().checklist.map((item) => item.label));
+        items.filter((label) => !existing.has(label)).forEach((label) => get().addTempItem(label));
+
+        set((state) => {
+          const entry = state.ai.hintCache[key];
+          if (!entry) return {};
+          return {
+            ai: { ...state.ai, hintCache: { ...state.ai.hintCache, [key]: { ...entry, decision: 'accepted' } } },
+          };
+        });
+      },
+
       // UI
       dismissStatus: () => set({ statusDismissed: true }),
       showToast: (message) => set({ toast: message }),
@@ -593,6 +681,14 @@ export const useAppStore = create<AppStore>()(
           ...currentState,
           ...persisted,
           userSettings: { ...currentState.userSettings, ...persisted?.userSettings },
+          // ai도 나중에 필드가 늘 수 있어 같은 이유로 한 겹 더 합친다.
+          // 해석 결과 캐시는 앱이 켜질 때마다 만료분을 지운다 — 새 호출이 없어도(AI를 끄고
+          // 안 쓰는 경우 등) 개인정보처리방침의 "180일 후 자동 삭제"가 지켜지게.
+          ai: {
+            ...currentState.ai,
+            ...persisted?.ai,
+            hintCache: pruneHintCache(persisted?.ai?.hintCache ?? {}, Date.now()),
+          },
         };
       },
       // 나중에 계정을 붙일 때를 위한 구분:
@@ -600,7 +696,8 @@ export const useAppStore = create<AppStore>()(
       //                      feedbackHistory, forgottenHistory
       //   [기기 로컬 전용]    checklist/checklistDate(오늘 것), todayFeedback,
       //                      userSettings.homeBssid(기기가 붙는 AP는 기기마다 다름),
-      //                      WeatherService 날씨 캐시, WifiMonitorService 알림 dedup 키
+      //                      WeatherService 날씨 캐시, WifiMonitorService 알림 dedup 키,
+      //                      ai(키가 기기 보안 저장소에 있어 다른 기기로 옮기면 안 됨)
       partialize: (state) => ({
         checklist: state.checklist,
         checklistDate: state.checklistDate,
@@ -611,6 +708,8 @@ export const useAppStore = create<AppStore>()(
         // 같은 날 앱이 재시작돼도(기기 재부팅, 강제 종료 등) 오늘 이미 준 피드백을
         // 기억해야 applyFeedback의 재선택 방지 로직이 제대로 동작한다.
         todayFeedback: state.todayFeedback,
+        // 캐시 키는 일정 제목의 해시라 제목 원문은 저장되지 않는다(services/ai/hints.ts).
+        ai: state.ai,
       }),
     }
   )

@@ -34,12 +34,19 @@ export const CalendarService = {
   // 오늘 일정 조회 (로컬 타임존 기준 자정 ~ 23:59)
   // 권한 없으면 빈 배열 반환
   async getTodayEvents(): Promise<CalendarEvent[]> {
+    return CalendarService.getEventsForDay(0);
+  },
+
+  // 오늘 기준 dayOffset일 뒤 하루치 일정 (0 = 오늘, 1 = 내일).
+  // 내일 일정은 AI 해석을 전날 밤에 미리 계산해두는 데 쓴다 — 아침에 캐시가 이미 차 있게.
+  async getEventsForDay(dayOffset: number): Promise<CalendarEvent[]> {
     try {
       const authorized = await RNCalendarEvents.checkPermissions();
       if (authorized !== 'authorized') return [];
 
-      const startDate = new Date(getTodayStartMs()).toISOString();
-      const endDate   = new Date(getTodayEndMs()).toISOString();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const startDate = new Date(getTodayStartMs() + dayOffset * dayMs).toISOString();
+      const endDate   = new Date(getTodayEndMs() + dayOffset * dayMs).toISOString();
 
       const events = await RNCalendarEvents.fetchAllEvents(startDate, endDate, []);
 

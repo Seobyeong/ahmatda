@@ -98,6 +98,15 @@ function keywordsFor(purposeId: PurposeId, custom?: CustomKeywords): string[] {
   return extra.length > 0 ? [...PURPOSES[purposeId].calKeywords, ...extra] : PURPOSES[purposeId].calKeywords;
 }
 
+// 일정 제목 하나가 로컬 키워드(기본 + 사용자 추가)로 어느 목적에 걸리는지.
+// AI 연결에서 "로컬로 이미 아는 일정은 AI에 보내지 않는다"는 판단에 쓴다.
+export function matchPurposeByTitle(title: string, customKeywords?: CustomKeywords): PurposeId | null {
+  for (const pid of Object.keys(PURPOSES) as PurposeId[]) {
+    if (keywordsFor(pid, customKeywords).some(kw => title.includes(kw))) return pid;
+  }
+  return null;
+}
+
 // 캘린더 이벤트 제목으로 목적 감지
 // 외출 시각과 가장 가까운 미래 이벤트 우선
 export function detectPurposeFromEvents(

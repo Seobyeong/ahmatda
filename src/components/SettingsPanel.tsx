@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   AppState,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,9 +16,12 @@ import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
+import { getTodayString } from '../utils/time';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
+import { AiKeyStore } from '../services/ai/AiKeyStore';
+import { DAILY_CALL_LIMIT } from '../services/ai/hints';
 import { SensitivitySelector } from './SensitivitySelector';
 import { TimeInput } from './TimeInput';
 import type { FeedbackType } from '../types';
@@ -33,6 +38,22 @@ const FEEDBACK_LABELS: Record<FeedbackType, string> = {
 };
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+// 개인정보처리방침(legal/privacy-policy.ko.md)의 문의 연락처와 같아야 한다.
+const SUPPORT_EMAIL = 'ko021954@gmail.com';
+
+// AI 연결 동의 문구 — App Store 심사 5.1.2(i): 무엇을, 누구에게 보내는지 밝히고
+// 보내기 전에 명시적 동의를 받는다. 실제로 보내는 데이터(services/ai/anthropic.ts)와
+// 반드시 일치해야 한다.
+const AI_CONSENT_MESSAGE = [
+  '키워드로 알 수 없는 캘린더 일정의 "제목"만 Anthropic(미국)의 Claude API로 전송해요.',
+  '',
+  '보내지 않는 것: 일정 시간, 장소, 메모, 위치',
+  '전송은 입력하신 API 키로 이뤄지고, 요금은 키 소유자에게 청구돼요(하루 최대 ' + DAILY_CALL_LIMIT + '회).',
+  'Anthropic은 API로 받은 데이터를 모델 학습에 쓰지 않고, 30일 이내에 삭제해요.',
+  '',
+  '설정에서 언제든 끌 수 있어요.',
+].join('\n');
 
 // tier1 날씨 트리거 항목 — buildChecklist()에서 생성하는 라벨과 반드시 일치해야 한다.
 const WEATHER_ITEMS: { label: string; description: string }[] = [
@@ -73,6 +94,9 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const setPurposeItemEnabled = useAppStore((s) => s.setPurposeItemEnabled);
   const addCustomKeyword = useAppStore((s) => s.addCustomKeyword);
   const removeCustomKeyword = useAppStore((s) => s.removeCustomKeyword);
+  const ai = useAppStore((s) => s.ai);
+  const setAiEnabled = useAppStore((s) => s.setAiEnabled);
+  const setAiConsent = useAppStore((s) => s.setAiConsent);
 
   const [editingTime, setEditingTime] = useState(false);
   const [keywordDraft, setKeywordDraft] = useState('');
@@ -80,6 +104,9 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  // 키 자체는 화면 상태에 들고 있지 않는다 — 있는지 여부만 안다.
+  const [aiHasKey, setAiHasKey] = useState(false);
+  const [aiKeyDraft, setAiKeyDraft] = useState('');
 
   useEffect(() => {
     if (!visible) return;
@@ -104,8 +131,14 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
       setEditingSensitivity(false);
       setWifiRegisterStatus('idle');
       setKeywordDraft('');
+      setAiKeyDraft('');
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    AiKeyStore.get(ai.provider).then((key) => setAiHasKey(!!key));
+  }, [visible, ai.provider]);
 
   // 출발 시각 입력 — 매 키 입력마다 store에 바로 커밋하면 그때마다 App.tsx의
   // 알림 재예약 + Wi-Fi 재arm effect가 함께 실행돼 불필요하게 잦다. 로컬 임시값에만
@@ -137,6 +170,46 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     if (!purposeId || !keywordDraft.trim()) return;
     addCustomKeyword(purposeId, keywordDraft);
     setKeywordDraft('');
+  };
+
+  // 켜기는 항상 동의를 거치고, 끄기는 동의 철회다 — 개인정보처리방침에 "끄면 동의도
+  // 철회된다"고 고지하므로, 다시 켤 때 동의를 건너뛰면 안 된다.
+  const handleAiToggle = (value: boolean) => {
+    if (!value) {
+      setAiConsent(null);
+      return;
+    }
+    Alert.alert('AI 일정 해석 켜기', AI_CONSENT_MESSAGE, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '동의하고 켜기',
+        onPress: () => {
+          setAiConsent(ai.provider);
+          setAiEnabled(true);
+        },
+      },
+    ]);
+  };
+
+  const handleAiKeySave = async () => {
+    const draft = aiKeyDraft.trim();
+    if (!draft) return;
+    const saved = await AiKeyStore.set(ai.provider, draft);
+    setAiKeyDraft('');
+    setAiHasKey(saved);
+    // 새 키를 넣었으면 "키 무효"로 멈춰 있던 상태를 푼다(동의는 유지).
+    if (saved && ai.consentedProvider) setAiConsent(ai.consentedProvider);
+  };
+
+  // 키를 지우면 동의도 함께 철회한다 — 다음에 켤 때 다시 동의를 받는다.
+  const handleAiKeyRemove = async () => {
+    await AiKeyStore.remove(ai.provider);
+    setAiHasKey(false);
+    setAiConsent(null);
+  };
+
+  const handleAiReport = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('[아맞다] 이상한 AI 제안 신고')}`).catch(() => {});
   };
 
   const handleRegisterWifi = async () => {
@@ -354,6 +427,60 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
           })
         )}
 
+        <Text style={styles.sectionTitle}>AI 일정 해석 (선택)</Text>
+        <Text style={styles.weatherDescription}>
+          키워드로 알 수 없는 일정(예: 부산 출장)을 Claude가 해석해 준비물을 제안해요. 본인의
+          Anthropic API 키가 필요해요.
+        </Text>
+        {aiHasKey ? (
+          <>
+            <View style={styles.weatherRow}>
+              <Text style={styles.routineLabel}>사용하기</Text>
+              <Switch
+                value={ai.enabled}
+                onValueChange={handleAiToggle}
+                trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
+                thumbColor={Colors.white}
+              />
+            </View>
+            {ai.status === 'invalidKey' ? (
+              <Text style={styles.wifiStatusError}>API 키가 거부됐어요. 키를 삭제하고 올바른 키를 다시 넣어주세요.</Text>
+            ) : null}
+            {ai.status === 'quotaExceeded' ? (
+              <Text style={styles.wifiStatusError}>요청 한도나 잔액이 부족해요. 내일 다시 시도해요.</Text>
+            ) : null}
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>
+                이번 달 {ai.usage.month === getTodayString().slice(0, 7) ? ai.usage.monthCalls : 0}회 호출 · 하루 최대 {DAILY_CALL_LIMIT}회
+              </Text>
+              <Pressable onPress={handleAiKeyRemove} hitSlop={8}>
+                <Text style={styles.calendarSettingsLink}>키 삭제</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={handleAiReport} hitSlop={8}>
+              <Text style={styles.aiReportLink}>이상한 제안 신고하기</Text>
+            </Pressable>
+          </>
+        ) : (
+          <View style={styles.keywordAddRow}>
+            <TextInput
+              style={styles.keywordInput}
+              value={aiKeyDraft}
+              onChangeText={setAiKeyDraft}
+              placeholder="Anthropic API 키 (sk-ant-...)"
+              placeholderTextColor={Colors.slate400}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={handleAiKeySave}
+              returnKeyType="done"
+            />
+            <Pressable style={styles.timeDoneButton} onPress={handleAiKeySave} hitSlop={8}>
+              <Check size={14} color={Colors.emerald600} />
+            </Pressable>
+          </View>
+        )}
+
         <Text style={styles.sectionTitle}>최근 피드백 기록</Text>
         {recentFeedback.length === 0 ? (
           <Text style={styles.emptyText}>아직 기록이 없어요.</Text>
@@ -553,6 +680,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 8,
     backgroundColor: Colors.slate50,
+  },
+  aiReportLink: {
+    marginTop: 8,
+    fontSize: 12,
+    color: Colors.slate400,
+    textDecorationLine: 'underline',
   },
   feedbackRow: {
     flexDirection: 'row',

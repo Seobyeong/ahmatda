@@ -40,6 +40,9 @@ import { PurposeSelector } from '../components/PurposeSelector';
 import { Toast } from '../components/Toast';
 import { WeatherTimeline } from '../components/WeatherTimeline';
 import { SettingsPanel } from '../components/SettingsPanel';
+import { AiSuggestionCard } from '../components/AiSuggestionCard';
+import { AiHintService } from '../services/ai/AiHintService';
+import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import type { CalendarEvent, ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
 
 // 위치 권한이 없거나 좌표 조회에 실패했을 때만 쓰이는 폴백 좌표 (서울시청)
@@ -119,6 +122,8 @@ export function DashboardScreen() {
   const statusDismissed = useAppStore((s) => s.statusDismissed);
   const toast = useAppStore((s) => s.toast);
   const scrollToChecklistRequested = useAppStore((s) => s.scrollToChecklistRequested);
+  const aiEnabled = useAppStore((s) => s.ai.enabled);
+  const aiHintCache = useAppStore((s) => s.ai.hintCache);
 
   const setAutoDetected = useAppStore((s) => s.setAutoDetected);
   const setWeather = useAppStore((s) => s.setWeather);
@@ -139,6 +144,8 @@ export function DashboardScreen() {
   const showToast = useAppStore((s) => s.showToast);
   const clearToast = useAppStore((s) => s.clearToast);
   const clearScrollToChecklistRequest = useAppStore((s) => s.clearScrollToChecklistRequest);
+  const acceptAiSuggestion = useAppStore((s) => s.acceptAiSuggestion);
+  const rejectAiSuggestion = useAppStore((s) => s.rejectAiSuggestion);
 
   const [refreshing, setRefreshing] = useState(false);
   // 오늘 일정 — 길찾기 대상 고르기용. 개인정보처리방침상 캘린더 일정은 저장하지 않으므로
@@ -169,6 +176,11 @@ export function DashboardScreen() {
       ? findMatchingEvent(detectedId, events, userSettings.departureTime, userSettings.customKeywords)
       : null;
     setAutoDetected(detectedId, matchedEvent);
+
+    // 키워드에 안 걸린 일정의 AI 해석 — 기다리지 않는다(AI 연결 설계 4장 규칙 1).
+    // 결과는 캐시에 들어가고, 아래 "일정 기반 제안" 카드가 캐시를 읽어 나중에 나타난다.
+    // AI가 꺼져 있거나 보낼 제목이 없으면 호출 없이 바로 끝난다.
+    AiHintService.precompute(events).catch(() => {});
 
     const coords = await getCurrentCoords();
     const lat = coords?.lat ?? FALLBACK_LAT;
@@ -327,6 +339,32 @@ export function DashboardScreen() {
       interimResults: true,
       continuous: false,
     });
+  };
+
+  // 일정 기반 제안 — 캐시만 읽는다. 일정 제목은 화면 상태(todayEvents)에만 있고 저장되지 않는다.
+  const aiSuggestions = aiEnabled
+    ? buildSuggestions(
+        todayEvents,
+        userSettings.customKeywords,
+        aiHintCache,
+        checklist.map((item) => item.label)
+      )
+    : [];
+
+  const handleAcceptSuggestion = (suggestion: AiSuggestion) => {
+    acceptAiSuggestion(suggestion);
+    if (!suggestion.purposeId) return;
+
+    // 방금 추가된 키워드로 목적 자동감지를 다시 돌린다. 사용자가 목적을 직접 고른
+    // 상태면 덮어쓰지 않는다 — 자동감지가 수동 선택을 이기면 안 된다.
+    showToast(`다음부터 '${suggestion.title}' 일정은 자동으로 인식해요.`);
+    if (purposeId !== null && !autoDetected) return;
+    const keywords = useAppStore.getState().userSettings.customKeywords;
+    const detectedId = detectPurposeFromEvents(todayEvents, userSettings.departureTime, keywords);
+    const matchedEvent = detectedId
+      ? findMatchingEvent(detectedId, todayEvents, userSettings.departureTime, keywords)
+      : null;
+    setAutoDetected(detectedId, matchedEvent);
   };
 
   const handleFeedback = (val: FeedbackType) => {
@@ -622,6 +660,16 @@ export function DashboardScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        {aiSuggestions.length > 0 ? (
+          <View style={styles.sectionSpacing}>
+            <AiSuggestionCard
+              suggestions={aiSuggestions}
+              onAccept={handleAcceptSuggestion}
+              onReject={(s) => rejectAiSuggestion(s.key)}
+            />
+          </View>
+        ) : null}
 
         {currentWeather ? (
           <View style={[styles.envStrip, styles.sectionSpacing]}>

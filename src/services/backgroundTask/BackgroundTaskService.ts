@@ -2,6 +2,8 @@ import BackgroundFetch from 'react-native-background-fetch';
 import { getNextAlertDate, isWithinDepartureWindow } from '@/utils/time';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { useAppStore } from '@/store';
+import { CalendarService } from '@/services/calendar/CalendarService';
+import { AiHintService } from '@/services/ai/AiHintService';
 
 const DEPARTURE_TASK_ID = 'ahmatda-departure-check';
 
@@ -20,6 +22,11 @@ export const BackgroundTaskService = {
       },
       async (taskId) => {
         await BackgroundTaskService._runCheck();
+        // AI 미리 계산은 주기 폴링에서만 한다. 출발 알림 태스크는 알림 판단만 하고 끝내야
+        // 한다 — 알림 시각이 AI 응답 시간에 영향받으면 안 된다(AI 연결 설계 4장 규칙 4).
+        if (taskId !== DEPARTURE_TASK_ID) {
+          await BackgroundTaskService._precomputeAiHints();
+        }
         BackgroundFetch.finish(taskId);
       },
       async (taskId) => {
@@ -49,5 +56,20 @@ export const BackgroundTaskService = {
     if (!isWithinDepartureWindow(userSettings.departureTime)) return;
 
     await WifiMonitorService.checkOnce();
+  },
+
+  // 오늘·내일 일정의 AI 해석을 미리 채운다 — 아침에 앱을 열 때 캐시가 이미 차 있게.
+  // AI가 꺼져 있거나 보낼 제목이 없으면 AiHintService가 호출 없이 바로 끝낸다.
+  async _precomputeAiHints(): Promise<void> {
+    if (!useAppStore.getState().ai.enabled) return;
+    try {
+      const [today, tomorrow] = await Promise.all([
+        CalendarService.getEventsForDay(0),
+        CalendarService.getEventsForDay(1),
+      ]);
+      await AiHintService.precompute([...today, ...tomorrow]);
+    } catch {
+      // 백그라운드 작업은 조용히 실패한다 — finish()는 호출부가 보장
+    }
   },
 };
