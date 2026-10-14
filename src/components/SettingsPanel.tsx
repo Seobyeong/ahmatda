@@ -24,6 +24,7 @@ import { AiKeyStore } from '../services/ai/AiKeyStore';
 import { DAILY_CALL_LIMIT } from '../services/ai/hints';
 import { SensitivitySelector } from './SensitivitySelector';
 import { TimeInput } from './TimeInput';
+import { PersonalizeModal } from './PersonalizeModal';
 import type { FeedbackType } from '../types';
 
 interface SettingsPanelProps {
@@ -107,6 +108,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   // 키 자체는 화면 상태에 들고 있지 않는다 — 있는지 여부만 안다.
   const [aiHasKey, setAiHasKey] = useState(false);
   const [aiKeyDraft, setAiKeyDraft] = useState('');
+  const [personalizeVisible, setPersonalizeVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -311,6 +313,17 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
             </Text>
           </Pressable>
         </View>
+
+        <View style={styles.row}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.rowLabel}>AI로 개인화하기</Text>
+            <Text style={styles.weatherDescription}>쓰고 있는 AI 앱과 대화해 루틴·키워드를 한 번에 설정 (추가 비용 없음)</Text>
+          </View>
+          <Pressable onPress={() => setPersonalizeVisible(true)} hitSlop={8}>
+            <Text style={styles.calendarSettingsLink}>시작</Text>
+          </Pressable>
+        </View>
+        <PersonalizeModal visible={personalizeVisible} onClose={() => setPersonalizeVisible(false)} />
 
         <Text style={styles.sectionTitle}>날씨 알림 항목</Text>
         {WEATHER_ITEMS.map((weatherItem) => {

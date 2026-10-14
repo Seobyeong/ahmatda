@@ -10,6 +10,7 @@ import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import { pruneHintCache, recordCall, type AiSuggestion } from '../services/ai/hints';
+import type { PersonalizePlan } from '../services/personalize/importPlan';
 import type {
   AiHintEntry,
   AiProviderId,
@@ -110,6 +111,9 @@ interface AppActions {
   putAiHints: (entries: Record<string, AiHintEntry>) => void;
   rejectAiSuggestion: (key: string) => void;
   acceptAiSuggestion: (suggestion: AiSuggestion) => void;
+
+  // 템플릿 개인화 — 미리보기에서 사용자가 적용을 눌렀을 때
+  applyPersonalization: (plan: PersonalizePlan) => void;
 
   // UI
   dismissStatus: () => void;
@@ -639,6 +643,54 @@ export const useAppStore = create<AppStore>()(
           };
         });
       },
+
+      // 템플릿 개인화(AI 연결 설계 11장). 계획은 buildPersonalizePlan()이 이미 검증·중복 제거한
+      // "추가만" 계획이라 여기서는 그대로 반영한다. userSettings 변경은 patchSettings 한 번으로
+      // 모아서 updatedAt이 한 번만 올라가게 한다.
+      applyPersonalization: (plan) =>
+        set((state) => {
+          const settings = state.userSettings;
+          const patch: Partial<UserSettings> = {};
+          if (plan.departureTime) patch.departureTime = plan.departureTime.to;
+          if (plan.sensitivity) patch.sensitivityLevel = plan.sensitivity.to;
+
+          if (plan.keywords.length > 0) {
+            const customKeywords = { ...settings.customKeywords };
+            plan.keywords.forEach(({ purposeId, keyword }) => {
+              const existing = customKeywords[purposeId] ?? [];
+              if (!existing.includes(keyword)) customKeywords[purposeId] = [...existing, keyword];
+            });
+            patch.customKeywords = customKeywords;
+          }
+
+          if (plan.disableItems.length > 0) {
+            const keys = plan.disableItems
+              .map(({ purposeId, label }) => purposeItemKey(purposeId, label))
+              .filter((key) => !settings.disabledPurposeItems.includes(key));
+            if (keys.length > 0) patch.disabledPurposeItems = [...settings.disabledPurposeItems, ...keys];
+          }
+
+          const existingLabels = new Set(state.permanentRoutines.map((r) => r.label));
+          const newRoutines: ChecklistItem[] = plan.routines
+            .filter(({ label }) => !existingLabels.has(label))
+            .map(({ label, days }) => ({
+              id: generateItemId(),
+              label,
+              icon: 'check-circle',
+              tier: 3,
+              badge: null,
+              checked: false,
+              temp: false,
+              permanent: true,
+              ...(days ? { days } : {}),
+              updatedAt: Date.now(),
+            }));
+
+          return {
+            ...patchSettings(state, patch),
+            ...(newRoutines.length > 0 ? { permanentRoutines: [...state.permanentRoutines, ...newRoutines] } : {}),
+          };
+        }),
 
       // UI
       dismissStatus: () => set({ statusDismissed: true }),
