@@ -21,6 +21,7 @@ import type {
   FeedbackRecord,
   FeedbackType,
   ForgottenRecord,
+  LeaveIntent,
   MapApp,
   PurposeId,
   UserSettings,
@@ -56,6 +57,10 @@ interface AppState {
 
   // AI 연결 (선택 기능) — 기기 로컬 전용
   ai: AiState;
+
+  // 오늘 [떠나기]를 누른 기록 — 외출 판정의 "본인이 나간다고 말함" 신호
+  // (docs/외출-감지-재설계.md 2·3장). date가 오늘이 아니면 지난 기록이다.
+  leaveIntent: LeaveIntent | null;
 
   // UI 상태
   statusDismissed: boolean;
@@ -116,6 +121,9 @@ interface AppActions {
   applyPersonalization: (plan: PersonalizePlan) => void;
 
   // UI
+  // [떠나기]
+  recordLeaveIntent: () => void;
+
   dismissStatus: () => void;
   showToast: (message: string) => void;
   clearToast: () => void;
@@ -223,6 +231,8 @@ const defaultState: AppState = {
     usage: { day: '', dayCalls: 0, month: '', monthCalls: 0 },
     hintCache: {},
   },
+
+  leaveIntent: null,
 
   statusDismissed: false,
   toast: null,
@@ -692,6 +702,8 @@ export const useAppStore = create<AppStore>()(
           };
         }),
 
+      recordLeaveIntent: () => set({ leaveIntent: { date: getTodayString(), at: Date.now() } }),
+
       // UI
       dismissStatus: () => set({ statusDismissed: true }),
       showToast: (message) => set({ toast: message }),
@@ -746,7 +758,7 @@ export const useAppStore = create<AppStore>()(
       // 나중에 계정을 붙일 때를 위한 구분:
       //   [계정 동기화 대상]  permanentRoutines, userSettings(homeBssid 제외),
       //                      feedbackHistory, forgottenHistory
-      //   [기기 로컬 전용]    checklist/checklistDate(오늘 것), todayFeedback,
+      //   [기기 로컬 전용]    checklist/checklistDate(오늘 것), todayFeedback, leaveIntent,
       //                      userSettings.homeBssid(기기가 붙는 AP는 기기마다 다름),
       //                      WeatherService 날씨 캐시, WifiMonitorService 알림 dedup 키,
       //                      ai(키가 기기 보안 저장소에 있어 다른 기기로 옮기면 안 됨)
@@ -762,7 +774,23 @@ export const useAppStore = create<AppStore>()(
         todayFeedback: state.todayFeedback,
         // 캐시 키는 일정 제목의 해시라 제목 원문은 저장되지 않는다(services/ai/hints.ts).
         ai: state.ai,
+        // 앱이 꺼졌다 켜져도(잠금화면 액션은 앱 프로세스 밖에서 돌 수 있다) 오늘 누른
+        // 기록이 남아야 외출 판정에 쓸 수 있다. 기기 로컬 전용.
+        leaveIntent: state.leaveIntent,
       }),
     }
   )
 );
+
+// persist 복원이 끝날 때까지 기다린다. 알림 액션은 앱이 종료된 상태에서도(headless)
+// 실행될 수 있는데, 그때 바로 getState()를 읽으면 AsyncStorage 복원 전 기본값
+// (빈 체크리스트)을 보고 "다 챙겼어요"라고 판단해버린다.
+export function whenHydrated(): Promise<void> {
+  if (useAppStore.persist.hasHydrated()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsub = useAppStore.persist.onFinishHydration(() => {
+      unsub();
+      resolve();
+    });
+  });
+}

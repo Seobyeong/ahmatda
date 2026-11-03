@@ -8,7 +8,7 @@ import notifee, {
 } from '@notifee/react-native';
 import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, getNextDailyDate, toDateString } from '@/utils/time';
 import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
-import { ChecklistItem, FeedbackType } from '@/types';
+import { ChecklistItem } from '@/types';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
 const CHANNEL_CHECKLIST = 'ahmatda-checklist';
@@ -17,6 +17,16 @@ const CHANNEL_FEEDBACK  = 'ahmatda-feedback';
 // 출발 알림은 울린 뒤 그대로 "잠금화면 출발 상태"로 남는다 (Android ongoing).
 // 앱이 같은 id로 내용을 갱신하고, 집을 나서거나 감시 창이 끝나면 사라진다.
 const DEPARTURE_ALERT_ID = 'departure-alert';
+
+// [떠나기]를 눌렀을 때 남은 것을 잠깐 보여주는 알림 (docs/외출-감지-재설계.md 2장).
+// 현관에서 신발 신는 동안 볼 정도면 충분해서 10분 뒤 스스로 사라진다.
+const LAST_CHECK_ID = 'last-check';
+const LAST_CHECK_TIMEOUT_MS = 10 * 60 * 1000;
+const LAST_CHECK_MAX_LABELS = 3;
+
+// 잠금화면 출발 상태 알림의 [떠나기]. launchActivity가 없어 앱을 열지 않고
+// 백그라운드 이벤트로 처리된다 — 잠금을 풀지 않고 누를 수 있어야 의미가 있다.
+const LEAVE_ACTION = { title: '떠나기', pressAction: { id: 'leave' } };
 
 function departureBody(detail: string): string {
   return `출발 30분 전 · ${detail}`;
@@ -132,6 +142,7 @@ export const NotificationService = {
           autoCancel:    false,
           onlyAlertOnce: true,
           timeoutAfter:  DEPARTURE_WINDOW_MS,
+          actions:       [LEAVE_ACTION],
         },
       },
       trigger
@@ -167,6 +178,7 @@ export const NotificationService = {
         autoCancel:    false,
         onlyAlertOnce: true,
         timeoutAfter:  remainingMs,
+        actions:       [LEAVE_ACTION],
       },
     });
   },
@@ -174,6 +186,32 @@ export const NotificationService = {
   // 집을 나섰을 때 — 출발 상태는 더 이상 의미가 없다. 예약(내일 것)은 그대로 둔다.
   async clearDepartureStatus(): Promise<void> {
     await notifee.cancelDisplayedNotification(DEPARTURE_ALERT_ID);
+  },
+
+  // [떠나기]를 눌렀는데 남은 게 있을 때 — 헤드업으로 한 번 보여주고 10분 뒤 사라진다.
+  // [다 챙겼어요]를 누르면 전부 체크되고, 그러면 외출 감지 긴급 알림도 자연히 안 나간다.
+  async showLastCheck(unchecked: ChecklistItem[]): Promise<void> {
+    const labels = unchecked.slice(0, LAST_CHECK_MAX_LABELS).map((i) => `· ${i.label}`).join('\n');
+    const extra  = unchecked.length > LAST_CHECK_MAX_LABELS
+      ? `\n외 ${unchecked.length - LAST_CHECK_MAX_LABELS}개`
+      : '';
+
+    await notifee.displayNotification({
+      id:    LAST_CHECK_ID,
+      title: `나가기 전에 ${unchecked.length}개 남았어요`,
+      body:  `${labels}${extra}`,
+      android: {
+        channelId:    CHANNEL_CHECKLIST,
+        importance:   AndroidImportance.HIGH,
+        pressAction:  { id: 'open-checklist', launchActivity: 'default' },
+        timeoutAfter: LAST_CHECK_TIMEOUT_MS,
+        actions:      [{ title: '다 챙겼어요', pressAction: { id: 'all-packed' } }],
+      },
+    });
+  },
+
+  async clearLastCheck(): Promise<void> {
+    await notifee.cancelDisplayedNotification(LAST_CHECK_ID);
   },
 
   // 당일 20:00 — 착장 피드백 알림 (액션 버튼 3개)
@@ -251,14 +289,20 @@ export async function handleNotificationEvent(
   const { EventType } = await import('@notifee/react-native');
 
   if (type === EventType.ACTION_PRESS) {
-    const actionId = detail.pressAction?.id as FeedbackType | undefined;
-    if (actionId && ['cold', 'good', 'hot'].includes(actionId)) {
+    const actionId = detail.pressAction?.id;
+    if (actionId === 'cold' || actionId === 'good' || actionId === 'hot') {
       // store에 직접 접근 (Zustand는 모듈 레벨에서 접근 가능)
       const { useAppStore } = await import('@/store');
       useAppStore.getState().applyFeedback(actionId);
 
       // TODO: 서버 전송이 필요하면 여기서 axios 호출
       // await axios.post('/api/v1/weather/feedback', { val: actionId });
+    }
+    // [떠나기] / [다 챙겼어요] — leave.ts가 NotificationService를 정적으로 물고 있어 동적 import
+    if (actionId === 'leave' || actionId === 'all-packed') {
+      const { pressLeave, markAllPacked } = await import('@/services/departure/leave');
+      if (actionId === 'leave') await pressLeave();
+      else await markAllPacked();
     }
   } else if (type === EventType.PRESS && detail.pressAction?.id === 'open-checklist') {
     // 출발 알림/긴급 알림 본문을 탭해서 앱을 연 경우 — 체크리스트 섹션으로 스크롤 요청

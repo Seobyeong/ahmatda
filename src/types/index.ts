@@ -123,6 +123,12 @@ export interface FeedbackRecord {
 // 외출(Wi-Fi 이탈) 시점에 미체크였던 항목 기록 — "자주 까먹는 항목" 학습용
 // updatedAt이 없는 건 의도적이다. 이건 사용자가 고치는 값이 아니라 기기가 관측한
 // 사실이라, 기기별 기록을 date 기준으로 합치면 되고 충돌 해결이 필요 없다.
+// [떠나기]를 누른 기록 (docs/외출-감지-재설계.md 2장)
+export interface LeaveIntent {
+  date: string; // "YYYY-MM-DD"
+  at: number;   // epoch ms — 외출 판정에서 신호끼리 10분 창 안에 모였는지 볼 때 쓴다
+}
+
 export interface ForgottenRecord {
   date: string;     // "YYYY-MM-DD"
   labels: string[]; // 그날 안 챙기고 나간 항목 라벨들

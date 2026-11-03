@@ -19,14 +19,17 @@ const TIER_PRIORITY: Record<ItemTier, number> = { 1: 0, 2: 1, 0: 2, 3: 3 };
 
 export const SNAPSHOT_MAX_LABELS = 2;
 
+// 안 챙긴 항목을 급한 순서로 — 앱 밖 표시(위젯·잠금화면·마지막 확인 알림)가 같은 순서를 쓴다.
+export function sortByUrgency(items: ChecklistItem[]): ChecklistItem[] {
+  return [...items].sort((a, b) => TIER_PRIORITY[a.tier] - TIER_PRIORITY[b.tier]);
+}
+
 export function buildDepartureSnapshot(
   checklist: ChecklistItem[],
   departureTime: string,
   today: string
 ): DepartureSnapshot {
-  const unchecked = checklist
-    .filter((item) => !item.checked)
-    .sort((a, b) => TIER_PRIORITY[a.tier] - TIER_PRIORITY[b.tier]);
+  const unchecked = sortByUrgency(checklist.filter((item) => !item.checked));
 
   const shown = unchecked.slice(0, SNAPSHOT_MAX_LABELS).map((item) => item.label);
   const rest = unchecked.length - shown.length;

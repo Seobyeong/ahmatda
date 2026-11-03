@@ -42,6 +42,7 @@ import { WeatherTimeline } from '../components/WeatherTimeline';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
 import { AiHintService } from '../services/ai/AiHintService';
+import { pressLeave } from '../services/departure/leave';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import type { CalendarEvent, ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
 
@@ -376,6 +377,26 @@ export function DashboardScreen() {
   const checkedCount = checklist.filter((i) => i.checked).length;
   const allChecked = total > 0 && checkedCount === total;
 
+  // [떠나기] — 남은 게 있으면 마지막 확인 알림을 띄워 주머니 속에서도 보이게 한다.
+  // 결과는 토스트로 바로 알린다. 연타해도 알림이 한 번만 뜨도록 진행 중엔 막는다.
+  const [leaving, setLeaving] = useState(false);
+  const handleLeave = async () => {
+    if (leaving) return;
+    setLeaving(true);
+    try {
+      const result = await pressLeave();
+      if (result.kind === 'all-packed') {
+        showToast('다 챙겼어요. 다녀오세요!');
+      } else {
+        const names = result.unchecked.slice(0, 2).map((i) => i.label).join(', ');
+        const more = result.unchecked.length > 2 ? ` 외 ${result.unchecked.length - 2}개` : '';
+        showToast(`잠깐! ${names}${more} 아직 안 챙겼어요`);
+      }
+    } finally {
+      setLeaving(false);
+    }
+  };
+
   const handleToggleAll = () => {
     if (allChecked) {
       uncheckAll();
@@ -660,6 +681,19 @@ export function DashboardScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.leaveButton, styles.sectionSpacing, pressed && styles.leaveButtonPressed]}
+          onPress={handleLeave}
+          disabled={leaving}
+          accessibilityRole="button"
+          accessibilityLabel="떠나기 — 나가기 전에 남은 것 확인"
+        >
+          <Text style={styles.leaveButtonText}>떠나기</Text>
+          <Text style={styles.leaveButtonSub}>
+            {allChecked ? '다 챙겼어요' : `아직 ${total - checkedCount}개 남음`}
+          </Text>
+        </Pressable>
 
         {aiSuggestions.length > 0 ? (
           <View style={styles.sectionSpacing}>
@@ -1022,6 +1056,25 @@ const styles = StyleSheet.create({
   },
   micButtonActive: {
     backgroundColor: Colors.indigo600,
+  },
+  leaveButton: {
+    backgroundColor: Colors.indigo600,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  leaveButtonPressed: {
+    opacity: 0.85,
+  },
+  leaveButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  leaveButtonSub: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.indigo100,
   },
   quickAddPermanentLink: {
     marginTop: 8,
