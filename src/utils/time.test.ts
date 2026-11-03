@@ -1,4 +1,4 @@
-import { getAlertTime, isRoutineActiveOnDay, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs } from './time';
+import { getAlertTime, isRoutineActiveOnDay, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs, getFeedbackOutingDate, isValidHHmm } from './time';
 
 describe('isRoutineActiveOnDay', () => {
   it('days가 없으면 매일 활성', () => {
@@ -132,4 +132,33 @@ describe('getDepartureWindowRemainingMs', () => {
     // 출발 00:15 → 창 23:45 ~ 01:45
     expect(getDepartureWindowRemainingMs('00:15', at('2026-07-08T00:45:00'))).toBe(60 * MIN);
   });
+});
+
+describe('getFeedbackOutingDate — 자기 전 피드백이 가리키는 외출 날짜', () => {
+  const at = (d: number, h: number, m: number) => new Date(2026, 10, d, h, m);
+
+  it('출발 이후 같은 날 밤이면 오늘 외출', () => {
+    expect(getFeedbackOutingDate('08:15', at(3, 22, 0))).toBe('2026-11-03');
+  });
+
+  it('자정을 넘긴 정리 시각이면 전날 외출', () => {
+    expect(getFeedbackOutingDate('08:15', at(4, 0, 30))).toBe('2026-11-03');
+  });
+
+  it('출발 시각 정각은 그날 외출로 본다', () => {
+    expect(getFeedbackOutingDate('08:15', at(3, 8, 15))).toBe('2026-11-03');
+  });
+
+  it('출발 직전이면 아직 전날 외출', () => {
+    expect(getFeedbackOutingDate('08:15', at(3, 8, 14))).toBe('2026-11-02');
+  });
+
+  it('월 경계도 넘어간다', () => {
+    expect(getFeedbackOutingDate('08:15', new Date(2026, 11, 1, 0, 30))).toBe('2026-11-30');
+  });
+});
+
+describe('isValidHHmm', () => {
+  it.each(['00:00', '00:30', '09:05', '23:59'])('%s는 통과', (t) => expect(isValidHHmm(t)).toBe(true));
+  it.each(['', '7:5', '24:00', '12:60', '7:05 pm', '12:3'])('%s는 거른다', (t) => expect(isValidHHmm(t)).toBe(false));
 });

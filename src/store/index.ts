@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PURPOSES, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
-import { getTodayString, isRoutineActiveOnDay } from '../utils/time';
+import { getFeedbackOutingDate, getTodayString, isRoutineActiveOnDay } from '../utils/time';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import { pruneHintCache, recordCall, type AiSuggestion } from '../services/ai/hints';
@@ -93,6 +93,7 @@ interface AppActions {
 
   // 유저 설정
   updateDepartureTime: (time: string) => void;
+  setNightlyCheckTime: (time: string) => void;
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   setMapApp: (app: MapApp) => void;
@@ -103,7 +104,7 @@ interface AppActions {
   removeCustomKeyword: (purposeId: PurposeId, keyword: string) => void;
 
   // 피드백
-  applyFeedback: (val: FeedbackType) => void;
+  applyFeedback: (val: FeedbackType, outingDate?: string) => void;
 
   // 자주 까먹는 항목
   recordForgotten: (labels: string[]) => void;
@@ -207,6 +208,7 @@ const defaultState: AppState = {
 
   userSettings: {
     departureTime: '08:15',
+    nightlyCheckTime: '22:00',
     homeBssid: null,
     sensitivityLevel: 3,
     learnedDelta: 0,
@@ -491,6 +493,7 @@ export const useAppStore = create<AppStore>()(
 
       // 유저 설정
       updateDepartureTime: (time) => set((state) => patchSettings(state, { departureTime: time })),
+      setNightlyCheckTime: (time) => set((state) => patchSettings(state, { nightlyCheckTime: time })),
 
       setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
 
@@ -555,24 +558,35 @@ export const useAppStore = create<AppStore>()(
       // learnedDelta가 중복 조정되지 않는다.
       // 조정 대상은 learnedDelta(학습값)뿐이다. 사용자가 고른 기준값(sensitivityLevel)은
       // 건드리지 않으므로, 나중에 민감도를 다시 골라도 여기 쌓인 학습이 사라지지 않는다.
-      applyFeedback: (val) =>
+      // 피드백은 달력 날짜가 아니라 "가장 최근 외출"에 붙는다 (getFeedbackOutingDate).
+      // 앱 화면과 자기 전 정리 알림이 같은 규칙을 써야 한다 — 다르면 00:30에 알림으로
+      // 답하고 앱에서 또 누를 때 같은 외출이 두 날짜로 갈라져 보정치가 두 번 쌓인다.
+      // outingDate는 테스트·특수 경로용으로만 넘긴다.
+      applyFeedback: (val, outingDate) =>
         set((state) => {
-          if (state.todayFeedback === val) return {};
+          const today = getTodayString();
+          const date = outingDate ?? getFeedbackOutingDate(state.userSettings.departureTime);
+          // 같은 날 답을 바꾸면 이전 답의 보정치를 되돌리고 새 답을 더한다. 이전 답은
+          // 그 날짜의 기록에서 찾는다 — todayFeedback은 오늘 것만 들고 있어 전날 외출엔 못 쓴다.
+          const previous = state.feedbackHistory.find((r) => r.date === date)?.val ?? null;
+          if (previous === val) return {};
 
           let learnedDelta = state.userSettings.learnedDelta;
-          if (state.todayFeedback) learnedDelta -= FEEDBACK_DELTA[state.todayFeedback];
+          if (previous) learnedDelta -= FEEDBACK_DELTA[previous];
           learnedDelta += FEEDBACK_DELTA[val];
 
-          const today = getTodayString();
           return {
             ...patchSettings(state, { learnedDelta }),
-            todayFeedback: val,
+            // 대시보드의 선택 표시는 오늘 외출 것만 — 전날 외출 답이 오늘 칩에 켜지면 안 된다.
+            ...(date === today ? { todayFeedback: val } : {}),
             // 하루 1건씩 영구 누적되는 persist 데이터라 캡이 없으면 무한 성장한다.
             // 화면(설정 패널)에서는 최근 3건만 쓰므로 최근 90건이면 충분하다.
             feedbackHistory: [
-              ...state.feedbackHistory.filter((r) => r.date !== today),
-              { date: today, val, updatedAt: Date.now() },
-            ].slice(-90),
+              ...state.feedbackHistory.filter((r) => r.date !== date),
+              { date, val, updatedAt: Date.now() },
+            ]
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .slice(-90),
           };
         }),
 

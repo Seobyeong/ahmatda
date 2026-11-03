@@ -4,6 +4,7 @@ import type { ChecklistItem, UserSettings } from '@/types';
 
 const settings: UserSettings = {
   departureTime: '08:15',
+  nightlyCheckTime: '22:00',
   homeBssid: null,
   sensitivityLevel: 3,
   learnedDelta: 0,

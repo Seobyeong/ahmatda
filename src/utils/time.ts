@@ -63,6 +63,25 @@ export function getNextDailyDate(hour: number, minute: number, now: Date = new D
   return target;
 }
 
+// "HH:mm" 24시간 형식인지. 동기화·가져오기로 들어온 값이 깨져 있으면 알림 예약이
+// Invalid Date로 실패해 매일 알림이 통째로 사라지므로, 예약 전에 거른다.
+export function isValidHHmm(time: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
+}
+
+// 자기 전 정리 알림에서 받은 착장 피드백이 "어느 날 외출"에 대한 것인지.
+//
+// 달력 날짜를 쓰면 정리 시각을 자정 이후(00:30)로 잡은 사람의 피드백이 하루 밀려서
+// 아직 나가지도 않은 오늘 외출에 기록된다. 그래서 지금 이전의 가장 최근 출발 시각이
+// 속한 날짜를 쓴다 — 출발 08:15, 지금 00:30(11/04)이면 11/03 외출에 대한 피드백이다.
+export function getFeedbackOutingDate(departureTime: string, now: Date = new Date()): string {
+  const [hh, mm] = departureTime.split(':').map(Number);
+  const departure = new Date(now);
+  departure.setHours(hh, mm, 0, 0);
+  if (departure.getTime() > now.getTime()) departure.setDate(departure.getDate() - 1);
+  return toDateString(departure);
+}
+
 // 오늘 날짜 "YYYY-MM-DD" 반환 (로컬 타임존 기준)
 // toISOString()은 UTC 기준이라 자정 근처 KST(00:00~08:59)에서 하루 어긋날 수 있어 직접 조립한다.
 export function getTodayString(): string {

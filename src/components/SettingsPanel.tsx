@@ -75,6 +75,8 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   }, [visible, translateY]);
 
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
+  const nightlyCheckTime = useAppStore((s) => s.userSettings.nightlyCheckTime);
+  const setNightlyCheckTime = useAppStore((s) => s.setNightlyCheckTime);
   const learnedDelta = useAppStore((s) => s.userSettings.learnedDelta);
   const sensitivityLevel = useAppStore((s) => s.userSettings.sensitivityLevel);
   const homeBssid = useAppStore((s) => s.userSettings.homeBssid);
@@ -102,6 +104,8 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [editingTime, setEditingTime] = useState(false);
   const [keywordDraft, setKeywordDraft] = useState('');
   const [timeDraft, setTimeDraft] = useState(departureTime);
+  const [editingNightly, setEditingNightly] = useState(false);
+  const [nightlyDraft, setNightlyDraft] = useState(nightlyCheckTime);
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -130,6 +134,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   useEffect(() => {
     if (!visible) {
       setEditingTime(false);
+      setEditingNightly(false);
       setEditingSensitivity(false);
       setWifiRegisterStatus('idle');
       setKeywordDraft('');
@@ -153,6 +158,17 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const handleTimeDone = () => {
     updateDepartureTime(timeDraft);
     setEditingTime(false);
+  };
+
+  // 자기 전 정리 시각도 같은 이유로 "완료"에서만 커밋한다 (바뀔 때마다 알림 재예약).
+  const handleNightlyEditStart = () => {
+    setNightlyDraft(nightlyCheckTime);
+    setEditingNightly(true);
+  };
+
+  const handleNightlyDone = () => {
+    setNightlyCheckTime(nightlyDraft);
+    setEditingNightly(false);
   };
 
   // 기준값만 바꾼다. 일일 피드백으로 쌓인 learnedDelta는 그대로 두므로,
@@ -258,6 +274,26 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
           ) : (
             <Pressable onPress={handleTimeEditStart}>
               <Text style={styles.rowValue}>{departureTime}</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>자기 전 정리 시간</Text>
+          {editingNightly ? (
+            <View style={styles.timeEditRow}>
+              <TimeInput value={nightlyDraft} onChange={setNightlyDraft} compact autoFocus />
+              <Pressable
+                style={styles.timeDoneButton}
+                onPress={handleNightlyDone}
+                hitSlop={8}
+              >
+                <Check size={14} color={Colors.emerald600} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={handleNightlyEditStart}>
+              <Text style={styles.rowValue}>{nightlyCheckTime}</Text>
             </Pressable>
           )}
         </View>

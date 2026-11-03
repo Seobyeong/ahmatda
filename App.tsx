@@ -57,13 +57,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // 온보딩 완료 또는 출발시각 변경 시 전날 알림/피드백 알림을 재예약한다.
-    // 출발 알림은 아래 effect가 전담한다 — 여기서도 예약하면 앱을 켤 때마다
-    // 같은 알림을 두 번 취소·재생성하게 된다(의존성이 같아 항상 함께 실행됨).
+    // 온보딩 완료 또는 출발시각·자기 전 정리 시각 변경 시 정리 알림을 재예약한다.
+    // (본문에 출발 시각이 들어가서 출발시각 변경에도 반응한다.)
+    // 출발 알림은 아래 effect가 전담한다.
     if (!userSettings.onboarded) return;
+    NotificationService.scheduleNightlyCheck(userSettings.departureTime, userSettings.nightlyCheckTime);
+  }, [userSettings.onboarded, userSettings.departureTime, userSettings.nightlyCheckTime]);
 
-    NotificationService.rescheduleDailyAlerts(userSettings.departureTime);
-    // 출발 알림 시각에 맞춰 백그라운드 확인 태스크도 함께 예약
+  useEffect(() => {
+    // 출발 알림 시각에 맞춰 백그라운드 확인 태스크 예약 — 정리 시각과는 무관해서 따로 둔다.
+    if (!userSettings.onboarded) return;
     BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
   }, [userSettings.onboarded, userSettings.departureTime]);
 

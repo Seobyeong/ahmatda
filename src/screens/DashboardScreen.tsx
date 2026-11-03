@@ -30,7 +30,7 @@ import { CalendarService } from '../services/calendar/CalendarService';
 import { DirectionsService } from '../services/directions/DirectionsService';
 import { WeatherService } from '../services/weather/WeatherService';
 import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta } from '../utils/temperature';
-import { getAlertTime, getCurrentSlotIndex, getTodayString, parseEventTime } from '../utils/time';
+import { getAlertTime, getCurrentSlotIndex, getFeedbackOutingDate, getTodayString, parseEventTime } from '../utils/time';
 import { pickNextPlaceEvent } from '../utils/directions';
 import { getCurrentCoords } from '../utils/location';
 import { isWithinKorea } from '../utils/kmaGrid';
@@ -119,7 +119,11 @@ export function DashboardScreen() {
   const weatherOutOfArea = useAppStore((s) => s.weatherOutOfArea);
   const weatherTimeline = useAppStore((s) => s.weatherTimeline);
   const userSettings = useAppStore((s) => s.userSettings);
-  const todayFeedback = useAppStore((s) => s.todayFeedback);
+  // 선택 표시는 store가 피드백을 붙이는 "가장 최근 외출" 기준 — 자기 전 정리 알림으로
+  // 이미 답했으면 앱에서도 켜져 보여야 같은 외출에 두 번 답하지 않는다.
+  const feedbackHistory = useAppStore((s) => s.feedbackHistory);
+  const currentFeedback =
+    feedbackHistory.find((r) => r.date === getFeedbackOutingDate(userSettings.departureTime))?.val ?? null;
   const statusDismissed = useAppStore((s) => s.statusDismissed);
   const toast = useAppStore((s) => s.toast);
   const scrollToChecklistRequested = useAppStore((s) => s.scrollToChecklistRequested);
@@ -562,14 +566,14 @@ export function DashboardScreen() {
                     key={opt.val}
                     style={[
                       styles.feedbackChip,
-                      todayFeedback === opt.val && styles.feedbackChipActive,
+                      currentFeedback === opt.val && styles.feedbackChipActive,
                     ]}
                     onPress={() => handleFeedback(opt.val)}
                   >
                     <Text
                       style={[
                         styles.feedbackChipText,
-                        todayFeedback === opt.val && styles.feedbackChipTextActive,
+                        currentFeedback === opt.val && styles.feedbackChipTextActive,
                       ]}
                     >
                       {opt.label}
@@ -728,16 +732,16 @@ export function DashboardScreen() {
         <View style={[styles.notificationPreview, styles.sectionSpacing]}>
           <Text style={styles.notificationTitle}>알림 미리보기</Text>
           <View style={styles.notificationRow}>
-            <Text style={styles.notificationStep}>1단계 · 전날 22:00</Text>
-            <Text style={styles.notificationText}>내일 날씨 예보를 확인해보세요.</Text>
+            <Text style={styles.notificationStep}>출발 30분 전 · {alertTime}</Text>
+            <Text style={styles.notificationText}>잠금화면에 체크리스트가 떠요. 나갈 땐 [떠나기]를 눌러 마지막 확인.</Text>
           </View>
           <View style={styles.notificationRow}>
-            <Text style={styles.notificationStep}>2단계 · 당일 {alertTime}</Text>
-            <Text style={styles.notificationText}>외출 30분 전이에요. 체크리스트를 확인하세요.</Text>
+            <Text style={styles.notificationStep}>현관 이탈 감지</Text>
+            <Text style={styles.notificationText}>안 챙긴 채 나가면 바로 알려요.</Text>
           </View>
           <View style={styles.notificationRow}>
-            <Text style={styles.notificationStep}>3단계 · 현관 이탈 감지</Text>
-            <Text style={styles.notificationText}>오늘 착장은 어땠나요? 피드백을 남겨주세요.</Text>
+            <Text style={styles.notificationStep}>자기 전 정리 · {userSettings.nightlyCheckTime}</Text>
+            <Text style={styles.notificationText}>오늘 착장 피드백을 남기고 다음 외출 준비를 봐요.</Text>
           </View>
         </View>
 

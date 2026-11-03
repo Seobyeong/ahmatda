@@ -6,17 +6,22 @@ import notifee, {
   TimestampTrigger,
   RepeatFrequency,
 } from '@notifee/react-native';
-import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, getNextDailyDate, toDateString } from '@/utils/time';
+import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, getNextDailyDate, isValidHHmm, toDateString } from '@/utils/time';
 import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { ChecklistItem } from '@/types';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
 const CHANNEL_CHECKLIST = 'ahmatda-checklist';
-const CHANNEL_FEEDBACK  = 'ahmatda-feedback';
+const LEGACY_CHANNEL_FEEDBACK = 'ahmatda-feedback';
 
 // 출발 알림은 울린 뒤 그대로 "잠금화면 출발 상태"로 남는다 (Android ongoing).
 // 앱이 같은 id로 내용을 갱신하고, 집을 나서거나 감시 창이 끝나면 사라진다.
 const DEPARTURE_ALERT_ID = 'departure-alert';
+
+// 자기 전 정리 알림. 예전 22:00 전날 알림 / 20:00 착장 피드백을 대체한다.
+const NIGHTLY_CHECK_ID = 'nightly-check';
+const LEGACY_NIGHTLY_IDS = ['day-before-alert', 'feedback-alert'];
+const DEFAULT_NIGHTLY_CHECK_TIME = '22:00';
 
 // [떠나기]를 눌렀을 때 남은 것을 잠깐 보여주는 알림 (docs/외출-감지-재설계.md 2장).
 // 현관에서 신발 신는 동안 볼 정도면 충분해서 10분 뒤 스스로 사라진다.
@@ -51,12 +56,9 @@ export const NotificationService = {
       sound:      'default',
       vibration:  true,
     });
-    await notifee.createChannel({
-      id:         CHANNEL_FEEDBACK,
-      name:       '착장 피드백 알림',
-      importance: AndroidImportance.DEFAULT,
-      visibility: AndroidVisibility.PUBLIC,
-    });
+    // 착장 피드백은 자기 전 정리 알림(외출 확인 채널)으로 합쳐졌다. 옛 채널이 시스템
+    // 알림 설정에 빈 항목으로 남지 않게 지운다 (없으면 아무 일도 안 한다).
+    await notifee.deleteChannel(LEGACY_CHANNEL_FEEDBACK);
   },
 
   // 정확한 알람(SCHEDULE_EXACT_ALARM) 권한 상태 확인.
@@ -71,33 +73,6 @@ export const NotificationService = {
   // Android 12+에서는 사용자가 이 화면에서 직접 허용해야 한다)
   async openExactAlarmSettings(): Promise<void> {
     await notifee.openAlarmPermissionSettings();
-  },
-
-  // 전날 22:00 — "내일도 출발하시나요?" 알림 예약
-  // 무조건 +1일로 잡으면 오늘 밤 22:00을 통째로 건너뛴다(아침에 온보딩하면 첫날 밤이
-  // 버려진다). 형제 알림들과 같이 "오늘로 잡고, 지났으면 내일" 규칙을 쓴다.
-  async scheduleDayBeforeAlert(departureTime: string): Promise<void> {
-    const target = getNextDailyDate(22, 0);
-
-    const trigger: TimestampTrigger = {
-      type:                    TriggerType.TIMESTAMP,
-      timestamp:               target.getTime(),
-      repeatFrequency:         RepeatFrequency.DAILY,
-      alarmManager: {
-        allowWhileIdle: true,  // Doze Mode 대응
-      },
-    };
-
-    await notifee.cancelTriggerNotification('day-before-alert');
-    await notifee.createTriggerNotification(
-      {
-        id:      'day-before-alert',
-        title:   '아맞다 ⏰',
-        body:    `내일 ${departureTime}에 외출 예정이에요. 일정 확인 중...`,
-        android: { channelId: CHANNEL_REMINDER, pressAction: { id: 'default' } },
-      },
-      trigger
-    );
   },
 
   // 당일 외출 30분 전 — 체크리스트 알림 + 모니터링 시작 신호
@@ -214,25 +189,38 @@ export const NotificationService = {
     await notifee.cancelDisplayedNotification(LAST_CHECK_ID);
   },
 
-  // 당일 20:00 — 착장 피드백 알림 (액션 버튼 3개)
-  async scheduleFeedbackAlert(): Promise<void> {
-    const target = getNextDailyDate(20, 0);
+  // 자기 전 정리 — 사용자가 정한 시각에 매일 한 번. 예전의 20:00 착장 피드백과
+  // 22:00 전날 알림을 하나로 합쳤다 (docs/외출-감지-재설계.md 5장 결정 3).
+  // 본문에 "내일"을 쓰지 않는 이유: 정리 시각이 자정 이후(00:30)면 다음 외출은 달력상
+  // 오늘이라 말이 틀어진다. 출발 시각만 말한다.
+  //
+  // 출발 알림은 여기서 예약하지 않는다 — 미체크 개수를 본문에 담아야 해서 App.tsx가
+  // 개수 변화에 맞춰 따로 예약한다. 전체 취소(cancelAllNotifications)도 쓰지 않는다 —
+  // 이미 떠 있는 Wi-Fi 이탈 긴급 알림까지 지워버린다. 자기 id만 취소한다.
+  async scheduleNightlyCheck(departureTime: string, nightlyCheckTime: string): Promise<void> {
+    const time = isValidHHmm(nightlyCheckTime) ? nightlyCheckTime : DEFAULT_NIGHTLY_CHECK_TIME;
+    const [hh, mm] = time.split(':').map(Number);
+    const target = getNextDailyDate(hh, mm);
 
     const trigger: TimestampTrigger = {
       type:            TriggerType.TIMESTAMP,
       timestamp:       target.getTime(),
       repeatFrequency: RepeatFrequency.DAILY,
-      alarmManager: { allowWhileIdle: true },
+      alarmManager: { allowWhileIdle: true },  // Doze Mode 대응
     };
 
-    await notifee.cancelTriggerNotification('feedback-alert');
+    // 업데이트 설치 전 기기에 남아 있는 옛 예약 두 개를 지운다 — 안 지우면 셋 다 울린다.
+    await Promise.all(
+      [...LEGACY_NIGHTLY_IDS, NIGHTLY_CHECK_ID].map((id) => notifee.cancelTriggerNotification(id))
+    );
     await notifee.createTriggerNotification(
       {
-        id:    'feedback-alert',
-        title: '아맞다 — 오늘 착장 어땠나요?',
-        body:  '피드백을 남기면 내일 추천이 더 정확해져요.',
+        id:    NIGHTLY_CHECK_ID,
+        title: '아맞다 — 오늘 하루 어땠나요?',
+        body:  `착장 피드백을 남기고, ${departureTime} 출발 전에 챙길 것도 미리 봐두세요.`,
         android: {
-          channelId: CHANNEL_FEEDBACK,
+          channelId:   CHANNEL_REMINDER,
+          pressAction: { id: 'open-checklist', launchActivity: 'default' },
           actions: [
             { title: '🥶 추웠음', pressAction: { id: 'cold' } },
             { title: '😊 적당함', pressAction: { id: 'good' } },
@@ -261,23 +249,6 @@ export const NotificationService = {
       },
     });
   },
-
-  // 매일 도는 알림 재등록 — 온보딩이 끝났거나 외출 시각이 바뀌었을 때 호출.
-  //
-  // 출발 알림은 여기서 예약하지 않는다. 그 알림만 미체크 개수를 본문에 담아야 해서
-  // App.tsx가 개수 변화에 맞춰 따로 예약하는데, 여기서도 예약하면 앱을 켤 때마다
-  // 같은 알림을 두 번 취소·재생성하게 된다(두 effect의 의존성이 겹쳐 항상 함께 돈다).
-  //
-  // 예전에는 시작 전에 cancelAllNotifications()로 싹 지웠는데, 그건 예약분뿐 아니라
-  // 이미 표시 중인 알림까지 지운다 — Wi-Fi 이탈 긴급 알림이 알림창에 떠 있는 상태에서
-  // 앱을 열면 정작 확인해야 할 그 알림이 사라졌다. 각 schedule* 함수가 자기 id를 먼저
-  // 취소하므로 전체 취소는 처음부터 필요 없었다.
-  async rescheduleDailyAlerts(departureTime: string): Promise<void> {
-    await Promise.all([
-      NotificationService.scheduleDayBeforeAlert(departureTime),
-      NotificationService.scheduleFeedbackAlert(),
-    ]);
-  },
 };
 
 // 알림 이벤트 핸들러 — App.tsx의 onForegroundEvent(포그라운드)와
@@ -291,9 +262,19 @@ export async function handleNotificationEvent(
   if (type === EventType.ACTION_PRESS) {
     const actionId = detail.pressAction?.id;
     if (actionId === 'cold' || actionId === 'good' || actionId === 'hot') {
-      // store에 직접 접근 (Zustand는 모듈 레벨에서 접근 가능)
-      const { useAppStore } = await import('@/store');
+      // store에 직접 접근 (Zustand는 모듈 레벨에서 접근 가능).
+      // 앱이 종료된 상태에서 누르면 persist 복원 전이라 기본값(learnedDelta 0)에 더한 뒤
+      // 그대로 저장해버릴 수 있어 복원을 먼저 기다린다.
+      // 어느 외출에 대한 답인지는 store가 앱 화면과 같은 규칙으로 정한다.
+      const { useAppStore, whenHydrated } = await import('@/store');
+      await whenHydrated();
       useAppStore.getState().applyFeedback(actionId);
+
+      // 답했으면 알림을 내린다. 버튼이 살아 있으면 자정 뒤에 또 눌러 다른 날짜로
+      // 기록이 갈라질 수 있다.
+      if (detail.notification?.id) {
+        await notifee.cancelDisplayedNotification(detail.notification.id);
+      }
 
       // TODO: 서버 전송이 필요하면 여기서 axios 호출
       // await axios.post('/api/v1/weather/feedback', { val: actionId });
