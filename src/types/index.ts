@@ -30,6 +30,7 @@ export interface ChecklistItem {
   temp: boolean;       // 오늘만 임시 항목
   permanent: boolean;  // 영구 루틴 항목
   days?: number[];     // 루틴이 나타날 요일 (0=일 ~ 6=토). 없으면 매일
+  onDate?: string;     // "YYYY-MM-DD" — 특정 날짜 1회 (docs/체크리스트-항목-속성.md 2.3). 지나면 정리
   // 동기화 충돌 해결(last-write-wins)용 수정 시각. permanentRoutines처럼 사용자가
   // 직접 만들고 고치는 항목에만 의미가 있고, tier 1·2 항목은 매 빌드마다 새로
   // 생성되는 파생 데이터라 설정하지 않는다.

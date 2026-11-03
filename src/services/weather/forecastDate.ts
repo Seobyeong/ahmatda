@@ -33,3 +33,69 @@ export function pickForecastDate(
   const today = formatLocalDate(now);
   return dates.includes(today) ? today : dates[0];
 }
+
+// ── 다음 외출 날의 예보 요약 (자기 전 정리의 "내일 준비", docs/외출-감지-재설계.md 5장) ──
+
+export interface DayOutlook {
+  rain: boolean;         // 나가 있는 동안 강수 형태가 잡히거나 강수확률이 RAIN_POP_THRESHOLD 이상
+  popMax: number;        // 나가 있는 동안 최대 강수확률(%)
+  maxTemp: number | null;
+  minTemp: number | null;
+  heat: boolean;         // 최고 33°C 이상 — 오늘 체크리스트의 폭염 기준과 같다
+}
+
+// 기상청이 "비 올 가능성이 높다"고 안내하는 수준. 30~50%는 매일 우산을 들게 만들어
+// 표시 예산을 깬다.
+export const RAIN_POP_THRESHOLD = 60;
+
+// 나가 있는 시간은 모른다 — 경로 기억 전에는 출발 시각부터 21시까지로 본다.
+// 21시 이후 출발(야간 근무)이면 그날 마지막 예보(23시)까지 본다.
+const DEFAULT_RETURN_TIME = '2100';
+const LAST_FCST_TIME = '2300';
+
+// date("YYYYMMDD")의 fromHHmm ~ 21시 예보만 본다. 해당 범위 예보가 없으면 null
+// (발표 시각에 따라 모레 이후는 응답에 없다).
+export function summarizeDayOutlook(
+  items: Array<{ category: string; fcstDate?: string; fcstTime?: string; fcstValue?: string }>,
+  date: string,
+  fromHHmm: string
+): DayOutlook | null {
+  // 출발 08:15면 08시 예보부터 — 정시 단위라 내림한다.
+  const from = `${fromHHmm.slice(0, 2)}00`;
+  const to = from > DEFAULT_RETURN_TIME ? LAST_FCST_TIME : DEFAULT_RETURN_TIME;
+  const inRange = items.filter(
+    (i) => i.fcstDate === date && (i.fcstTime ?? '') >= from && (i.fcstTime ?? '') <= to
+  );
+  if (inRange.length === 0) return null;
+
+  const values = (cat: string) =>
+    inRange.filter((i) => i.category === cat).map((i) => Number(i.fcstValue)).filter((n) => Number.isFinite(n));
+
+  const temps = values('TMP');
+  const pops = values('POP');
+  const ptys = values('PTY');
+
+  const popMax = pops.length > 0 ? Math.max(...pops) : 0;
+  const maxTemp = temps.length > 0 ? Math.max(...temps) : null;
+  const minTemp = temps.length > 0 ? Math.min(...temps) : null;
+
+  return {
+    rain: ptys.some((p) => p !== 0) || popMax >= RAIN_POP_THRESHOLD,
+    popMax,
+    maxTemp,
+    minTemp,
+    heat: maxTemp !== null && maxTemp >= 33,
+  };
+}
+
+// 오늘 체크리스트의 우산 판단 — 지금 비가 오거나, 아직 안 지난 시간대 예보에 비가 있으면.
+// 다음 외출 미리보기(summarizeDayOutlook)와 같은 기준(강수 형태 또는 강수확률 60%)이어야
+// 한다. 전날 밤 "우산 — 비 예보 70%"라고 해놓고 아침에 지금 맑다고 빼면 믿고 나간 사람이 젖는다.
+export function isRainExpectedToday(
+  rainingNow: boolean,
+  slots: Array<{ rain: number; alert: string | null }>,
+  currentSlotIndex: number
+): boolean {
+  if (rainingNow) return true;
+  return slots.slice(currentSlotIndex).some((s) => s.alert === 'rain' || s.rain >= RAIN_POP_THRESHOLD);
+}

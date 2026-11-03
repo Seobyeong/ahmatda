@@ -6,6 +6,7 @@
 
 import { PURPOSES, PURPOSE_ORDER } from '@/constants/purposes';
 import type { ChecklistItem, PurposeId, UserSettings } from '@/types';
+import { isOneOff } from '@/utils/routines';
 import { PERSONALIZE_FORMAT_VERSION, TEMPLATE_MARKER } from './template';
 
 const MAX_ROUTINES = 15;
@@ -132,7 +133,8 @@ export function buildPersonalizePlan(
   }
 
   if (Array.isArray(data.routines)) {
-    const existing = new Set(permanentRoutines.map((r) => r.label.trim()));
+    // 특정 날짜 1회 항목은 "이미 있는 루틴"이 아니다 — 같은 이름을 매일 루틴으로 받을 수 있어야 한다.
+    const existing = new Set(permanentRoutines.filter((r) => !isOneOff(r)).map((r) => r.label.trim()));
     for (const raw of data.routines.slice(0, MAX_ROUTINES)) {
       const label = cleanLabel((raw as { label?: unknown } | null)?.label);
       if (!label) continue;

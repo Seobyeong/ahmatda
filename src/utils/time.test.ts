@@ -1,25 +1,4 @@
-import { getAlertTime, isRoutineActiveOnDay, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs, getFeedbackOutingDate, isValidHHmm } from './time';
-
-describe('isRoutineActiveOnDay', () => {
-  it('days가 없으면 매일 활성', () => {
-    expect(isRoutineActiveOnDay(undefined, 0)).toBe(true);
-    expect(isRoutineActiveOnDay(undefined, 6)).toBe(true);
-  });
-
-  it('빈 배열도 매일 활성으로 취급 (요일 전부 껐다 켜는 과도기 보호)', () => {
-    expect(isRoutineActiveOnDay([], 3)).toBe(true);
-  });
-
-  it('지정된 요일에만 활성', () => {
-    const monWedFri = [1, 3, 5];
-    expect(isRoutineActiveOnDay(monWedFri, 1)).toBe(true);
-    expect(isRoutineActiveOnDay(monWedFri, 3)).toBe(true);
-    expect(isRoutineActiveOnDay(monWedFri, 5)).toBe(true);
-    expect(isRoutineActiveOnDay(monWedFri, 0)).toBe(false);
-    expect(isRoutineActiveOnDay(monWedFri, 2)).toBe(false);
-    expect(isRoutineActiveOnDay(monWedFri, 6)).toBe(false);
-  });
-});
+import { getAlertTime, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs, getFeedbackOutingDate, getNextDepartureDate, isValidHHmm } from './time';
 
 // 기존에 테스트가 없던 시간 유틸도 함께 커버
 describe('getAlertTime', () => {
@@ -161,4 +140,20 @@ describe('getFeedbackOutingDate — 자기 전 피드백이 가리키는 외출 
 describe('isValidHHmm', () => {
   it.each(['00:00', '00:30', '09:05', '23:59'])('%s는 통과', (t) => expect(isValidHHmm(t)).toBe(true));
   it.each(['', '7:5', '24:00', '12:60', '7:05 pm', '12:3'])('%s는 거른다', (t) => expect(isValidHHmm(t)).toBe(false));
+});
+
+describe('getNextDepartureDate — 자기 전 정리의 "내일 준비"가 가리키는 날', () => {
+  const day = (d: Date) => `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${d.getMinutes()}`;
+
+  it('밤 22시면 내일 출발', () => {
+    expect(day(getNextDepartureDate('08:15', new Date(2026, 10, 3, 22, 0)))).toBe('11/4 8:15');
+  });
+
+  it('자정 넘긴 00:30이면 달력상 오늘 출발', () => {
+    expect(day(getNextDepartureDate('08:15', new Date(2026, 10, 4, 0, 30)))).toBe('11/4 8:15');
+  });
+
+  it('출발 시각 정각이면 이미 나간 것으로 보고 다음 날', () => {
+    expect(day(getNextDepartureDate('08:15', new Date(2026, 10, 4, 8, 15)))).toBe('11/5 8:15');
+  });
 });

@@ -43,6 +43,7 @@ import { SettingsPanel } from '../components/SettingsPanel';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
 import { AiHintService } from '../services/ai/AiHintService';
 import { pressLeave } from '../services/departure/leave';
+import { TomorrowPreviewModal } from '../components/TomorrowPreviewModal';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import type { CalendarEvent, ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
 
@@ -127,6 +128,9 @@ export function DashboardScreen() {
   const statusDismissed = useAppStore((s) => s.statusDismissed);
   const toast = useAppStore((s) => s.toast);
   const scrollToChecklistRequested = useAppStore((s) => s.scrollToChecklistRequested);
+  const tomorrowPreviewRequested = useAppStore((s) => s.tomorrowPreviewRequested);
+  const clearTomorrowPreviewRequest = useAppStore((s) => s.clearTomorrowPreviewRequest);
+  const [tomorrowVisible, setTomorrowVisible] = useState(false);
   const aiEnabled = useAppStore((s) => s.ai.enabled);
   const aiHintCache = useAppStore((s) => s.ai.hintCache);
 
@@ -257,7 +261,8 @@ export function DashboardScreen() {
     }
     buildChecklist();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentWeather, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, permanentRoutines]);
+    // weatherTimeline: 우산은 남은 시간대 예보로도 판단한다 (isRainExpectedToday)
+  }, [currentWeather, weatherTimeline, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, permanentRoutines]);
 
   useEffect(() => {
     // 알림(출발 알림/긴급 알림) 본문을 탭해서 앱을 열었을 때 체크리스트로 스크롤한다.
@@ -272,6 +277,13 @@ export function DashboardScreen() {
 
     return () => cancelAnimationFrame(frame);
   }, [scrollToChecklistRequested, clearScrollToChecklistRequest]);
+
+  // 자기 전 정리 알림을 눌러 들어온 경우 — 다음 외출 준비 화면을 연다
+  useEffect(() => {
+    if (!tomorrowPreviewRequested) return;
+    setTomorrowVisible(true);
+    clearTomorrowPreviewRequest();
+  }, [tomorrowPreviewRequested, clearTomorrowPreviewRequest]);
 
   const handlePurposeSelect = (id: PurposeId | null) => {
     setPurpose(id);
@@ -729,6 +741,15 @@ export function DashboardScreen() {
           </View>
         ) : null}
 
+        <Pressable
+          style={[styles.tomorrowButton, styles.sectionSpacing]}
+          onPress={() => setTomorrowVisible(true)}
+          accessibilityRole="button"
+        >
+          <Text style={styles.tomorrowButtonText}>🌙 다음 외출 준비 미리보기</Text>
+          <Text style={styles.tomorrowButtonSub}>그날 일정·예보로 뜰 것을 보고, 그날만 챙길 것을 더해요</Text>
+        </Pressable>
+
         <View style={[styles.notificationPreview, styles.sectionSpacing]}>
           <Text style={styles.notificationTitle}>알림 미리보기</Text>
           <View style={styles.notificationRow}>
@@ -747,6 +768,8 @@ export function DashboardScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <TomorrowPreviewModal visible={tomorrowVisible} onClose={() => setTomorrowVisible(false)} />
 
       {toast ? <Toast message={toast} onDone={clearToast} /> : null}
     </View>
@@ -1060,6 +1083,21 @@ const styles = StyleSheet.create({
   },
   micButtonActive: {
     backgroundColor: Colors.indigo600,
+  },
+  tomorrowButton: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 16,
+  },
+  tomorrowButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate800,
+  },
+  tomorrowButtonSub: {
+    marginTop: 4,
+    fontSize: 12,
+    color: Colors.slate500,
   },
   leaveButton: {
     backgroundColor: Colors.indigo600,

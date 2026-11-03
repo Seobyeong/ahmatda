@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrentWeather, WeatherAlert, WeatherSlot, WeatherType, TimelineHint } from '@/types';
 import { getCurrentSlotIndex } from '@/utils/time';
 import { latLonToGrid } from '@/utils/kmaGrid';
-import { formatLocalDate, pickForecastDate } from './forecastDate';
+import { formatLocalDate, pickForecastDate, summarizeDayOutlook, type DayOutlook } from './forecastDate';
 import { getSidoFromCoords } from '@/utils/sido';
 import { AirQualityService } from '@/services/airQuality/AirQualityService';
 
@@ -158,29 +158,7 @@ export const WeatherService = {
     if (!KMA_API_KEY) return WeatherService._getTimelineCache();
 
     try {
-      const { nx, ny } = latLonToGrid(lat, lon);
-      const { base_date, base_time } = getVilageFcstBaseTime(new Date());
-
-      const response = await axios.get(`${KMA_BASE_URL}/getVilageFcst`, {
-        params: {
-          serviceKey: KMA_API_KEY,
-          numOfRows: 1000,
-          pageNo: 1,
-          dataType: 'JSON',
-          base_date,
-          base_time,
-          nx,
-          ny,
-        },
-        timeout: 8000,
-      });
-
-      const header = response.data?.response?.header;
-      if (header?.resultCode !== '00') {
-        throw new Error(header?.resultMsg ?? 'KMA API error');
-      }
-
-      const items: KmaItem[] = response.data?.response?.body?.items?.item ?? [];
+      const items = await WeatherService._fetchVilageFcst(lat, lon);
 
       // 단기예보는 최대 +3일치를 한 번에 돌려준다. fcstTime("1200")만으로 맵을 만들면
       // 오늘·내일·모레의 같은 시각이 서로를 덮어써서, "오늘 시간대별 날씨" 자리에
@@ -243,6 +221,46 @@ export const WeatherService = {
     } catch {
       return WeatherService._getTimelineCache();
     }
+  },
+
+  // 다음 외출 날 예보 요약 — 자기 전 정리의 "내일 준비" 미리보기용.
+  // 캐시를 쓰지 않는다: 타임라인 캐시는 오늘 날짜 하나만 담고 있어서 다음 날 값이 없다.
+  // 실패하면 null — 화면은 "예보를 못 불러왔어요"로 날씨 항목 없이 보여준다.
+  async getDayOutlook(lat: number, lon: number, date: Date, departureTime: string): Promise<DayOutlook | null> {
+    if (!KMA_API_KEY) return null;
+    try {
+      const items = await WeatherService._fetchVilageFcst(lat, lon);
+      return summarizeDayOutlook(items, formatLocalDate(date), departureTime);
+    } catch {
+      return null;
+    }
+  },
+
+  // 단기예보(getVilageFcst) 원본 항목 — 타임라인과 다음 날 예보가 같이 쓴다. 실패하면 throw.
+  async _fetchVilageFcst(lat: number, lon: number): Promise<KmaItem[]> {
+    const { nx, ny } = latLonToGrid(lat, lon);
+    const { base_date, base_time } = getVilageFcstBaseTime(new Date());
+
+    const response = await axios.get(`${KMA_BASE_URL}/getVilageFcst`, {
+      params: {
+        serviceKey: KMA_API_KEY,
+        numOfRows: 1000,
+        pageNo: 1,
+        dataType: 'JSON',
+        base_date,
+        base_time,
+        nx,
+        ny,
+      },
+      timeout: 8000,
+    });
+
+    const header = response.data?.response?.header;
+    if (header?.resultCode !== '00') {
+      throw new Error(header?.resultMsg ?? 'KMA API error');
+    }
+
+    return response.data?.response?.body?.items?.item ?? [];
   },
 
   // 타임라인 힌트 생성 (착장 추천 연동)

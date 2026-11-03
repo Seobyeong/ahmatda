@@ -69,6 +69,17 @@ export function isValidHHmm(time: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
 }
 
+// 다음 외출이 있는 날 — 출발 시각이 아직 안 지났으면 오늘, 지났으면 내일.
+// 자기 전 정리에서 "내일 준비"가 가리키는 날이다. 정리 시각이 자정 이후(00:30)면
+// 달력상 오늘이 그날이라 "+1일"로 계산하면 하루 밀린다.
+export function getNextDepartureDate(departureTime: string, now: Date = new Date()): Date {
+  const [hh, mm] = departureTime.split(':').map(Number);
+  const departure = new Date(now);
+  departure.setHours(hh, mm, 0, 0);
+  if (departure.getTime() <= now.getTime()) departure.setDate(departure.getDate() + 1);
+  return departure;
+}
+
 // 자기 전 정리 알림에서 받은 착장 피드백이 "어느 날 외출"에 대한 것인지.
 //
 // 달력 날짜를 쓰면 정리 시각을 자정 이후(00:30)로 잡은 사람의 피드백이 하루 밀려서
@@ -124,13 +135,6 @@ export function getDepartureWindowRemainingMs(departureTime: string, now: Date =
   return null;
 }
 
-// 루틴이 주어진 요일(0=일 ~ 6=토)에 활성인지 판정 — days가 없거나 비어 있으면 매일 활성.
-// 빈 배열을 "매일"로 취급하는 이유: 설정 UI에서 요일을 전부 껐다가 다시 켜는 과도기에
-// 루틴이 영영 사라진 것처럼 보이는 혼란을 막기 위해.
-export function isRoutineActiveOnDay(days: number[] | undefined, dayOfWeek: number): boolean {
-  if (!days || days.length === 0) return true;
-  return days.includes(dayOfWeek);
-}
 
 // 오늘 자정 epoch millis (로컬 타임존 기준)
 export function getTodayStartMs(): number {

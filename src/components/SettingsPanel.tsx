@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -17,6 +17,7 @@ import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
 import { getTodayString } from '../utils/time';
+import { isOneOff } from '../utils/routines';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
@@ -85,7 +86,10 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const customKeywords = useAppStore((s) => s.userSettings.customKeywords);
   const mapApp = useAppStore((s) => s.userSettings.mapApp);
   const purposeId = useAppStore((s) => s.purposeId);
-  const permanentRoutines = useAppStore((s) => s.permanentRoutines);
+  // "내 루틴"은 반복 항목만 — 특정 날짜 1회 항목은 다음 외출 준비 화면에서 다룬다.
+  // (여기서 요일을 고르면 OR 조건이 붙어 매주 나타나 버린다.)
+  const allRoutines = useAppStore((s) => s.permanentRoutines);
+  const permanentRoutines = useMemo(() => allRoutines.filter((r) => !isOneOff(r)), [allRoutines]);
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const setSensitivity = useAppStore((s) => s.setSensitivity);

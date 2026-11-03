@@ -220,7 +220,8 @@ export const NotificationService = {
         body:  `착장 피드백을 남기고, ${departureTime} 출발 전에 챙길 것도 미리 봐두세요.`,
         android: {
           channelId:   CHANNEL_REMINDER,
-          pressAction: { id: 'open-checklist', launchActivity: 'default' },
+          // 본문을 누르면 다음 외출 준비 미리보기가 열린다 (TomorrowPreviewModal)
+          pressAction: { id: 'open-tomorrow', launchActivity: 'default' },
           actions: [
             { title: '🥶 추웠음', pressAction: { id: 'cold' } },
             { title: '😊 적당함', pressAction: { id: 'good' } },
@@ -289,5 +290,13 @@ export async function handleNotificationEvent(
     // 출발 알림/긴급 알림 본문을 탭해서 앱을 연 경우 — 체크리스트 섹션으로 스크롤 요청
     const { useAppStore } = await import('@/store');
     useAppStore.getState().requestScrollToChecklist();
+  } else if (
+    type === EventType.PRESS &&
+    (detail.pressAction?.id === 'open-tomorrow' || detail.notification?.id === NIGHTLY_CHECK_ID)
+  ) {
+    // 자기 전 정리 알림 본문 탭 — 다음 외출 준비 화면을 연다.
+    // iOS는 android.pressAction을 안 쓰고 'default'로 오므로 알림 id로도 본다.
+    const { useAppStore } = await import('@/store');
+    useAppStore.getState().requestTomorrowPreview();
   }
 }

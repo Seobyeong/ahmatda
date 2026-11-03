@@ -137,3 +137,7 @@ export function findMatchingEvent<T extends { title: string; time: string }>(
   const ordered = sortEventsByRelevance(events, departureTime);
   return ordered.find(ev => keywords.some(kw => ev.title.includes(kw))) ?? null;
 }
+
+// 사용자가 끈 목적별 준비물의 저장 키 — userSettings.disabledPurposeItems에 "purposeId:라벨"로 쌓인다.
+// (같은 라벨이 여러 목적에 나와서 목적별로 구분해야 한다.)
+export const purposeItemKey = (purposeId: PurposeId, label: string) => `${purposeId}:${label}`;
