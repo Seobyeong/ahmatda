@@ -93,11 +93,23 @@ export interface CalendarEvent {
 export type MapApp = 'kakao' | 'naver';
 
 // 유저 설정
+// 첫 사용 설문 (docs/외출-감지-재설계.md 6장, 2026-11-04 결정)
+//   minimal  필요할 때만 — 출발 전 알림 없음, 안 챙기고 나갈 때만 알림
+//   normal   보통 — 출발 전 알림 + 이탈 알림 + 자기 전 정리
+//   frequent 자주 — 위에 더해 집 밖에서 머물다 떠날 때도 알림 (위치 '항상 허용' 권장)
+// 자기 전 정리 알림의 "2주 뒤엔 물을 게 있는 날만"(minimal/normal)은 아직 구현 전이다.
+export type AlertPreference = 'minimal' | 'normal' | 'frequent';
+
+// 주 이동수단 — 자차는 우산 기준 완화, 도보·자전거는 체감온도를 더 극단으로 본다.
+export type CommuteMode = 'transit' | 'walk' | 'car';
+
 export interface UserSettings {
   departureTime: string;    // "HH:mm" 형식
   // 자기 전 정리 시각 "HH:mm" — 착장 피드백 + 내일 준비 알림 하나가 여기서 울린다
   // (예전 20:00 피드백 + 22:00 전날 알림을 대체, docs/외출-감지-재설계.md 5장)
   nightlyCheckTime: string;
+  alertPreference: AlertPreference;
+  commuteMode: CommuteMode | null; // null = 아직 안 고름 → 대중교통과 같은 기준
   homeBssid: string | null; // 집 Wi-Fi BSSID
   // 체감온도 보정치 Δt는 두 성분의 합이다. 한 필드에 섞으면 민감도를 다시 고를 때
   // 그동안 쌓인 학습이 통째로 덮어써지므로 반드시 분리해서 보관한다.

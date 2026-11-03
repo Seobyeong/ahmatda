@@ -29,7 +29,7 @@ import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { DirectionsService } from '../services/directions/DirectionsService';
 import { WeatherService } from '../services/weather/WeatherService';
-import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta } from '../utils/temperature';
+import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta, getExposureAdjust } from '../utils/temperature';
 import { getAlertTime, getCurrentSlotIndex, getFeedbackOutingDate, getTodayString, parseEventTime } from '../utils/time';
 import { pickNextPlaceEvent } from '../utils/directions';
 import { getCurrentCoords } from '../utils/location';
@@ -262,7 +262,8 @@ export function DashboardScreen() {
     buildChecklist();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // weatherTimeline: 우산은 남은 시간대 예보로도 판단한다 (isRainExpectedToday)
-  }, [currentWeather, weatherTimeline, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, permanentRoutines]);
+    // commuteMode: 자차면 우산 기준이 달라진다
+  }, [currentWeather, weatherTimeline, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, userSettings.commuteMode, permanentRoutines]);
 
   useEffect(() => {
     // 알림(출발 알림/긴급 알림) 본문을 탭해서 앱을 열었을 때 체크리스트로 스크롤한다.
@@ -428,7 +429,7 @@ export function DashboardScreen() {
 
   const activePurposeColor = purposeId ? PurposeColors[PURPOSES[purposeId].color].chip : undefined;
 
-  const perceivedTemp = currentWeather
+  const basePerceived = currentWeather
     ? calcPerceivedTemp(
         currentWeather.temp,
         currentWeather.humidity,
@@ -436,6 +437,8 @@ export function DashboardScreen() {
         getEffectiveDelta(userSettings.sensitivityLevel, userSettings.learnedDelta)
       )
     : null;
+  const exposureAdj = basePerceived !== null ? getExposureAdjust(basePerceived, userSettings.commuteMode) : 0;
+  const perceivedTemp = basePerceived !== null ? basePerceived + exposureAdj : null;
 
   const perceivedFormula =
     currentWeather && perceivedTemp !== null
@@ -444,7 +447,8 @@ export function DashboardScreen() {
           currentWeather.humidity,
           currentWeather.wind,
           getEffectiveDelta(userSettings.sensitivityLevel, userSettings.learnedDelta),
-          perceivedTemp
+          perceivedTemp,
+          exposureAdj
         )
       : null;
 
@@ -752,10 +756,12 @@ export function DashboardScreen() {
 
         <View style={[styles.notificationPreview, styles.sectionSpacing]}>
           <Text style={styles.notificationTitle}>알림 미리보기</Text>
-          <View style={styles.notificationRow}>
-            <Text style={styles.notificationStep}>출발 30분 전 · {alertTime}</Text>
-            <Text style={styles.notificationText}>잠금화면에 체크리스트가 떠요. 나갈 땐 [떠나기]를 눌러 마지막 확인.</Text>
-          </View>
+          {userSettings.alertPreference !== 'minimal' ? (
+            <View style={styles.notificationRow}>
+              <Text style={styles.notificationStep}>출발 30분 전 · {alertTime}</Text>
+              <Text style={styles.notificationText}>잠금화면에 체크리스트가 떠요. 나갈 땐 [떠나기]를 눌러 마지막 확인.</Text>
+            </View>
+          ) : null}
           <View style={styles.notificationRow}>
             <Text style={styles.notificationStep}>현관 이탈 감지</Text>
             <Text style={styles.notificationText}>안 챙긴 채 나가면 바로 알려요.</Text>

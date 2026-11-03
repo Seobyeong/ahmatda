@@ -1,4 +1,4 @@
-import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta } from './temperature';
+import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta, getExposureAdjust } from './temperature';
 
 describe('calcPerceivedTemp', () => {
   it('보정 요인이 없으면 실제 온도를 그대로 반환한다', () => {
@@ -93,5 +93,27 @@ describe('getEffectiveDelta', () => {
     expect(before).toBe(-3);
     expect(after).toBe(-2);       // 기준값만 +1 움직임
     expect(after - before).toBe(1); // 학습분은 그대로 살아있음
+  });
+});
+
+describe('getExposureAdjust — 도보·자전거 노출 보정', () => {
+  it('도보가 아니면 0', () => {
+    expect(getExposureAdjust(5, 'transit')).toBe(0);
+    expect(getExposureAdjust(5, 'car')).toBe(0);
+    expect(getExposureAdjust(5, null)).toBe(0);
+  });
+
+  it('추운 날은 더 춥게, 더운 날은 더 덥게, 쾌적 구간은 그대로', () => {
+    expect(getExposureAdjust(17, 'walk')).toBe(-1);
+    expect(getExposureAdjust(18, 'walk')).toBe(0);
+    expect(getExposureAdjust(26, 'walk')).toBe(0);
+    expect(getExposureAdjust(27, 'walk')).toBe(1);
+  });
+});
+
+describe('formatPerceivedFormula — 노출 보정 표시', () => {
+  it('보정이 있을 때만 도보 항을 붙인다', () => {
+    expect(formatPerceivedFormula(10, 50, 1, 0, 9, -1)).toBe('10° + f(H:50%, W:1m/s) + Δt(+0°) + 도보(-1°) ≒ 9°C');
+    expect(formatPerceivedFormula(10, 50, 1, 0, 10)).toBe('10° + f(H:50%, W:1m/s) + Δt(+0°) ≒ 10°C');
   });
 });

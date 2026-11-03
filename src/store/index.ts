@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PURPOSES, findMatchingEvent, purposeItemKey } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getFeedbackOutingDate, getTodayString } from '../utils/time';
-import { isRainExpectedToday } from '../services/weather/forecastDate';
+import { getUmbrellaBadge } from '../services/weather/forecastDate';
 import { isOneOff, isRoutineActiveOn, pruneExpiredOneOffs } from '../utils/routines';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
@@ -21,6 +21,8 @@ import type {
   ChecklistItem,
   CurrentWeather,
   FeedbackRecord,
+  AlertPreference,
+  CommuteMode,
   FeedbackType,
   ForgottenRecord,
   LeaveIntent,
@@ -98,6 +100,8 @@ interface AppActions {
   // 유저 설정
   updateDepartureTime: (time: string) => void;
   setNightlyCheckTime: (time: string) => void;
+  setAlertPreference: (pref: AlertPreference) => void;
+  setCommuteMode: (mode: CommuteMode) => void;
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   setMapApp: (app: MapApp) => void;
@@ -212,6 +216,8 @@ const defaultState: AppState = {
   userSettings: {
     departureTime: '08:15',
     nightlyCheckTime: '22:00',
+    alertPreference: 'normal',
+    commuteMode: null,
     homeBssid: null,
     sensitivityLevel: 3,
     learnedDelta: 0,
@@ -419,16 +425,20 @@ export const useAppStore = create<AppStore>()(
           !userSettings.disabledWeatherItems.includes(label);
 
         if (currentWeather) {
-          if (
-            isRainExpectedToday(currentWeather.rainAlert, weatherTimeline, getCurrentSlotIndex()) &&
-            isWeatherItemEnabled('우산')
-          ) {
+          // 지금 비 또는 남은 시간대 예보 — 자차는 지금 비만 (getUmbrellaBadge)
+          const umbrellaBadge = getUmbrellaBadge(
+            userSettings.commuteMode,
+            currentWeather.rainAlert,
+            weatherTimeline,
+            getCurrentSlotIndex()
+          );
+          if (umbrellaBadge && isWeatherItemEnabled('우산')) {
             items.push({
               id: nextId(),
               label: '우산',
               icon: 'umbrella',
               tier: 1,
-              badge: '오늘 비 예보',
+              badge: umbrellaBadge,
               checked: wasChecked.get('우산') ?? false,
               temp: false,
               permanent: false,
@@ -540,6 +550,8 @@ export const useAppStore = create<AppStore>()(
       // 유저 설정
       updateDepartureTime: (time) => set((state) => patchSettings(state, { departureTime: time })),
       setNightlyCheckTime: (time) => set((state) => patchSettings(state, { nightlyCheckTime: time })),
+      setAlertPreference: (pref) => set((state) => patchSettings(state, { alertPreference: pref })),
+      setCommuteMode: (mode) => set((state) => patchSettings(state, { commuteMode: mode })),
 
       setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
 

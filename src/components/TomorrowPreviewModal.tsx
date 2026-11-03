@@ -101,6 +101,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
         disabledPurposeItems: userSettings.disabledPurposeItems,
         outlook,
         forgottenCounts: countRecentForgotten(forgottenHistory, getTodayString()),
+        commuteMode: userSettings.commuteMode,
       }),
     [target, userSettings, permanentRoutines, events, outlook, forgottenHistory]
   );

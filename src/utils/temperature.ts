@@ -1,4 +1,5 @@
 import { SENSITIVITY_DELTA } from '@/constants/feedback';
+import type { CommuteMode } from '@/types';
 
 // 실제 적용되는 체감온도 보정치 Δt.
 // 사용자가 직접 고른 기준값(민감도)과 일일 피드백으로 쌓인 학습값을 합산한다.
@@ -32,6 +33,19 @@ export function calcPerceivedTemp(
   return Math.round(actual + humidityAdj + windAdj + deltaOffset);
 }
 
+// 도보·자전거는 바깥에 오래 노출된다 — 추운 날은 더 춥게, 더운 날은 더 덥게 1°C 민다.
+// Δt 하나로는 양쪽을 같이 표현할 수 없어서(Δt는 한 방향 이동) 따로 둔다.
+// 쾌적 구간(18~26°C)에서는 건드리지 않는다.
+export const EXPOSURE_COMFORT_LOW = 18;
+export const EXPOSURE_COMFORT_HIGH = 26;
+
+export function getExposureAdjust(perceived: number, commuteMode: CommuteMode | null): number {
+  if (commuteMode !== 'walk') return 0;
+  if (perceived < EXPOSURE_COMFORT_LOW) return -1;
+  if (perceived > EXPOSURE_COMFORT_HIGH) return 1;
+  return 0;
+}
+
 // 온도 포맷
 export function formatTemp(value: number): string {
   return `${value}°C`;
@@ -43,7 +57,9 @@ export function formatPerceivedFormula(
   humidity: number,
   wind: number,
   deltaOffset: number,
-  result: number
+  result: number,
+  exposureAdj: number = 0
 ): string {
-  return `${actual}° + f(H:${humidity}%, W:${wind}m/s) + Δt(${deltaOffset >= 0 ? '+' : ''}${deltaOffset}°) ≒ ${result}°C`;
+  const exposure = exposureAdj !== 0 ? ` + 도보(${exposureAdj > 0 ? '+' : ''}${exposureAdj}°)` : '';
+  return `${actual}° + f(H:${humidity}%, W:${wind}m/s) + Δt(${deltaOffset >= 0 ? '+' : ''}${deltaOffset}°)${exposure} ≒ ${result}°C`;
 }

@@ -158,6 +158,12 @@ export const NotificationService = {
     });
   },
 
+  // 알림 성향 "필요할 때만" — 출발 전 알림을 아예 쓰지 않는다. 예약과 떠 있는 것 모두 내린다.
+  // (Wi-Fi 이탈 긴급 알림은 별개라 그대로 나간다.)
+  async cancelDepartureAlert(): Promise<void> {
+    await notifee.cancelNotification(DEPARTURE_ALERT_ID);
+  },
+
   // 집을 나섰을 때 — 출발 상태는 더 이상 의미가 없다. 예약(내일 것)은 그대로 둔다.
   async clearDepartureStatus(): Promise<void> {
     await notifee.cancelDisplayedNotification(DEPARTURE_ALERT_ID);

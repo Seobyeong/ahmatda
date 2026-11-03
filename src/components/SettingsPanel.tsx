@@ -26,6 +26,8 @@ import { DAILY_CALL_LIMIT } from '../services/ai/hints';
 import { SensitivitySelector } from './SensitivitySelector';
 import { TimeInput } from './TimeInput';
 import { PersonalizeModal } from './PersonalizeModal';
+import { ChoiceList } from './ChoiceList';
+import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES } from '../constants/preferences';
 import type { FeedbackType } from '../types';
 
 interface SettingsPanelProps {
@@ -78,6 +80,10 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
   const nightlyCheckTime = useAppStore((s) => s.userSettings.nightlyCheckTime);
   const setNightlyCheckTime = useAppStore((s) => s.setNightlyCheckTime);
+  const alertPreference = useAppStore((s) => s.userSettings.alertPreference);
+  const commuteMode = useAppStore((s) => s.userSettings.commuteMode);
+  const setAlertPreference = useAppStore((s) => s.setAlertPreference);
+  const setCommuteMode = useAppStore((s) => s.setCommuteMode);
   const learnedDelta = useAppStore((s) => s.userSettings.learnedDelta);
   const sensitivityLevel = useAppStore((s) => s.userSettings.sensitivityLevel);
   const homeBssid = useAppStore((s) => s.userSettings.homeBssid);
@@ -301,6 +307,12 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
             </Pressable>
           )}
         </View>
+
+        <Text style={styles.sectionTitle}>알림 성향</Text>
+        <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPreference} onChange={setAlertPreference} />
+
+        <Text style={styles.sectionTitle}>주 이동수단</Text>
+        <ChoiceList choices={COMMUTE_CHOICES} value={commuteMode} onChange={setCommuteMode} />
 
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Δt 보정치</Text>

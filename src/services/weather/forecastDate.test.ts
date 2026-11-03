@@ -1,4 +1,4 @@
-import { isRainExpectedToday, pickForecastDate, summarizeDayOutlook } from './forecastDate';
+import { getUmbrellaBadge, isRainExpectedToday, pickForecastDate, summarizeDayOutlook } from './forecastDate';
 
 // 단기예보는 최대 +3일치를 한 번에 돌려준다. 한 날짜만 골라내지 못하면
 // "오늘 시간대별 날씨" 자리에 내일·모레 값이 섞여 들어간다.
@@ -89,5 +89,18 @@ describe('isRainExpectedToday — 아침 체크리스트 우산 기준', () => {
 
   it('60% 미만이면 우산 없음', () => {
     expect(isRainExpectedToday(false, [slot(50), slot(40)], 0)).toBe(false);
+  });
+});
+
+describe('getUmbrellaBadge — 이동수단별 우산', () => {
+  const later = [{ rain: 10, alert: null }, { rain: 80, alert: null }];
+  it('지금 비면 누구나', () => {
+    expect(getUmbrellaBadge('car', true, [], 0)).toBe('지금 비 와요');
+    expect(getUmbrellaBadge('transit', true, [], 0)).toBe('지금 비 와요');
+  });
+  it('예보만이면 자차는 빼고 나머지는 넣는다', () => {
+    expect(getUmbrellaBadge('car', false, later, 0)).toBeNull();
+    expect(getUmbrellaBadge('walk', false, later, 0)).toBe('오늘 비 예보');
+    expect(getUmbrellaBadge(null, false, later, 0)).toBe('오늘 비 예보');
   });
 });

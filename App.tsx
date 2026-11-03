@@ -78,10 +78,21 @@ export default function App() {
     if (!userSettings.onboarded) return;
 
     const snapshot = JSON.parse(snapshotJson) as DepartureSnapshot;
+    // 홈 위젯은 사용자가 직접 올려둔 것이라 알림 성향과 무관하게 갱신한다.
+    setWidgetSnapshot(snapshot);
+
+    // 알림 성향 "필요할 때만"은 출발 전 알림을 쓰지 않는다 (취소는 아래 effect가 한 번만)
+    if (userSettings.alertPreference === 'minimal') return;
     NotificationService.scheduleDepartureAlert(userSettings.departureTime, snapshot);
     NotificationService.updateDepartureStatus(userSettings.departureTime, snapshot);
-    setWidgetSnapshot(snapshot);
-  }, [userSettings.onboarded, userSettings.departureTime, snapshotJson]);
+  }, [userSettings.onboarded, userSettings.departureTime, userSettings.alertPreference, snapshotJson]);
+
+  useEffect(() => {
+    // "필요할 때만"으로 바꾸면 이미 잡힌 출발 알림 예약과 떠 있는 것을 내린다.
+    // 체크할 때마다가 아니라 성향이 바뀔 때만 돈다.
+    if (!userSettings.onboarded || userSettings.alertPreference !== 'minimal') return;
+    NotificationService.cancelDepartureAlert().catch(() => {});
+  }, [userSettings.onboarded, userSettings.alertPreference]);
 
   useEffect(() => {
     // 온보딩 완료 후 출발 시각 감시 창에 맞춰 Wi-Fi 이탈 모니터링을 매일 재arm

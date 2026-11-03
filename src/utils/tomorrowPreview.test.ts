@@ -15,6 +15,7 @@ const base: TomorrowPreviewInput = {
   disabledPurposeItems: [],
   outlook: null,
   forgottenCounts: new Map(),
+  commuteMode: null,
 };
 
 const labels = (input: Partial<TomorrowPreviewInput>) =>
@@ -89,5 +90,14 @@ describe('buildTomorrowPreview — 1회 항목이 다른 항목에 가려질 때
     });
     expect(preview.items).toHaveLength(1);
     expect(preview.items[0]).toMatchObject({ label: '우산', kind: 'weather', routineId: 'once' });
+  });
+});
+
+describe('buildTomorrowPreview — 자차', () => {
+  it('비 예보만으로는 우산을 넣지 않는다', () => {
+    expect(labels({
+      commuteMode: 'car',
+      outlook: { rain: true, popMax: 90, maxTemp: 15, minTemp: 9, heat: false },
+    })).toEqual([]);
   });
 });

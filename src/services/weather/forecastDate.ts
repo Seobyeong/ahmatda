@@ -99,3 +99,21 @@ export function isRainExpectedToday(
   if (rainingNow) return true;
   return slots.slice(currentSlotIndex).some((s) => s.alert === 'rain' || s.rain >= RAIN_POP_THRESHOLD);
 }
+
+// 이동수단별 우산 규칙 — 아침 체크리스트와 다음 외출 미리보기가 같이 쓴다.
+// 자차는 예보만으로는 우산을 넣지 않는다 (지금 비가 올 때만, 주차장~입구 구간).
+export function usesRainForecast(commuteMode: string | null): boolean {
+  return commuteMode !== 'car';
+}
+
+// 오늘 체크리스트 우산의 이유 문구. null이면 넣지 않는다.
+export function getUmbrellaBadge(
+  commuteMode: string | null,
+  rainingNow: boolean,
+  slots: Array<{ rain: number; alert: string | null }>,
+  currentSlotIndex: number
+): string | null {
+  if (rainingNow) return '지금 비 와요';
+  if (!usesRainForecast(commuteMode)) return null;
+  return isRainExpectedToday(false, slots, currentSlotIndex) ? '오늘 비 예보' : null;
+}

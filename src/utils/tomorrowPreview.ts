@@ -8,10 +8,10 @@
 // 미세먼지는 내일 예보 API가 따로라 넣지 않는다 (아침 조립 때 실황으로 반영된다).
 
 import { PURPOSES, detectPurposeFromEvents, findMatchingEvent, purposeItemKey, type CustomKeywords } from '@/constants/purposes';
-import type { DayOutlook } from '@/services/weather/forecastDate';
+import { usesRainForecast, type DayOutlook } from '@/services/weather/forecastDate';
 import { getForgottenBadge } from './forgotten';
 import { isOneOff, isRoutineActiveOn } from './routines';
-import type { ChecklistItem, PurposeId } from '@/types';
+import type { ChecklistItem, CommuteMode, PurposeId } from '@/types';
 
 export type PreviewKind = 'weather' | 'purpose' | 'oneoff' | 'routine';
 
@@ -37,6 +37,7 @@ export interface TomorrowPreviewInput {
   disabledPurposeItems: string[];
   outlook: DayOutlook | null;
   forgottenCounts: Map<string, number>;
+  commuteMode: CommuteMode | null;
 }
 
 export function buildTomorrowPreview(input: TomorrowPreviewInput): TomorrowPreview {
@@ -59,7 +60,8 @@ export function buildTomorrowPreview(input: TomorrowPreviewInput): TomorrowPrevi
 
   const { outlook } = input;
   const weatherOn = (label: string) => !input.disabledWeatherItems.includes(label);
-  if (outlook?.rain && weatherOn('우산')) {
+  // 자차는 아침 조립에서도 "지금 비 올 때만" 우산을 넣는다 — 전날 밤 예보로는 약속하지 않는다.
+  if (outlook?.rain && usesRainForecast(input.commuteMode) && weatherOn('우산')) {
     push({ label: '우산', kind: 'weather', reason: `비 예보 ${outlook.popMax}%` });
   }
   if (outlook?.heat && weatherOn('물병')) {

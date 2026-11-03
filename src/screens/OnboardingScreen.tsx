@@ -22,6 +22,10 @@ import { NotificationService } from '../services/notification/NotificationServic
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
 import { SensitivitySelector } from '../components/SensitivitySelector';
 import { TimeInput } from '../components/TimeInput';
+import { ChoiceList } from '../components/ChoiceList';
+import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES } from '../constants/preferences';
+import { isValidHHmm } from '../utils/time';
+import type { AlertPreference, CommuteMode } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type OnboardingScreenProps = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
@@ -81,6 +85,13 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
 
   const [sensitivity, setSensitivityValue] = useState<1 | 2 | 3 | 4 | 5>(3);
 
+  // 첫 사용 설문 — 답이 곧바로 설정을 바꾸는 질문만 (docs/외출-감지-재설계.md 6장)
+  // 초기값만 필요해서 구독하지 않고 한 번 읽는다 (설정이 바뀔 때마다 화면 전체가 다시 그려지지 않게)
+  const [alertPref, setAlertPref] = useState<AlertPreference>(() => useAppStore.getState().userSettings.alertPreference);
+  const [commute, setCommute] = useState<CommuteMode | null>(() => useAppStore.getState().userSettings.commuteMode);
+  const [nightly, setNightly] = useState(() => useAppStore.getState().userSettings.nightlyCheckTime);
+  const nightlyValid = isValidHHmm(nightly);
+
   const departureTimeDefault = useAppStore((s) => s.userSettings.departureTime);
   const [time, setTime] = useState(departureTimeDefault);
   const [bssid, setBssid] = useState('');
@@ -90,6 +101,9 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
   const completeOnboarding = useAppStore((s) => s.completeOnboarding);
+  const setAlertPreference = useAppStore((s) => s.setAlertPreference);
+  const setCommuteMode = useAppStore((s) => s.setCommuteMode);
+  const setNightlyCheckTime = useAppStore((s) => s.setNightlyCheckTime);
 
   // 한 번 거부되면 OS가 앱 내 권한 다이얼로그를 다시 띄워주지 않으므로(iOS/Android 공통),
   // 이미 거부된 상태에서 다시 누르면 요청 대신 설정 화면으로 보낸다.
@@ -222,6 +236,13 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     setStep(2);
   };
 
+  const handleSurveyNext = () => {
+    setAlertPreference(alertPref);
+    if (commute) setCommuteMode(commute);
+    setNightlyCheckTime(nightly);
+    setStep(3);
+  };
+
   const handleStart = () => {
     updateDepartureTime(time);
     if (bssid) {
@@ -309,6 +330,34 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
       ) : null}
 
       {step === 2 ? (
+        <View>
+          <Text style={styles.title}>나에게 맞추기</Text>
+          <Text style={styles.description}>세 가지만 물어볼게요. 나중에 설정에서 바꿀 수 있어요.</Text>
+
+          <Text style={styles.surveyQuestion}>알림은 얼마나 받고 싶나요?</Text>
+          <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPref} onChange={setAlertPref} />
+
+          <Text style={styles.surveyQuestion}>주로 어떻게 이동하나요?</Text>
+          <ChoiceList choices={COMMUTE_CHOICES} value={commute} onChange={setCommute} />
+
+          <Text style={styles.surveyQuestion}>자기 전에 내일을 정리할 시간</Text>
+          <Text style={styles.description}>
+            이 시간에 오늘 착장을 묻고, 다음 외출에 챙길 것을 미리 보여드려요.
+          </Text>
+          <TimeInput value={nightly} onChange={setNightly} />
+          {!nightlyValid ? <Text style={styles.wifiErrorText}>시간을 00:00~23:59 형식으로 입력해주세요.</Text> : null}
+
+          <Pressable
+            style={[styles.primaryButton, !nightlyValid && styles.primaryButtonDisabled]}
+            onPress={handleSurveyNext}
+            disabled={!nightlyValid}
+          >
+            <Text style={styles.primaryButtonText}>다음</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {step === 3 ? (
         <View>
           <Text style={styles.title}>외출 시간을 설정해주세요</Text>
           <TimeInput value={time} onChange={setTime} />
@@ -480,6 +529,13 @@ const styles = StyleSheet.create({
     color: Colors.indigo600,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  surveyQuestion: {
+    marginTop: 20,
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.slate700,
   },
   divider: {
     height: 1,
