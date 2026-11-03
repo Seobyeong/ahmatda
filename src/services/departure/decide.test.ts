@@ -1,4 +1,4 @@
-import { DECISION_WINDOW_MS, decideDeparture, type DepartureSignal, type SignalAvailability } from './decide';
+import { DECISION_WINDOW_MS, WIFI_FALLBACK_MS, decideDeparture, type DepartureSignal, type SignalAvailability } from './decide';
 
 const MIN = 60 * 1000;
 const T0 = new Date(2026, 10, 4, 8, 0).getTime();
@@ -44,7 +44,7 @@ describe('decideDeparture — 오탐 거르기', () => {
   });
 
   it('창(10분)이 지난 신호는 묶지 않는다', () => {
-    const d = decideDeparture([sig('wifiExit', 0), sig('walking', 11)], ALL, at(11));
+    const d = decideDeparture([sig('walking', 0), sig('locationExit', 11)], ALL, at(11));
     expect(d).toEqual({ status: 'candidate', since: at(11) });
   });
 
@@ -92,5 +92,36 @@ describe('decideDeparture — 권한 저하', () => {
     const onlyLocation = { walking: false, location: true };
     expect(decideDeparture([sig('wifiExit', 0)], onlyLocation, at(1)).status).toBe('candidate');
     expect(decideDeparture([sig('wifiExit', 0), sig('locationExit', 2)], onlyLocation, at(2)).status).toBe('confirmed');
+  });
+});
+
+describe('decideDeparture — Wi-Fi 5분 안전장치', () => {
+  it('걷기·위치 신호가 안 와도 Wi-Fi 이탈이 5분 이어지면 확정', () => {
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(4)).status).toBe('candidate');
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(0) + WIFI_FALLBACK_MS)).toEqual({
+      status: 'confirmed', at: at(5), by: ['wifiExit'],
+    });
+  });
+
+  it('확인이 늦게 돌아도(10분 창 밖) 놓치지 않는다', () => {
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(40))).toMatchObject({ status: 'confirmed', at: at(5) });
+  });
+
+  it('5분 안에 다시 붙으면(공유기 재부팅) 확정 아님', () => {
+    expect(decideDeparture([sig('wifiExit', 0), sig('wifiReturn', 3)], ALL, at(10))).toEqual({ status: 'none' });
+  });
+
+  it('복귀 뒤 다시 끊긴 경우는 마지막 이탈부터 5분', () => {
+    const signals = [sig('wifiExit', 0), sig('wifiReturn', 3), sig('wifiExit', 6)];
+    expect(decideDeparture(signals, ALL, at(10)).status).toBe('candidate');
+    expect(decideDeparture(signals, ALL, at(11))).toMatchObject({ status: 'confirmed', at: at(11) });
+  });
+
+  it('집 반경 재진입도 귀가로 본다', () => {
+    expect(decideDeparture([sig('wifiExit', 0), sig('locationEnter', 2)], ALL, at(10))).toEqual({ status: 'none' });
+  });
+
+  it('2시간 넘은 이탈은 오늘 외출과 무관하다', () => {
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(121))).toEqual({ status: 'none' });
   });
 });

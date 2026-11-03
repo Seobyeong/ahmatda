@@ -12,9 +12,17 @@
 //   4. 권한 저하: 주 신호를 하나도 쓸 수 없으면(걷기·위치 둘 다 거부) Wi-Fi 이탈 단독으로
 //      확정한다 — 지금(Wi-Fi 단독 감지)과 같은 동작. [떠나기] 단독은 확정이 아니다.
 //   5. Wi-Fi만 끊기고 다른 신호가 없으면 "후보"로 둔다 (공유기 재부팅, Wi-Fi 직접 끔,
-//      방 구석 약전계를 거른다). 후보는 창이 지나면 사라진다.
+//      방 구석 약전계를 거른다).
+//   6. 안전장치 (2026-11-04 사용자 결정): 걷기·위치를 쓸 수 있는데 신호가 안 오더라도
+//      (앱 종료로 신호 유실 등) 집 Wi-Fi 이탈이 WIFI_FALLBACK_MS 동안 복귀 없이 이어지면
+//      확정한다. 조용히 넘어가는 것이 이 앱의 가장 나쁜 실패라서다. 공유기 재부팅은 보통
+//      그 전에 다시 붙는다. 이 판정만은 10분 창과 무관하게 SAFETY_MAX_AGE_MS 안의 마지막
+//      Wi-Fi 상태를 본다 — 확인이 늦게 돌아도(12분 뒤) 놓치지 않게.
 
 export const DECISION_WINDOW_MS = 10 * 60 * 1000;
+export const WIFI_FALLBACK_MS = 5 * 60 * 1000;
+// 감시 창(출발 30분 전 ~ +2시간)보다 오래된 Wi-Fi 이탈은 오늘 외출과 무관하다.
+export const SAFETY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 export type DepartureSignalType =
   | 'walking'        // 주 — 걷기 시작 (활동 인식)
@@ -58,7 +66,9 @@ export function decideDeparture(
   const live = ordered.filter(
     (s) => !RETURN.has(s.type) && (s.type === 'leaveIntent' || s.at > lastReturn)
   );
-  if (live.length === 0) return { status: 'none' };
+  // 규칙 6 — 10분 창과 무관하게 본다 (창 안 신호가 하나도 없어도)
+  const fallback = wifiFallback(signals, now);
+  if (live.length === 0) return fallback ?? { status: 'none' };
 
   // 신호를 시간순으로 하나씩 더하다가 규칙을 처음 만족하는 순간이 확정 시각이다.
   // 같은 종류가 여러 번 와도 한 번으로 센다 (걷기가 계속 들어와도 "주 신호 2개"가 아니다).
@@ -77,8 +87,24 @@ export function decideDeparture(
     if (confirmed) return { status: 'confirmed', at: s.at, by: [...seen] };
   }
 
+  // 규칙 6 — 마지막 Wi-Fi 상태가 "이탈"이고 5분 넘게 복귀가 없으면 확정
+  if (fallback) return fallback;
+
   // [떠나기]만 있으면 "나갈 생각"일 뿐 신호가 아니다 — 후보로도 보지 않는다.
   const evidence = live.filter((s) => s.type !== 'leaveIntent');
   if (evidence.length === 0) return { status: 'none' };
   return { status: 'candidate', since: evidence[0].at };
 }
+
+function wifiFallback(signals: DepartureSignal[], now: number): DepartureDecision | null {
+  const homeState = signals
+    .filter((s) => s.at <= now && now - s.at <= SAFETY_MAX_AGE_MS && HOME_STATE.has(s.type))
+    .sort((a, b) => a.at - b.at);
+  const last = homeState[homeState.length - 1];
+  if (!last || last.type !== 'wifiExit') return null;
+  if (now - last.at < WIFI_FALLBACK_MS) return null;
+  return { status: 'confirmed', at: last.at + WIFI_FALLBACK_MS, by: ['wifiExit'] };
+}
+
+// Wi-Fi 안전장치가 보는 "집에 있나" 신호. 위치 재진입도 귀가로 본다.
+const HOME_STATE: ReadonlySet<DepartureSignalType> = new Set(['wifiExit', 'wifiReturn', 'locationEnter']);
