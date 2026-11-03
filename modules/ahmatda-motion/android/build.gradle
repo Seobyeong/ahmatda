@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.ahmatdamotion'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.ahmatdamotion"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // 활동 전환 API(ActivityRecognition). expo-location도 같은 라이브러리를 api로 물고 있다.
+  // 버전이 다르면 Gradle이 높은 쪽 하나로 맞추므로, Expo SDK를 올릴 때 expo-location의
+  // android/build.gradle 버전과 같이 확인할 것 (2026-11 기준 둘 다 21.0.1).
+  implementation 'com.google.android.gms:play-services-location:21.0.1'
+}

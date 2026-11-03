@@ -13,7 +13,7 @@ import notifee from '@notifee/react-native';
 import * as Location from 'expo-location';
 import NetInfo, { NetInfoStateType } from '@react-native-community/netinfo';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AlarmClock, Bell, Calendar, Check, MapPin } from 'lucide-react-native';
+import { AlarmClock, Bell, Calendar, Check, Footprints, MapPin } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -27,6 +27,7 @@ import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES } from '../constants/preferen
 import { isValidHHmm } from '../utils/time';
 import type { AlertPreference, CommuteMode } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
+import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
 
 type OnboardingScreenProps = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -81,7 +82,8 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     notification: PermissionState;
     location: PermissionState;
     exactAlarm: PermissionState;
-  }>({ calendar: 'idle', notification: 'idle', location: 'idle', exactAlarm: 'idle' });
+    motion: PermissionState;
+  }>({ calendar: 'idle', notification: 'idle', location: 'idle', exactAlarm: 'idle', motion: 'idle' });
 
   const [sensitivity, setSensitivityValue] = useState<1 | 2 | 3 | 4 | 5>(3);
 
@@ -192,6 +194,34 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     }
   };
 
+  // 신체 활동(걷기 감지) — 외출 판정의 주 신호 (docs/외출-감지-재설계.md 3장). Android만.
+  // 거부해도 판정은 위치·Wi-Fi로 간다.
+  const requestMotion = async () => {
+    if (permissions.motion === 'denied') {
+      await Linking.openSettings();
+      return;
+    }
+    try {
+      const granted = await requestMotionPermission();
+      setPermissions((p) => ({ ...p, motion: granted ? 'granted' : 'denied' }));
+      // 허용 즉시 구독을 건다 — 앱 시작 때 건 시도는 권한이 없어 실패했다.
+      if (granted) syncWalkingDetection();
+    } catch {
+      setPermissions((p) => ({ ...p, motion: 'denied' }));
+    }
+  };
+
+  // 설정에서 돌아왔을 때 — 허용으로 바뀌었으면 올리고, 허용이었다가 꺼졌으면 내린다.
+  // 아직 안 물어본(idle) 상태는 거부로 바꾸지 않는다 (check가 둘을 구분해주지 않는다).
+  const checkMotionPermission = async () => {
+    const granted = await hasMotionPermission();
+    setPermissions((p) => {
+      if (granted) return { ...p, motion: 'granted' };
+      if (p.motion === 'granted') return { ...p, motion: 'denied' };
+      return p;
+    });
+  };
+
   const requestExactAlarmPermission = async () => {
     try {
       await NotificationService.openExactAlarmSettings();
@@ -212,6 +242,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
         checkCalendarPermission();
         checkNotificationPermission();
         checkLocationPermission();
+        checkMotionPermission();
       }
     });
     return () => subscription.remove();
@@ -296,6 +327,16 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             onRequest={requestLocationPermission}
             deniedActionLabel="설정에서 허용"
           />
+          {isMotionSupported() ? (
+            <PermissionRow
+              icon={<Footprints size={20} color={Colors.indigo600} />}
+              title="🚶 신체 활동"
+              description="걷기 시작을 감지해 집을 나서는 순간을 더 정확히 알아채요"
+              status={permissions.motion}
+              onRequest={requestMotion}
+              deniedActionLabel="설정에서 허용"
+            />
+          ) : null}
           <PermissionRow
             icon={<AlarmClock size={20} color={Colors.indigo600} />}
             title="⏰ 정확한 알람"

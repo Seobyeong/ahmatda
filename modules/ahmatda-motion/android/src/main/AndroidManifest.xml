@@ -1,0 +1,25 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android 10(API 29)+: 런타임 권한 "신체 활동". JS에서 PermissionsAndroid로 요청한다. -->
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+  <!-- Android 9 이하: Play 서비스 쪽 설치 시 권한 -->
+  <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
+
+  <application>
+    <!-- 걷기 시작 전환을 받는 리시버. PendingIntent가 이 클래스를 명시적으로 가리키므로
+         다른 앱이 보낼 이유가 없다 — exported=false. -->
+    <receiver
+      android:name=".ActivityTransitionReceiver"
+      android:exported="false" />
+
+    <!-- 재부팅·앱 업데이트 뒤 구독 재등록. BOOT_COMPLETED는 시스템이 보내는 브로드캐스트라
+         exported=true여야 받는다 (RECEIVE_BOOT_COMPLETED 권한은 앱 매니페스트에 이미 있음). -->
+    <receiver
+      android:name=".MotionBootReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

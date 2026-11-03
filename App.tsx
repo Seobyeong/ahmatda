@@ -12,6 +12,7 @@ import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskS
 import { useAppStore } from '@/store';
 import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { setWidgetSnapshot } from './modules/ahmatda-widget';
+import { syncWalkingDetection } from './modules/ahmatda-motion';
 
 // 백그라운드 이벤트 핸들러 등록 (앱 실행 전 최상단에 등록 필수)
 notifee.onBackgroundEvent(async ({ type, detail }) => {
@@ -41,6 +42,13 @@ export default function App() {
     // 앱 시작 시 1회 백그라운드 폴링 등록 (react-native-background-fetch)
     BackgroundTaskService.configure();
 
+    // 걷기 시작 감지 구독 — 권한에 맞춰 걸거나 푼다. 설정에서 권한을 바꾸고 돌아오는 경우도
+    // 있어 포그라운드 복귀마다 다시 맞춘다. (재부팅·업데이트 뒤엔 네이티브 부팅 리시버가 다시 건다.)
+    syncWalkingDetection();
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncWalkingDetection();
+    });
+
     // 앱이 완전히 종료된 상태에서 알림을 탭해 콜드스타트된 경우 —
     // onForegroundEvent/onBackgroundEvent 둘 다 이 최초 실행 시점에는 아직
     // 이벤트를 전달해주지 않으므로 별도로 확인해야 한다.
@@ -53,7 +61,7 @@ export default function App() {
       handleNotificationEvent(type, detail);
     });
 
-    return () => { unsubscribe(); };
+    return () => { unsubscribe(); appStateSub.remove(); };
   }, []);
 
   useEffect(() => {
