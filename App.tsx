@@ -12,7 +12,11 @@ import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskS
 import { useAppStore } from '@/store';
 import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { setWidgetSnapshot } from './modules/ahmatda-widget';
-import { syncWalkingDetection } from './modules/ahmatda-motion';
+import { addWalkingListener, syncWalkingDetection } from './modules/ahmatda-motion';
+import { DepartureService } from '@/services/departure/DepartureService';
+// 집 지오펜스 태스크 정의 — TaskManager.defineTask는 번들 최상위에서 돌아야 한다
+// (앱이 화면 없이 백그라운드로 깨어나도 태스크가 정의돼 있게). import만으로 정의된다.
+import { HomeGeofence } from '@/services/departure/homeGeofence';
 
 // 백그라운드 이벤트 핸들러 등록 (앱 실행 전 최상단에 등록 필수)
 notifee.onBackgroundEvent(async ({ type, detail }) => {
@@ -44,9 +48,28 @@ export default function App() {
 
     // 걷기 시작 감지 구독 — 권한에 맞춰 걸거나 푼다. 설정에서 권한을 바꾸고 돌아오는 경우도
     // 있어 포그라운드 복귀마다 다시 맞춘다. (재부팅·업데이트 뒤엔 네이티브 부팅 리시버가 다시 건다.)
+    // 집 지오펜스도 같은 이유로 맞춘다 (위치 '항상 허용'을 설정에서 켜고 돌아오는 경우).
     syncWalkingDetection();
+    HomeGeofence.sync();
     const appStateSub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') syncWalkingDetection();
+      if (state === 'active') {
+        syncWalkingDetection();
+        HomeGeofence.sync();
+      }
+    });
+
+    // 앱 프로세스가 살아 있을 때 걷기 시작이 오면 바로 판정한다. 죽어 있을 때 온 걷기는 네이티브가
+    // 기록해 두고, 다음 판정(폴링·Wi-Fi·지오펜스)이 함께 본다. 감시 창 밖이면 판정이 알아서 거른다.
+    const removeWalkingListener = addWalkingListener(() => {
+      DepartureService.evaluate().catch(() => {});
+    });
+
+    // 외출이 확정되면(어느 신호로든) Wi-Fi 리스너는 더 돌 이유가 없다. 앱이 떠 있으면 토스트도 띄운다.
+    const removeDepartedListener = DepartureService.onDeparted((unchecked) => {
+      WifiMonitorService.stopMonitoring();
+      if (unchecked.length > 0) {
+        useAppStore.getState().showToast(`외출이 감지됐어요 — 아직 ${unchecked.length}개를 못 챙겼어요.`);
+      }
     });
 
     // 앱이 완전히 종료된 상태에서 알림을 탭해 콜드스타트된 경우 —
@@ -61,7 +84,7 @@ export default function App() {
       handleNotificationEvent(type, detail);
     });
 
-    return () => { unsubscribe(); appStateSub.remove(); };
+    return () => { unsubscribe(); appStateSub.remove(); removeWalkingListener(); removeDepartedListener(); DepartureService.cancelRecheck(); };
   }, []);
 
   useEffect(() => {
@@ -107,13 +130,7 @@ export default function App() {
     // (집 BSSID가 없으면 서비스 내부에서 자동 스킵)
     if (!userSettings.onboarded) return;
 
-    const arm = () => {
-      WifiMonitorService.armForDeparture(userSettings.departureTime, (uncheckedItems) => {
-        useAppStore.getState().showToast(
-          `외출이 감지됐어요 — 아직 ${uncheckedItems.length}개를 못 챙겼어요.`
-        );
-      });
-    };
+    const arm = () => WifiMonitorService.armForDeparture(userSettings.departureTime);
     arm();
 
     // 앱이 오래 백그라운드에 있으면 재확인 인터벌 자체가 실행을 보장받지 못할 수

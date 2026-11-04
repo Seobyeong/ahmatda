@@ -41,7 +41,16 @@
           ]
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "현재 위치의 날씨를 확인하고 집 Wi-Fi를 등록해 외출을 감지하기 위해 위치 권한이 필요해요.",
+          "locationAlwaysAndWhenInUsePermission": "앱을 닫아 둬도 등록한 집을 벗어나는 순간을 확인해 안 챙긴 물건을 알려드리기 위해 위치 권한이 필요해요. 위치는 기기 안에서만 쓰여요.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ]
     ],
     "extra": {
       "eas": {

@@ -1,12 +1,12 @@
 import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NotificationService } from '@/services/notification/NotificationService';
-import { getTodayString, isWithinDepartureWindow } from '@/utils/time';
+import { DepartureService } from '@/services/departure/DepartureService';
+import { SignalLog } from '@/services/departure/signalLog';
+import { isWithinDepartureWindow } from '@/utils/time';
 import { classifyPresence } from './presence';
 import type { ChecklistItem } from '@/types';
 
 const BSSID_KEY         = 'home_bssid';
-const ALERT_DATE_KEY    = 'wifi_alert_date';
 const DEBOUNCE_MS       = 10_000;  // 10초 디바운스 (오탐 방지)
 const TIMEOUT_MS        = 2 * 60 * 60 * 1000;  // 2시간 타임아웃 (배터리 보호용 안전장치)
 const ARM_CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 감시 창 진입/이탈 재확인 주기
@@ -45,61 +45,35 @@ export const WifiMonitorService = {
     return bssid;
   },
 
-  // 1회성 Wi-Fi 확인 (백그라운드 폴링용) — 리스너/디바운스 없이 즉시 판정.
-  // 집 밖이고 미체크 항목이 있으면 긴급 알림을 보내고 그 목록을 반환한다.
-  // 하루에 한 번만 알리도록 날짜 기준으로 중복 알림을 막는다.
+  // 1회성 Wi-Fi 확인 (백그라운드 폴링용) — 리스너/디바운스 없이 지금 상태를 신호 기록에 남기고
+  // 외출 판정을 한 번 돌린다. 판정·알림·당일 중복 방지는 DepartureService가 한다.
+  // 알림을 보냈으면 안 챙긴 항목을 반환한다.
   async checkOnce(): Promise<ChecklistItem[] | null> {
     const homeBssid = await WifiMonitorService.getHomeBssid();
-    if (!homeBssid) return null;
-
-    const today = getTodayString();
-    const alreadyAlerted = await AsyncStorage.getItem(ALERT_DATE_KEY);
-    if (alreadyAlerted === today) return null;
-
-    const state = await NetInfo.fetch();
-    const presence = classifyPresence(state, homeBssid);
-    // 'unknown'이면 아무것도 하지 않는다 — 알림도, dedup 키 소진도, 놓침 기록도 없다.
-    // 다음 폴링에서 판정이 가능해지면 그때 처리된다.
-    if (presence !== 'away') return null;
-
-    // 집을 나섰으니 잠금화면 출발 상태는 내린다 (다 챙기고 나간 날도 포함)
-    await NotificationService.clearDepartureStatus();
-
-    const { useAppStore } = await import('@/store');
-
-    // 백그라운드 폴링은 앱을 한 번도 열지 않은 날에도 돈다. 그때 checklist는 아직
-    // 어제 것이라, 그대로 쓰면 어제 항목으로 알림을 보내고 어제 라벨을 오늘 날짜로
-    // 기록해 "이번 주 N번 놓침" 집계를 오염시킨다. 날짜가 밀렸으면 먼저 하루를 넘긴다.
-    // (buildChecklist가 아니라 startNewDay를 쓰는 이유: checklistDate만 오늘로 바꿔두면
-    //  나중에 앱을 열었을 때 DashboardScreen이 하루 전환을 건너뛰어 todayFeedback 같은
-    //  당일 한정 상태가 어제 값으로 남는다.)
-    if (useAppStore.getState().checklistDate !== today) {
-      useAppStore.getState().startNewDay();
+    if (homeBssid) {
+      const presence = classifyPresence(await NetInfo.fetch(), homeBssid);
+      // 'unknown'이면 아무것도 기록하지 않는다 — 위치 권한이 잠깐 빠진 걸 이탈로 적으면
+      // 집 소파에서 안전장치가 울린다. 같은 상태가 이어지면 기록은 처음 시각을 유지한다.
+      if (presence === 'away') await SignalLog.record('wifiExit');
+      if (presence === 'home') await SignalLog.record('wifiReturn');
     }
-
-    const unchecked = useAppStore.getState().checklist.filter((i) => !i.checked);
-    if (unchecked.length === 0) return null;
-
-    await NotificationService.triggerUrgentAlert(unchecked);
-    await AsyncStorage.setItem(ALERT_DATE_KEY, today);
-    // "자주 까먹는 항목" 학습 — 안 챙기고 나간 항목을 기록해두면 다음 재빌드 때
-    // 최근 7일간 2회 이상 놓친 항목에 "이번 주 N번 놓침" 뱃지가 붙는다.
-    useAppStore.getState().recordForgotten(unchecked.map((i) => i.label));
-    return unchecked;
+    // 집 Wi-Fi가 없어도 걷기·위치로 판정할 수 있다.
+    return DepartureService.evaluate();
   },
 
-  // 모니터링 시작
-  // onOuting: 외출 감지 시 호출될 콜백
-  async startMonitoring(
-    onOuting: (uncheckedItems: ChecklistItem[]) => void
-  ): Promise<void> {
+  // 모니터링 시작. 외출 확정 알림(토스트 등)은 DepartureService.onDeparted로 받는다 —
+  // 확정은 Wi-Fi 말고도 지오펜스·걷기·재확인 타이머에서 날 수 있어서다.
+  async startMonitoring(): Promise<void> {
     // 짧은 시간 안에 startMonitoring이 중복 호출되면(예: 설정 화면에서 출발시각을
     // 연속 수정) AsyncStorage 조회가 끝나는 순서가 호출 순서와 다를 수 있어서,
     // 가장 마지막 호출만 리스너를 실제로 설치하도록 세대 번호로 막는다.
     const generation = ++monitorGeneration;
     const homeBssid = await WifiMonitorService.getHomeBssid();
     if (!homeBssid) return;  // BSSID 미등록 시 모니터링 안 함
+    // 오늘 외출이 이미 확정됐으면 더 볼 게 없다 (5분마다 도는 재arm이 다시 걸지 않게)
+    const departed = await DepartureService.hasDepartedToday();
     if (generation !== monitorGeneration) return;  // 그 사이 더 최신 호출이 있었음
+    if (departed) return;
 
     // 이미 실행 중이면 중복 등록 방지
     WifiMonitorService.stopMonitoring();
@@ -109,6 +83,11 @@ export const WifiMonitorService = {
     // 콜백은 이 값과 비교해야 한다 (generation과 비교하면 항상 불일치라 알림이
     // 영영 안 나간다).
     const listenerGeneration = monitorGeneration;
+    let awaySince: number | null = null;
+    // 집 Wi-Fi를 다시 본 횟수 — 디바운스 콜백이 await하는 사이 재연결됐는지 알아내려고 센다.
+    // (그 사이 기록된 wifiReturn은 앞선 이탈이 없어 버려지고, 뒤이어 이탈이 기록되면 집에 있는데
+    //  "나감"이 마지막 상태로 남아 안전장치가 울린다.)
+    let homeSeen = 0;
 
     // 2시간 후 자동 종료 (Wi-Fi 미이탈 시 배터리 보호)
     timeoutTimer = setTimeout(() => {
@@ -125,9 +104,14 @@ export const WifiMonitorService = {
 
       // 집 Wi-Fi 끊김 감지
       if (presence === 'away' || !isConnected) {
+        // 이탈 시각은 디바운스가 끝난 때가 아니라 처음 끊긴 때다 — 걷기·위치와 묶는 10분 창과
+        // 안전장치 5분이 이 시각부터 센다.
+        if (awaySince === null) awaySince = Date.now();
         // 10초 디바운스 — 일시적 끊김 무시
         if (debounceTimer) clearTimeout(debounceTimer);
+        const exitAt = awaySince;
         debounceTimer = setTimeout(async () => {
+          const homeSeenAtStart = homeSeen;
           // 재확인
           const rechecked = await NetInfo.fetch();
 
@@ -137,15 +121,21 @@ export const WifiMonitorService = {
           // 리스너 설치 시점의 세대와 달라졌으면 이 콜백은 무효다.
           if (listenerGeneration !== monitorGeneration) return;
 
+          if (homeSeen !== homeSeenAtStart) return;  // 기다리는 사이 다시 붙었다
           if (classifyPresence(rechecked, homeBssid) === 'away') {
-            // checkOnce()가 미체크 항목 조회, 알림 전송, 당일 중복 알림 방지까지 처리한다.
-            // BackgroundTaskService의 주기적 폴링과 동일한 dedup 키를 공유해 이중 알림을 막는다.
-            const unchecked = await WifiMonitorService.checkOnce();
-            if (unchecked) {
-              onOuting(unchecked);
+            // Wi-Fi 이탈은 이제 "부가 신호"다 (결정 2). 걷기·위치가 붙거나 안전장치 5분이
+            // 지나야 확정되므로, 여기서는 기록하고 판정만 돌린다. 판정·알림·당일 중복 방지는
+            // DepartureService가 백그라운드 폴링과 같은 키로 한다.
+            await SignalLog.record('wifiExit', exitAt);
+            if (homeSeen !== homeSeenAtStart) {
+              // 기록하는 사이 다시 붙었다 — 복귀를 이탈 뒤에 다시 적어 마지막 상태를 "집"으로 둔다.
+              await SignalLog.record('wifiReturn');
+              return;
             }
-
-            WifiMonitorService.stopMonitoring();
+            if (listenerGeneration !== monitorGeneration) return;
+            await DepartureService.evaluate();
+            // 확정이면 App.tsx의 onDeparted 구독이 리스너를 내린다. 아직 확정이 아니면 남겨 둔다 —
+            // 다시 붙으면(뭘 가지러 돌아옴) 복귀를 기록해야 안전장치가 울리지 않는다.
           }
         }, DEBOUNCE_MS);
       } else {
@@ -154,6 +144,10 @@ export const WifiMonitorService = {
           clearTimeout(debounceTimer);
           debounceTimer = null;
         }
+        awaySince = null;
+        homeSeen++;
+        // 이탈을 적어둔 적이 없으면 기록은 바뀌지 않는다 (같은 상태 중복 제거).
+        if (presence === 'home') SignalLog.record('wifiReturn').catch(() => {});
       }
     });
   },
@@ -174,15 +168,12 @@ export const WifiMonitorService = {
   // RN은 앱이 오래 백그라운드에 있으면 긴 타이머가 실행을 보장받지 못해서, 다음날
   // 같은 시각에 정확히 맞춰 실행돼야 하는 긴 타이머는 조용히 죽을 수 있다. 짧은
   // 주기로 반복 재확인하면 앱이 다시 활성화됐을 때 곧 따라잡는다.
-  armForDeparture(
-    departureTime: string,
-    onOuting: (uncheckedItems: ChecklistItem[]) => void
-  ): void {
+  armForDeparture(departureTime: string): void {
     if (armInterval) { clearInterval(armInterval); armInterval = null; }
 
     const tick = () => {
       if (isWithinDepartureWindow(departureTime)) {
-        if (!unsubscribe) WifiMonitorService.startMonitoring(onOuting);
+        if (!unsubscribe) WifiMonitorService.startMonitoring();
       } else {
         WifiMonitorService.stopMonitoring();
       }

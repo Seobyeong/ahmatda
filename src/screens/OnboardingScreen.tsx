@@ -20,6 +20,7 @@ import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { NotificationService } from '../services/notification/NotificationService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
+import { HOME_RADIUS_M, HomeGeofence } from '../services/departure/homeGeofence';
 import { SensitivitySelector } from '../components/SensitivitySelector';
 import { TimeInput } from '../components/TimeInput';
 import { ChoiceList } from '../components/ChoiceList';
@@ -83,7 +84,8 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     location: PermissionState;
     exactAlarm: PermissionState;
     motion: PermissionState;
-  }>({ calendar: 'idle', notification: 'idle', location: 'idle', exactAlarm: 'idle', motion: 'idle' });
+    backgroundLocation: PermissionState;
+  }>({ calendar: 'idle', notification: 'idle', location: 'idle', exactAlarm: 'idle', motion: 'idle', backgroundLocation: 'idle' });
 
   const [sensitivity, setSensitivityValue] = useState<1 | 2 | 3 | 4 | 5>(3);
 
@@ -98,6 +100,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const [time, setTime] = useState(departureTimeDefault);
   const [bssid, setBssid] = useState('');
   const [wifiStatus, setWifiStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [homeStatus, setHomeStatus] = useState<'idle' | 'busy' | 'active' | 'saved' | 'error'>('idle');
 
   const setSensitivity = useAppStore((s) => s.setSensitivity);
   const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
@@ -182,6 +185,27 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     }
   };
 
+  // 위치 '항상 허용' — 앱이 화면에 없을 때 집 반경 이탈을 받는다 (외출 판정 주 신호, 선택).
+  // Play "눈에 띄는 공개" 안내와 재요청 가능 여부 판단은 HomeGeofence가 설정 화면과 같이 한다.
+  const requestBackgroundLocation = async () => {
+    const result = await HomeGeofence.promptBackgroundPermission();
+    if (result === 'granted' || result === 'denied') {
+      setPermissions((p) => ({ ...p, backgroundLocation: result }));
+    }
+    // 'settings'·'dismissed'는 그대로 둔다 — 설정에서 돌아오면 checkBackgroundLocation이 반영한다.
+  };
+
+  // 설정 화면에서 돌아왔을 때 — Android 11+는 요청 결과가 설정 화면을 거쳐 오므로 여기서 반영한다.
+  const checkBackgroundLocation = async () => {
+    try {
+      const result = await Location.getBackgroundPermissionsAsync();
+      if (result.status === 'undetermined') return;
+      setPermissions((p) => ({ ...p, backgroundLocation: result.granted ? 'granted' : 'denied' }));
+    } catch {
+      // 조회 실패 시 현재 상태 유지
+    }
+  };
+
   // 정확한 알람은 앱 안에서 직접 요청하는 권한이 아니라 시스템 설정 화면에서
   // 사용자가 켜야 하므로, 현재 상태를 조회해서 반영하는 방식으로 처리한다.
   const checkExactAlarmPermission = async () => {
@@ -243,6 +267,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
         checkNotificationPermission();
         checkLocationPermission();
         checkMotionPermission();
+        checkBackgroundLocation();
       }
     });
     return () => subscription.remove();
@@ -260,6 +285,13 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     } catch {
       setWifiStatus('error');
     }
+  };
+
+  // 집 좌표는 지금 위치를 새로 잡아 기기에만 저장한다 (집 반경 지오펜스의 중심).
+  const registerHomeLocation = async () => {
+    setHomeStatus('busy');
+    const result = await HomeGeofence.registerCurrentLocationAsHome();
+    setHomeStatus(!result ? 'error' : result.active ? 'active' : 'saved');
   };
 
   const handleSensitivityNext = () => {
@@ -327,6 +359,16 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             onRequest={requestLocationPermission}
             deniedActionLabel="설정에서 허용"
           />
+          {locationGranted ? (
+            <PermissionRow
+              icon={<MapPin size={20} color={Colors.indigo600} />}
+              title="📍 위치 항상 허용 (선택)"
+              description="앱을 닫아 둬도 집을 벗어나는 순간을 알아채요. 권장해요"
+              status={permissions.backgroundLocation}
+              onRequest={requestBackgroundLocation}
+              deniedActionLabel="설정에서 허용"
+            />
+          ) : null}
           {isMotionSupported() ? (
             <PermissionRow
               icon={<Footprints size={20} color={Colors.indigo600} />}
@@ -434,6 +476,32 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             placeholder="BSSID 직접 입력 (선택 사항)"
             placeholderTextColor={Colors.slate400}
           />
+
+          <View style={styles.divider} />
+
+          <Text style={styles.title}>집 위치를 등록해주세요</Text>
+          <Text style={styles.description}>
+            집에 있을 때 눌러주세요. 집에서 {HOME_RADIUS_M}m쯤 벗어나는 것을 외출 신호로 써요.
+            위치는 이 기기에만 저장돼요. 등록하지 않으면 걷기와 Wi-Fi로만 판단해요.
+          </Text>
+          <Pressable
+            style={[styles.primaryButton, (!locationGranted || homeStatus === 'busy') && styles.primaryButtonDisabled]}
+            onPress={registerHomeLocation}
+            disabled={!locationGranted || homeStatus === 'busy'}
+          >
+            <Text style={styles.primaryButtonText}>
+              {!locationGranted ? '위치 권한 필요' : homeStatus === 'busy' ? '위치 확인 중…' : '지금 위치를 집으로 등록'}
+            </Text>
+          </Pressable>
+          {homeStatus === 'active' ? <Text style={styles.wifiSuccessText}>집 위치를 등록했어요.</Text> : null}
+          {homeStatus === 'saved' ? (
+            <Text style={styles.wifiSuccessText}>
+              집 위치를 저장했어요. 위치 '항상 허용'을 켜야 집을 벗어나는 걸 알아채요 (설정에서 켤 수 있어요).
+            </Text>
+          ) : null}
+          {homeStatus === 'error' ? (
+            <Text style={styles.wifiErrorText}>위치를 가져오지 못했어요. 위치 서비스를 켜고 다시 눌러주세요.</Text>
+          ) : null}
 
           <Pressable style={styles.primaryButton} onPress={handleStart}>
             <Text style={styles.primaryButtonText}>시작하기</Text>

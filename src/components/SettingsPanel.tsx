@@ -21,6 +21,8 @@ import { isOneOff } from '../utils/routines';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
+import { HomeGeofence } from '../services/departure/homeGeofence';
+import * as Location from 'expo-location';
 import { AiKeyStore } from '../services/ai/AiKeyStore';
 import { DAILY_CALL_LIMIT } from '../services/ai/hints';
 import { SensitivitySelector } from './SensitivitySelector';
@@ -119,6 +121,10 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  // 집 위치·위치 '항상 허용' — 외출 판정의 위치 신호 (docs/외출-감지-재설계.md 3장)
+  const [hasHome, setHasHome] = useState(false);
+  const [homeRegisterStatus, setHomeRegisterStatus] = useState<'idle' | 'busy' | 'active' | 'saved' | 'error'>('idle');
+  const [bgLocation, setBgLocation] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
   // 키 자체는 화면 상태에 들고 있지 않는다 — 있는지 여부만 안다.
   const [aiHasKey, setAiHasKey] = useState(false);
   const [aiKeyDraft, setAiKeyDraft] = useState('');
@@ -131,6 +137,10 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
       CalendarService.checkPermission().then((status) =>
         setCalendarConnected(status === 'authorized')
       );
+      HomeGeofence.getHomeCoords().then((c) => setHasHome(c !== null));
+      Location.getBackgroundPermissionsAsync()
+        .then((r) => setBgLocation(r.granted ? 'granted' : r.status === 'undetermined' ? 'undetermined' : 'denied'))
+        .catch(() => {});
     };
     check();
 
@@ -147,6 +157,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
       setEditingNightly(false);
       setEditingSensitivity(false);
       setWifiRegisterStatus('idle');
+      setHomeRegisterStatus('idle');
       setKeywordDraft('');
       setAiKeyDraft('');
     }
@@ -250,6 +261,19 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     }
   };
 
+  const handleRegisterHome = async () => {
+    setHomeRegisterStatus('busy');
+    const result = await HomeGeofence.registerCurrentLocationAsHome();
+    if (result) setHasHome(true);
+    setHomeRegisterStatus(!result ? 'error' : result.active ? 'active' : 'saved');
+  };
+
+  // 온보딩과 같은 안내·재요청 판단을 HomeGeofence가 한다 (Play "눈에 띄는 공개").
+  const handleBackgroundLocation = async () => {
+    const result = await HomeGeofence.promptBackgroundPermission();
+    if (result === 'granted' || result === 'denied') setBgLocation(result);
+  };
+
   // 화면에는 실제 적용되는 Δt(기준값 + 학습값)를 보여준다.
   const effectiveDelta = getEffectiveDelta(sensitivityLevel, learnedDelta);
   const deltaColor =
@@ -345,6 +369,35 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
         {wifiRegisterStatus === 'error' ? (
           <Text style={styles.wifiStatusError}>Wi-Fi에 연결돼 있지 않아요.</Text>
         ) : null}
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>집 위치</Text>
+          <Pressable onPress={handleRegisterHome} disabled={homeRegisterStatus === 'busy'}>
+            <Text style={styles.calendarSettingsLink}>
+              {homeRegisterStatus === 'busy' ? '확인 중…' : hasHome ? '지금 위치로 재등록' : '지금 위치로 등록'}
+            </Text>
+          </Pressable>
+        </View>
+        {homeRegisterStatus === 'active' ? (
+          <Text style={styles.wifiStatusSuccess}>지금 위치를 집으로 등록했어요. 이 기기에만 저장돼요.</Text>
+        ) : null}
+        {homeRegisterStatus === 'saved' ? (
+          <Text style={styles.wifiStatusSuccess}>집 위치를 저장했어요. 아래 '위치 항상 허용'을 켜야 집을 벗어나는 걸 알아채요.</Text>
+        ) : null}
+        {homeRegisterStatus === 'error' ? (
+          <Text style={styles.wifiStatusError}>위치를 가져오지 못했어요. 위치 권한과 위치 서비스를 확인해주세요.</Text>
+        ) : null}
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>위치 항상 허용 (권장)</Text>
+          {bgLocation === 'granted' ? (
+            <Text style={styles.rowValue}>허용됨</Text>
+          ) : (
+            <Pressable onPress={handleBackgroundLocation}>
+              <Text style={styles.calendarSettingsLink}>켜기</Text>
+            </Pressable>
+          )}
+        </View>
 
         <View style={styles.row}>
           <Text style={styles.rowLabel}>캘린더 연동</Text>

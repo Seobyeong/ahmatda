@@ -34,6 +34,10 @@
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+  <!-- 집 반경 지오펜스 (외출 판정 위치 신호) — 앱이 화면에 없을 때 이탈을 받으려면 필요.
+       Play Console 백그라운드 위치 신고서 대상 (docs/외출-감지-재설계.md 8장) -->
+  <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
   <!-- Foreground Service -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
