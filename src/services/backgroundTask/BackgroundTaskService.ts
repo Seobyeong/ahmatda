@@ -5,8 +5,11 @@ import { useAppStore } from '@/store';
 import { CalendarService } from '@/services/calendar/CalendarService';
 import { AiHintService } from '@/services/ai/AiHintService';
 import { AwayPlaceService } from '@/services/departure/AwayPlaceService';
+import { OutingLog } from '@/services/nightly/outingLog';
+import { NightlyService } from '@/services/nightly/NightlyService';
 
 const DEPARTURE_TASK_ID = 'ahmatda-departure-check';
+const PLAN_BUDGET_MS = 15 * 1000;
 
 export const BackgroundTaskService = {
   // 앱 시작 시 1회 호출 — 주기적 백그라운드 폴링(최소 15분 간격) 등록.
@@ -28,7 +31,16 @@ export const BackgroundTaskService = {
         if (taskId !== DEPARTURE_TASK_ID) {
           // 집 밖 머묾 확인(감시 창과 무관하게 하루 종일, 켜져 있을 때만)과 AI 미리 계산은 서로 무관하다.
           // 위치 조회가 길어져도 OS 백그라운드 실행 시간 안에 둘 다 끝나게 같이 돌린다.
-          await Promise.all([AwayPlaceService.tick(), BackgroundTaskService._precomputeAiHints()]);
+          // 자기 전 정리: 집 Wi-Fi 안/밖을 한 번 보고(외출했는지), 오늘 밤 알림을 다시 계획한다.
+          await Promise.all([
+            AwayPlaceService.tick(),
+            BackgroundTaskService._precomputeAiHints(),
+            // 자기 전 계획은 위치·예보를 받을 수 있어 시간 상한을 둔다 (finish가 늦으면 OS가 폴링을 줄인다)
+            Promise.race([
+              OutingLog.observeWifi().then(() => NightlyService.plan()),
+              new Promise<void>((resolve) => setTimeout(resolve, PLAN_BUDGET_MS)),
+            ]),
+          ]);
         }
         BackgroundFetch.finish(taskId);
       },

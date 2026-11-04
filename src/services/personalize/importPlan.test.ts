@@ -7,6 +7,7 @@ const settings: UserSettings = {
   nightlyCheckTime: '22:00',
   alertPreference: 'normal',
   awayPlaceAlert: null,
+  onboardedDate: null,
   commuteMode: null,
   homeBssid: null,
   sensitivityLevel: 3,

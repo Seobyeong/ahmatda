@@ -6,7 +6,7 @@ import notifee, {
   TimestampTrigger,
   RepeatFrequency,
 } from '@notifee/react-native';
-import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, getNextDailyDate, isValidHHmm, toDateString } from '@/utils/time';
+import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, toDateString } from '@/utils/time';
 import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { ChecklistItem } from '@/types';
 
@@ -21,7 +21,6 @@ const DEPARTURE_ALERT_ID = 'departure-alert';
 // 자기 전 정리 알림. 예전 22:00 전날 알림 / 20:00 착장 피드백을 대체한다.
 const NIGHTLY_CHECK_ID = 'nightly-check';
 const LEGACY_NIGHTLY_IDS = ['day-before-alert', 'feedback-alert'];
-const DEFAULT_NIGHTLY_CHECK_TIME = '22:00';
 
 // [떠나기]를 눌렀을 때 남은 것을 잠깐 보여주는 알림 (docs/외출-감지-재설계.md 2장).
 // 현관에서 신발 신는 동안 볼 정도면 충분해서 10분 뒤 스스로 사라진다.
@@ -35,6 +34,56 @@ const LEAVE_ACTION = { title: '떠나기', pressAction: { id: 'leave' } };
 
 function departureBody(detail: string): string {
   return `출발 30분 전 · ${detail}`;
+}
+
+// 자기 전 정리 — 날짜별 한 번짜리 알림 (scheduleNightlyChecks)
+export interface NightlyEntry {
+  at: Date;
+  variant: 'full' | 'preview' | 'skip';
+  highlight: string | null; // 다음 외출에 달라지는 것 — "우산(비 예보 70%), 운동화(10:00 '헬스' 일정)"
+  repeat: boolean;          // 이 날부터 매일 반복 (계획의 마지막 칸 — 앱이 다시 안 돌아도 끊기지 않게)
+}
+
+const NIGHTLY_ID_PREFIX = 'nightly-check-';
+const NIGHTLY_TAIL_ID = 'nightly-check-tail';
+let lastNightlySignature: string | null = null;
+
+function nightlyId(entry: { at: Date; repeat: boolean }): string {
+  return entry.repeat ? NIGHTLY_TAIL_ID : `${NIGHTLY_ID_PREFIX}${toDateString(entry.at)}`;
+}
+
+export function isNightlyCheckId(id: string | undefined): boolean {
+  return id === NIGHTLY_CHECK_ID || (id?.startsWith(NIGHTLY_ID_PREFIX) ?? false);
+}
+
+function nightlyContent(entry: NightlyEntry, departureTime: string) {
+  const android = {
+    channelId:   CHANNEL_REMINDER,
+    // 본문을 누르면 다음 외출 준비 미리보기가 열린다 (TomorrowPreviewModal)
+    pressAction: { id: 'open-tomorrow', launchActivity: 'default' },
+  };
+  if (entry.variant === 'preview') {
+    return {
+      id:    nightlyId(entry),
+      title: '다음 외출에 챙길 게 있어요',
+      body:  `${departureTime} 출발 · ${entry.highlight ?? '눌러서 미리 확인해 보세요'}`,
+      android,
+    };
+  }
+  const extra = entry.highlight ? `\n다음 외출: ${entry.highlight}` : '';
+  return {
+    id:    nightlyId(entry),
+    title: '아맞다 — 오늘 하루 어땠나요?',
+    body:  `착장 피드백을 남기고, ${departureTime} 출발 전에 챙길 것도 미리 봐두세요.${extra}`,
+    android: {
+      ...android,
+      actions: [
+        { title: '🥶 추웠음', pressAction: { id: 'cold' } },
+        { title: '😊 적당함', pressAction: { id: 'good' } },
+        { title: '🥵 더웠음', pressAction: { id: 'hot'  } },
+      ],
+    },
+  };
 }
 
 export const NotificationService = {
@@ -203,40 +252,39 @@ export const NotificationService = {
   // 출발 알림은 여기서 예약하지 않는다 — 미체크 개수를 본문에 담아야 해서 App.tsx가
   // 개수 변화에 맞춰 따로 예약한다. 전체 취소(cancelAllNotifications)도 쓰지 않는다 —
   // 이미 떠 있는 Wi-Fi 이탈 긴급 알림까지 지워버린다. 자기 id만 취소한다.
-  async scheduleNightlyCheck(departureTime: string, nightlyCheckTime: string): Promise<void> {
-    const time = isValidHHmm(nightlyCheckTime) ? nightlyCheckTime : DEFAULT_NIGHTLY_CHECK_TIME;
-    const [hh, mm] = time.split(':').map(Number);
-    const target = getNextDailyDate(hh, mm);
+  //
+  // 날마다 보낼지·피드백을 붙일지가 달라서(NightlyService, 외출-감지-재설계 5장) 반복 알림이 아니라
+  // 날짜별 한 번짜리 알림을 여러 개 예약한다. id는 nightly-check-YYYY-MM-DD.
+  //   full    — 착장 피드백 버튼 + 챙길 것 미리보기 (기본)
+  //   preview — 외출 안 한 날: 피드백 없이 다음 외출에 달라지는 것만
+  //   skip    — 예약하지 않음
+  async scheduleNightlyChecks(entries: NightlyEntry[], departureTime: string): Promise<void> {
+    const wanted = entries.filter((e) => e.variant !== 'skip');
+    const signature = JSON.stringify([departureTime, entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat])]);
 
-    const trigger: TimestampTrigger = {
-      type:            TriggerType.TIMESTAMP,
-      timestamp:       target.getTime(),
-      repeatFrequency: RepeatFrequency.DAILY,
-      alarmManager: { allowWhileIdle: true },  // Doze Mode 대응
-    };
+    const existing = await notifee.getTriggerNotificationIds();
+    const wantedIds = new Set(wanted.map((e) => nightlyId(e)));
+    const allPresent = [...wantedIds].every((id) => existing.includes(id));
+    // 15분마다 불려도 바뀐 게 없으면 알람을 다시 걸지 않는다.
+    if (signature === lastNightlySignature && allPresent) return;
 
-    // 업데이트 설치 전 기기에 남아 있는 옛 예약 두 개를 지운다 — 안 지우면 셋 다 울린다.
-    await Promise.all(
-      [...LEGACY_NIGHTLY_IDS, NIGHTLY_CHECK_ID].map((id) => notifee.cancelTriggerNotification(id))
+    // 업데이트 전 예약(옛 22:00·20:00 알림, 반복 nightly-check)과 계획에서 빠진 날을 지운다.
+    const stale = existing.filter(
+      (id) => LEGACY_NIGHTLY_IDS.includes(id) || id === NIGHTLY_CHECK_ID ||
+        (id.startsWith(NIGHTLY_ID_PREFIX) && !wantedIds.has(id))
     );
-    await notifee.createTriggerNotification(
-      {
-        id:    NIGHTLY_CHECK_ID,
-        title: '아맞다 — 오늘 하루 어땠나요?',
-        body:  `착장 피드백을 남기고, ${departureTime} 출발 전에 챙길 것도 미리 봐두세요.`,
-        android: {
-          channelId:   CHANNEL_REMINDER,
-          // 본문을 누르면 다음 외출 준비 미리보기가 열린다 (TomorrowPreviewModal)
-          pressAction: { id: 'open-tomorrow', launchActivity: 'default' },
-          actions: [
-            { title: '🥶 추웠음', pressAction: { id: 'cold' } },
-            { title: '😊 적당함', pressAction: { id: 'good' } },
-            { title: '🥵 더웠음', pressAction: { id: 'hot'  } },
-          ],
-        },
-      },
-      trigger
-    );
+    await Promise.all(stale.map((id) => notifee.cancelTriggerNotification(id)));
+
+    for (const entry of wanted) {
+      const trigger: TimestampTrigger = {
+        type:         TriggerType.TIMESTAMP,
+        timestamp:    entry.at.getTime(),
+        alarmManager: { allowWhileIdle: true },  // Doze Mode 대응
+        ...(entry.repeat ? { repeatFrequency: RepeatFrequency.DAILY } : {}),
+      };
+      await notifee.createTriggerNotification(nightlyContent(entry, departureTime), trigger);
+    }
+    lastNightlySignature = signature;
   },
 
   // 긴급 알림 — Wi-Fi 이탈 시 미체크 항목 경고
@@ -319,7 +367,7 @@ export async function handleNotificationEvent(
     useAppStore.getState().requestScrollToChecklist();
   } else if (
     type === EventType.PRESS &&
-    (detail.pressAction?.id === 'open-tomorrow' || detail.notification?.id === NIGHTLY_CHECK_ID)
+    (detail.pressAction?.id === 'open-tomorrow' || isNightlyCheckId(detail.notification?.id))
   ) {
     // 자기 전 정리 알림 본문 탭 — 다음 외출 준비 화면을 연다.
     // iOS는 android.pressAction을 안 쓰고 'default'로 오므로 알림 id로도 본다.

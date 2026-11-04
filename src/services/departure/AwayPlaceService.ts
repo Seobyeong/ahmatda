@@ -22,6 +22,7 @@ import { isAwayPlaceAlertOn } from '@/constants/preferences';
 import { getTodayString } from '@/utils/time';
 import { DAILY_LIMIT, PAIR_WINDOW_MS, distanceMeters, hasLeftPlace, pickCarryItems, stayingSince } from './awayPlace';
 import { HOME_RADIUS_M, HomeGeofence } from './homeGeofence';
+import { markOutingToday } from '@/services/nightly/outingLog';
 import { getStillStarts, getVehicleStarts, getWalkingStarts, hasMotionPermission, isMotionSupported } from '../../../modules/ahmatda-motion';
 
 export const PLACE_GEOFENCE_TASK = 'ahmatda-place-geofence';
@@ -216,6 +217,8 @@ async function tickOnce(): Promise<void> {
 
   const next: Place = { ...here, since, registeredAt: Date.now(), exitAt: null };
   await writeState({ ...state, place: next });
+  // 집 밖에서 머물고 있다 — 자기 전 정리에는 "외출한 날"
+  await markOutingToday();
   try {
     await Location.startGeofencingAsync(PLACE_GEOFENCE_TASK, [{
       identifier: 'place',

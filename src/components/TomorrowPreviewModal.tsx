@@ -4,10 +4,8 @@ import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES } from '../constants/purposes';
 import { useAppStore } from '../store';
-import { CalendarService } from '../services/calendar/CalendarService';
-import { WeatherService } from '../services/weather/WeatherService';
 import type { DayOutlook } from '../services/weather/forecastDate';
-import { getCurrentCoords } from '../utils/location';
+import { fetchPreviewInputs } from '../services/nightly/previewInputs';
 import { countRecentForgotten } from '../utils/forgotten';
 import { buildTomorrowPreview } from '../utils/tomorrowPreview';
 import { getNextDepartureDate, getTodayString, toDateString } from '../utils/time';
@@ -19,11 +17,6 @@ interface TomorrowPreviewModalProps {
 }
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-// 위치 권한이 없을 때 — DashboardScreen과 같은 폴백(서울시청)
-const FALLBACK_LAT = 37.5665;
-const FALLBACK_LON = 126.978;
 
 // 자기 전 정리 — 다음 외출 날 체크리스트 미리보기 (docs/외출-감지-재설계.md 5장).
 // 그날 요일·일정·예보로 무엇이 뜰지 보여주고, 그날만 챙길 것을 바로 더할 수 있다.
@@ -55,27 +48,13 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
     setIsToday(toDateString(next) === getTodayString());
     setLoading(true);
 
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const nextStart = new Date(next);
-    nextStart.setHours(0, 0, 0, 0);
-    const dayOffset = Math.round((nextStart.getTime() - todayStart.getTime()) / DAY_MS);
-
+    // 자기 전 정리 알림의 "다음 외출: …"과 같은 데이터 (services/nightly/previewInputs)
     (async () => {
       try {
-        const [dayEvents, coords] = await Promise.all([
-          CalendarService.getEventsForDay(dayOffset),
-          getCurrentCoords(),
-        ]);
-        const dayOutlook = await WeatherService.getDayOutlook(
-          coords?.lat ?? FALLBACK_LAT,
-          coords?.lon ?? FALLBACK_LON,
-          next,
-          userSettings.departureTime
-        );
+        const inputs = await fetchPreviewInputs(next, userSettings.departureTime);
         if (cancelled) return;
-        setEvents(dayEvents);
-        setOutlook(dayOutlook);
+        setEvents(inputs.events);
+        setOutlook(inputs.outlook);
       } catch {
         // 각 서비스가 실패를 빈 값으로 돌려주지만, 예상 밖 예외에도 로딩이 멈추지 않게.
       } finally {

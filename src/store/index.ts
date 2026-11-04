@@ -107,6 +107,7 @@ interface AppActions {
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   setMapApp: (app: MapApp) => void;
   completeOnboarding: () => void;
+  ensureOnboardedDate: () => void;
   setWeatherItemEnabled: (label: string, enabled: boolean) => void;
   setPurposeItemEnabled: (purposeId: PurposeId, label: string, enabled: boolean) => void;
   addCustomKeyword: (purposeId: PurposeId, keyword: string) => void;
@@ -224,6 +225,7 @@ const defaultState: AppState = {
     sensitivityLevel: 3,
     learnedDelta: 0,
     onboarded: false,
+    onboardedDate: null,
     disabledWeatherItems: [],
     disabledPurposeItems: [],
     customKeywords: {},
@@ -567,7 +569,12 @@ export const useAppStore = create<AppStore>()(
       setSensitivity: (level) => set((state) => patchSettings(state, { sensitivityLevel: level })),
       setMapApp: (app) => set((state) => patchSettings(state, { mapApp: app })),
 
-      completeOnboarding: () => set((state) => patchSettings(state, { onboarded: true })),
+      completeOnboarding: () => set((state) => patchSettings(state, { onboarded: true, onboardedDate: getTodayString() })),
+      ensureOnboardedDate: () => set((state) =>
+        state.userSettings.onboarded && !state.userSettings.onboardedDate
+          ? patchSettings(state, { onboardedDate: getTodayString() })
+          : {}
+      ),
 
       setWeatherItemEnabled: (label, enabled) =>
         set((state) =>

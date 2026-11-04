@@ -15,6 +15,7 @@ import { Alert, Linking } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { SignalLog } from './signalLog';
+import { markOutingToday } from '@/services/nightly/outingLog';
 
 export const HOME_GEOFENCE_TASK = 'ahmatda-home-geofence';
 // Google은 지오펜스 반경을 최소 100~150m로 권한다 (그보다 작으면 실내 GPS 오차로 오탐이 잦다).
@@ -76,6 +77,8 @@ TaskManager.defineTask<GeofenceTaskData>(HOME_GEOFENCE_TASK, async ({ data, erro
 
   if (data.eventType === Location.GeofencingEventType.Exit) {
     await SignalLog.record('locationExit', now);
+    // 감시 창 밖(주말 오후 등)의 외출도 자기 전 정리에는 "외출한 날"이다
+    await markOutingToday();
   } else if (data.eventType === Location.GeofencingEventType.Enter) {
     await SignalLog.record('locationEnter', now);
   } else {

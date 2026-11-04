@@ -16,6 +16,8 @@ import { parseLeaveLink } from '@/services/departure/leaveLink';
 import { leaveResultMessage, pressLeave } from '@/services/departure/leave';
 import { addWalkingListener, syncWalkingDetection } from './modules/ahmatda-motion';
 import { DepartureService } from '@/services/departure/DepartureService';
+import { NightlyService } from '@/services/nightly/NightlyService';
+import { OutingLog } from '@/services/nightly/outingLog';
 // 집 지오펜스 태스크 정의 — TaskManager.defineTask는 번들 최상위에서 돌아야 한다
 // (앱이 화면 없이 백그라운드로 깨어나도 태스크가 정의돼 있게). import만으로 정의된다.
 import { HomeGeofence } from '@/services/departure/homeGeofence';
@@ -29,6 +31,8 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
 
 export default function App() {
   const userSettings   = useAppStore(state => state.userSettings);
+  // 자기 전 정리 알림의 "다음 외출: …" 한 줄이 이것들로 정해진다 — 바뀌면 다시 계획한다.
+  const permanentRoutines = useAppStore(state => state.permanentRoutines);
   // 앱 밖 표시(출발 알림·잠금화면·홈 위젯)에 쓰이는 요약만 문자열로 구독한다 —
   // checklist 배열 전체를 구독하면 보이는 내용이 그대로여도(재빌드로 배열 identity만
   // 바뀌는 경우, 체크된 항목 삭제 등) 네이티브 알림 취소+재예약이 매번 일어난다.
@@ -60,6 +64,7 @@ export default function App() {
         syncWalkingDetection();
         HomeGeofence.sync();
         AwayPlaceService.tick();
+        OutingLog.observeWifi().then(() => NightlyService.plan());
       }
     });
 
@@ -113,9 +118,16 @@ export default function App() {
     // 온보딩 완료 또는 출발시각·자기 전 정리 시각 변경 시 정리 알림을 재예약한다.
     // (본문에 출발 시각이 들어가서 출발시각 변경에도 반응한다.)
     // 출발 알림은 아래 effect가 전담한다.
+    // 날짜별로 따로 예약하고 오늘 밤 것은 외출 여부·다음 외출에 따라 바꾼다 (NightlyService).
+    // 설정·루틴이 바뀌면 미리보기 캐시를 쓰지 않고 다시 계산한다.
     if (!userSettings.onboarded) return;
-    NotificationService.scheduleNightlyCheck(userSettings.departureTime, userSettings.nightlyCheckTime);
-  }, [userSettings.onboarded, userSettings.departureTime, userSettings.nightlyCheckTime]);
+    useAppStore.getState().ensureOnboardedDate();
+    OutingLog.observeWifi().then(() => NightlyService.plan({ fresh: true }));
+  }, [
+    userSettings.onboarded, userSettings.departureTime, userSettings.nightlyCheckTime, userSettings.alertPreference,
+    userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, userSettings.customKeywords,
+    userSettings.commuteMode, permanentRoutines,
+  ]);
 
   useEffect(() => {
     // 출발 알림 시각에 맞춰 백그라운드 확인 태스크 예약 — 정리 시각과는 무관해서 따로 둔다.
