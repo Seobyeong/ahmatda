@@ -256,6 +256,27 @@ export const NotificationService = {
       },
     });
   },
+
+  // 집 밖 장소에서 머물다 떠날 때 — 아침에 챙긴 것 중 꺼내 쓰는 물건 (docs/외출-감지-재설계.md 4장).
+  // 긴급 알림보다 한 단계 부드럽게: 진동 짧게, 같은 id라 새로 오면 앞의 것을 대신한다.
+  async triggerPlaceLeaveAlert(items: ChecklistItem[]): Promise<void> {
+    const labels = items.slice(0, 3).map(i => `· ${i.label}`).join('\n');
+    const extra  = items.length > 3 ? `\n외 ${items.length - 3}개` : '';
+
+    await notifee.displayNotification({
+      id:    'place-leave',
+      title: '두고 가는 거 없나요? 👀',
+      body:  `여기서 꺼내 쓴 물건 챙기셨나요?\n${labels}${extra}`,
+      android: {
+        channelId:   CHANNEL_CHECKLIST,
+        importance:  AndroidImportance.HIGH,
+        pressAction: { id: 'open-checklist', launchActivity: 'default' },
+        sound:       'default',
+        vibrationPattern: [0, 300],
+        timeoutAfter: 30 * 60 * 1000,
+      },
+    });
+  },
 };
 
 // 알림 이벤트 핸들러 — App.tsx의 onForegroundEvent(포그라운드)와

@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionRequest
+import com.google.android.gms.location.DetectedActivity
 
 // 활동 전환 구독 걸기/풀기 — JS 모듈과 부팅 리시버가 같이 쓴다.
 object MotionRegistration {
@@ -28,7 +29,8 @@ object MotionRegistration {
       onResult(false)
       return
     }
-    val transitions = ActivityTransitionReceiver.MOVING_TYPES.map { type ->
+    // 움직임 시작(외출 판정) + 정지·탈것 시작(집 밖 머묾 판정, 7단계)
+    val transitions = (ActivityTransitionReceiver.MOVING_TYPES + DetectedActivity.STILL + DetectedActivity.IN_VEHICLE).map { type ->
       ActivityTransition.Builder()
         .setActivityType(type)
         .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)

@@ -304,6 +304,10 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
     if (commute) setCommuteMode(commute);
     setNightlyCheckTime(nightly);
     setStep(3);
+    // "자주"는 집 밖 머묾 알림을 켠다 — 위치 '항상 허용'이 없으면 동작하지 않아 이때 한 번 권한다.
+    if (alertPref === 'frequent' && permissions.location === 'granted' && permissions.backgroundLocation !== 'granted') {
+      requestBackgroundLocation();
+    }
   };
 
   const handleStart = () => {

@@ -4,6 +4,7 @@ import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { useAppStore } from '@/store';
 import { CalendarService } from '@/services/calendar/CalendarService';
 import { AiHintService } from '@/services/ai/AiHintService';
+import { AwayPlaceService } from '@/services/departure/AwayPlaceService';
 
 const DEPARTURE_TASK_ID = 'ahmatda-departure-check';
 
@@ -25,7 +26,9 @@ export const BackgroundTaskService = {
         // AI 미리 계산은 주기 폴링에서만 한다. 출발 알림 태스크는 알림 판단만 하고 끝내야
         // 한다 — 알림 시각이 AI 응답 시간에 영향받으면 안 된다(AI 연결 설계 4장 규칙 4).
         if (taskId !== DEPARTURE_TASK_ID) {
-          await BackgroundTaskService._precomputeAiHints();
+          // 집 밖 머묾 확인(감시 창과 무관하게 하루 종일, 켜져 있을 때만)과 AI 미리 계산은 서로 무관하다.
+          // 위치 조회가 길어져도 OS 백그라운드 실행 시간 안에 둘 다 끝나게 같이 돌린다.
+          await Promise.all([AwayPlaceService.tick(), BackgroundTaskService._precomputeAiHints()]);
         }
         BackgroundFetch.finish(taskId);
       },

@@ -17,6 +17,8 @@ import { DepartureService } from '@/services/departure/DepartureService';
 // 집 지오펜스 태스크 정의 — TaskManager.defineTask는 번들 최상위에서 돌아야 한다
 // (앱이 화면 없이 백그라운드로 깨어나도 태스크가 정의돼 있게). import만으로 정의된다.
 import { HomeGeofence } from '@/services/departure/homeGeofence';
+// 집 밖 장소 지오펜스 태스크 정의 (같은 이유로 최상위 import)
+import { AwayPlaceService } from '@/services/departure/AwayPlaceService';
 
 // 백그라운드 이벤트 핸들러 등록 (앱 실행 전 최상단에 등록 필수)
 notifee.onBackgroundEvent(async ({ type, detail }) => {
@@ -55,6 +57,7 @@ export default function App() {
       if (state === 'active') {
         syncWalkingDetection();
         HomeGeofence.sync();
+        AwayPlaceService.tick();
       }
     });
 
@@ -62,6 +65,8 @@ export default function App() {
     // 기록해 두고, 다음 판정(폴링·Wi-Fi·지오펜스)이 함께 본다. 감시 창 밖이면 판정이 알아서 거른다.
     const removeWalkingListener = addWalkingListener(() => {
       DepartureService.evaluate().catch(() => {});
+      // 머문 자리를 벗어난 뒤 걷기가 오면 그때 "떠남"이 확정된다
+      AwayPlaceService.tick();
     });
 
     // 외출이 확정되면(어느 신호로든) Wi-Fi 리스너는 더 돌 이유가 없다. 앱이 떠 있으면 토스트도 띄운다.

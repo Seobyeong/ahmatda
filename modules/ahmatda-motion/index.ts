@@ -13,6 +13,8 @@ interface AhmatdaMotionNative {
   start(): Promise<boolean>;
   stop(): Promise<void>;
   getWalkingStarts(): number[];
+  getStillStarts(): number[];
+  getVehicleStarts(): number[];
   addListener(event: 'onWalkingStart', listener: (e: { at: number }) => void): Subscription;
 }
 
@@ -65,6 +67,16 @@ export async function syncWalkingDetection(): Promise<boolean> {
 
 export function getWalkingStarts(): number[] {
   return native?.getWalkingStarts() ?? [];
+}
+
+// 정지 시작 시각들 — 집 밖 머묾 판정 (docs/외출-감지-재설계.md 4장). 마지막 움직임 이후 첫 정지만 남는다.
+export function getStillStarts(): number[] {
+  return native?.getStillStarts?.() ?? [];
+}
+
+// 탈것(버스·지하철·차) 시작 시각들 — 머묾 판정에서 움직임으로 센다 (외출 판정의 걷기는 아니다)
+export function getVehicleStarts(): number[] {
+  return native?.getVehicleStarts?.() ?? [];
 }
 
 export function addWalkingListener(listener: (at: number) => void): () => void {

@@ -29,7 +29,8 @@ import { SensitivitySelector } from './SensitivitySelector';
 import { TimeInput } from './TimeInput';
 import { PersonalizeModal } from './PersonalizeModal';
 import { ChoiceList } from './ChoiceList';
-import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES } from '../constants/preferences';
+import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
+import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
 import type { FeedbackType } from '../types';
 
 interface SettingsPanelProps {
@@ -85,6 +86,9 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const alertPreference = useAppStore((s) => s.userSettings.alertPreference);
   const commuteMode = useAppStore((s) => s.userSettings.commuteMode);
   const setAlertPreference = useAppStore((s) => s.setAlertPreference);
+  const awayPlaceAlert = useAppStore((s) => s.userSettings.awayPlaceAlert);
+  const setAwayPlaceAlert = useAppStore((s) => s.setAwayPlaceAlert);
+  const awayPlaceOn = isAwayPlaceAlertOn({ alertPreference, awayPlaceAlert });
   const setCommuteMode = useAppStore((s) => s.setCommuteMode);
   const learnedDelta = useAppStore((s) => s.userSettings.learnedDelta);
   const sensitivityLevel = useAppStore((s) => s.userSettings.sensitivityLevel);
@@ -125,6 +129,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [hasHome, setHasHome] = useState(false);
   const [homeRegisterStatus, setHomeRegisterStatus] = useState<'idle' | 'busy' | 'active' | 'saved' | 'error'>('idle');
   const [bgLocation, setBgLocation] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+  const [motionGranted, setMotionGranted] = useState(false);
   // 키 자체는 화면 상태에 들고 있지 않는다 — 있는지 여부만 안다.
   const [aiHasKey, setAiHasKey] = useState(false);
   const [aiKeyDraft, setAiKeyDraft] = useState('');
@@ -138,6 +143,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
         setCalendarConnected(status === 'authorized')
       );
       HomeGeofence.getHomeCoords().then((c) => setHasHome(c !== null));
+      hasMotionPermission().then(setMotionGranted).catch(() => {});
       Location.getBackgroundPermissionsAsync()
         .then((r) => setBgLocation(r.granted ? 'granted' : r.status === 'undetermined' ? 'undetermined' : 'denied'))
         .catch(() => {});
@@ -268,6 +274,28 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     setHomeRegisterStatus(!result ? 'error' : result.active ? 'active' : 'saved');
   };
 
+  // 집 밖 머묾 알림은 위치 '항상 허용'과 신체 활동(정지·걷기)이 있어야 동작한다 — 켤 때 없으면
+  // 권한다 (docs/외출-감지-재설계.md 4장 "켤 때 '항상 허용'을 권장하는 안내").
+  const recommendPermissionsIfNeeded = async () => {
+    if (isMotionSupported() && !motionGranted) {
+      const granted = await requestMotionPermission().catch(() => false);
+      setMotionGranted(granted);
+      if (granted) syncWalkingDetection();
+    }
+    if (bgLocation !== 'granted') await handleBackgroundLocation();
+  };
+
+  const handleAlertPreference = (pref: typeof alertPreference) => {
+    if (pref === alertPreference) return;
+    setAlertPreference(pref);
+    if (pref === 'frequent') recommendPermissionsIfNeeded();
+  };
+
+  const handleAwayPlaceToggle = (on: boolean) => {
+    setAwayPlaceAlert(on);
+    if (on) recommendPermissionsIfNeeded();
+  };
+
   // 온보딩과 같은 안내·재요청 판단을 HomeGeofence가 한다 (Play "눈에 띄는 공개").
   const handleBackgroundLocation = async () => {
     const result = await HomeGeofence.promptBackgroundPermission();
@@ -333,7 +361,26 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
         </View>
 
         <Text style={styles.sectionTitle}>알림 성향</Text>
-        <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPreference} onChange={setAlertPreference} />
+        <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPreference} onChange={handleAlertPreference} />
+        <View style={styles.weatherRow}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.routineLabel}>집 밖에서 떠날 때 알림</Text>
+            <Text style={styles.weatherDescription}>
+              {!isMotionSupported()
+                ? '이 기기에서는 아직 쓸 수 없어요'
+                : awayPlaceOn && (bgLocation !== 'granted' || !motionGranted)
+                  ? `켜져 있지만 ${bgLocation !== 'granted' ? "위치 '항상 허용'" : '신체 활동 권한'}이 있어야 동작해요`
+                  : '20분 넘게 머문 곳을 떠날 때, 아침에 챙긴 충전기·우산 같은 물건을 알려요 (하루 3번까지)'}
+            </Text>
+          </View>
+          <Switch
+            value={awayPlaceOn}
+            onValueChange={handleAwayPlaceToggle}
+            disabled={!isMotionSupported()}
+            trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
+            thumbColor={Colors.white}
+          />
+        </View>
 
         <Text style={styles.sectionTitle}>주 이동수단</Text>
         <ChoiceList choices={COMMUTE_CHOICES} value={commuteMode} onChange={setCommuteMode} />

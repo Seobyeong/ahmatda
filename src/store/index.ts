@@ -101,6 +101,7 @@ interface AppActions {
   updateDepartureTime: (time: string) => void;
   setNightlyCheckTime: (time: string) => void;
   setAlertPreference: (pref: AlertPreference) => void;
+  setAwayPlaceAlert: (on: boolean) => void;
   setCommuteMode: (mode: CommuteMode) => void;
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
@@ -217,6 +218,7 @@ const defaultState: AppState = {
     departureTime: '08:15',
     nightlyCheckTime: '22:00',
     alertPreference: 'normal',
+    awayPlaceAlert: null,
     commuteMode: null,
     homeBssid: null,
     sensitivityLevel: 3,
@@ -550,7 +552,14 @@ export const useAppStore = create<AppStore>()(
       // 유저 설정
       updateDepartureTime: (time) => set((state) => patchSettings(state, { departureTime: time })),
       setNightlyCheckTime: (time) => set((state) => patchSettings(state, { nightlyCheckTime: time })),
-      setAlertPreference: (pref) => set((state) => patchSettings(state, { alertPreference: pref })),
+      // 성향을 다시 고르면 집 밖 머묾 알림도 성향을 따르게 되돌린다 (스위치로 따로 정한 값은 풀림).
+      // 같은 성향을 다시 누른 건 바꾼 게 아니다 — 스위치로 끈 값을 지우지 않는다.
+      setAlertPreference: (pref) => set((state) =>
+        state.userSettings.alertPreference === pref
+          ? {}
+          : patchSettings(state, { alertPreference: pref, awayPlaceAlert: null })
+      ),
+      setAwayPlaceAlert: (on) => set((state) => patchSettings(state, { awayPlaceAlert: on })),
       setCommuteMode: (mode) => set((state) => patchSettings(state, { commuteMode: mode })),
 
       setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
