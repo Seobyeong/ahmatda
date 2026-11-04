@@ -15,6 +15,7 @@ interface AhmatdaMotionNative {
   getWalkingStarts(): number[];
   getStillStarts(): number[];
   getVehicleStarts(): number[];
+  clearRecords?(): void;
   addListener(event: 'onWalkingStart', listener: (e: { at: number }) => void): Subscription;
 }
 
@@ -83,4 +84,9 @@ export function addWalkingListener(listener: (at: number) => void): () => void {
   if (!native) return () => {};
   const subscription = native.addListener('onWalkingStart', (e) => listener(e.at));
   return () => subscription.remove();
+}
+
+// 진단 화면의 "테스트 기록 지우기" — 걷기·탈것·정지 기록을 지운다
+export function clearMotionRecords(): void {
+  native?.clearRecords?.();
 }

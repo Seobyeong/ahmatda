@@ -28,6 +28,7 @@ import { DAILY_CALL_LIMIT } from '../services/ai/hints';
 import { SensitivitySelector } from './SensitivitySelector';
 import { TimeInput } from './TimeInput';
 import { PersonalizeModal } from './PersonalizeModal';
+import { DiagnosticsModal } from './DiagnosticsModal';
 import { ChoiceList } from './ChoiceList';
 import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
 import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
@@ -134,6 +135,8 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const [aiHasKey, setAiHasKey] = useState(false);
   const [aiKeyDraft, setAiKeyDraft] = useState('');
   const [personalizeVisible, setPersonalizeVisible] = useState(false);
+  // 실기기 검증용 진단 화면 — "설정" 제목을 길게 눌러 연다 (docs/실기기-검증-가이드.md)
+  const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -314,7 +317,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
     <Animated.View style={[styles.container, { transform: [{ translateY }] }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>설정</Text>
+          <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting>설정</Text>
           <Pressable onPress={onClose} hitSlop={8}>
             <X size={20} color={Colors.slate500} />
           </Pressable>
@@ -476,6 +479,7 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
           </Pressable>
         </View>
         <PersonalizeModal visible={personalizeVisible} onClose={() => setPersonalizeVisible(false)} />
+        <DiagnosticsModal visible={diagnosticsVisible} onClose={() => setDiagnosticsVisible(false)} />
 
         <Text style={styles.sectionTitle}>날씨 알림 항목</Text>
         {WEATHER_ITEMS.map((weatherItem) => {

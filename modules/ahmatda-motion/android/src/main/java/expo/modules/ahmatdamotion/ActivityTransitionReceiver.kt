@@ -101,6 +101,12 @@ class ActivityTransitionReceiver : BroadcastReceiver() {
         .apply()
     }
 
+    // 진단 화면의 "테스트 기록 지우기" — 같은 날 시나리오를 반복할 때 앞선 걷기·정지가 판정에 섞이지 않게
+    fun clearAll(context: Context) {
+      context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .edit().remove(KEY_WALKING).remove(KEY_STILL).remove(KEY_VEHICLE).apply()
+    }
+
     fun readStill(context: Context): List<Long> = readAll(context, KEY_STILL)
     fun readVehicle(context: Context): List<Long> = readAll(context, KEY_VEHICLE)
 

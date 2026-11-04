@@ -49,6 +49,11 @@ export const OutingLog = {
     return serialized(read);
   },
 
+  // 진단 화면의 "테스트 기록 지우기"
+  clear(): Promise<void> {
+    return serialized(() => AsyncStorage.removeItem(KEY));
+  },
+
   // 외출 흔적. 이미 있으면 그대로. 새로 생겼으면 true (자기 전 정리를 다시 계획할 신호).
   markOut(date: string): Promise<boolean> {
     return serialized(async () => {

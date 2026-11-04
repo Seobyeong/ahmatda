@@ -134,6 +134,7 @@ interface AppActions {
   // UI
   // [떠나기]
   recordLeaveIntent: () => void;
+  clearLeaveIntent: () => void; // 진단 화면의 테스트 기록 지우기
 
   dismissStatus: () => void;
   showToast: (message: string) => void;
@@ -791,6 +792,7 @@ export const useAppStore = create<AppStore>()(
         }),
 
       recordLeaveIntent: () => set({ leaveIntent: { date: getTodayString(), at: Date.now() } }),
+      clearLeaveIntent: () => set({ leaveIntent: null }),
 
       // UI
       dismissStatus: () => set({ statusDismissed: true }),

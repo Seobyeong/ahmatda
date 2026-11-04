@@ -42,6 +42,12 @@ async function getAvailability(): Promise<SignalAvailability> {
   return { walking, location };
 }
 
+// 판정 재료 — evaluateOnce와 진단 화면이 같이 쓴다
+async function gatherInputs(leaveIntent: { date: string; at: number } | null) {
+  const [signals, availability] = await Promise.all([collectSignals(leaveIntent), getAvailability()]);
+  return { signals, availability };
+}
+
 async function collectSignals(leaveIntent: { date: string; at: number } | null): Promise<DepartureSignal[]> {
   const signals: DepartureSignal[] = [...(await SignalLog.getAll())];
   for (const at of getWalkingStarts()) signals.push({ type: 'walking', at });
@@ -73,7 +79,8 @@ async function evaluateOnce(): Promise<ChecklistItem[] | null> {
   const today = getTodayString();
   if ((await AsyncStorage.getItem(ALERT_DATE_KEY)) === today) return null;
 
-  const decision = decideDeparture(await collectSignals(leaveIntent), await getAvailability(), Date.now());
+  const { signals, availability } = await gatherInputs(leaveIntent);
+  const decision = decideDeparture(signals, availability, Date.now());
   if (decision.status === 'candidate') scheduleRecheck();
   if (decision.status !== 'confirmed') return null;
 
@@ -123,6 +130,43 @@ export const DepartureService = {
   // 오늘 이미 외출이 확정됐는지 — Wi-Fi 리스너를 다시 걸지 않으려고 본다.
   async hasDepartedToday(): Promise<boolean> {
     return (await AsyncStorage.getItem(DEPARTED_DATE_KEY)) === getTodayString();
+  },
+
+  // 진단 화면용 — 지금 판정에 들어가는 신호·사용 가능 여부·판정 결과와, 실제 알림 전에 거르는 조건을
+  // 알림 없이 본다. 판정 재료는 evaluateOnce와 같은 gatherInputs를 쓴다.
+  async inspect(): Promise<{
+    signals: DepartureSignal[];
+    availability: SignalAvailability;
+    decision: ReturnType<typeof decideDeparture>;
+    inWindow: boolean;
+    alertedDate: string | null;
+    departedDate: string | null;
+  }> {
+    const { useAppStore, whenHydrated } = await import('@/store');
+    await whenHydrated();
+    const { userSettings, leaveIntent } = useAppStore.getState();
+    const [{ signals, availability }, alertedDate, departedDate] = await Promise.all([
+      gatherInputs(leaveIntent),
+      AsyncStorage.getItem(ALERT_DATE_KEY),
+      AsyncStorage.getItem(DEPARTED_DATE_KEY),
+    ]);
+    return {
+      signals, availability, decision: decideDeparture(signals, availability, Date.now()),
+      inWindow: isWithinDepartureWindow(userSettings.departureTime), alertedDate, departedDate,
+    };
+  },
+
+  // 진단 화면의 "테스트 기록 지우기" — 오늘 알림 보냄·외출 확정 표시를 지워 같은 날 다시 시험할 수 있게.
+  // 판정과 같은 줄에 세운다 — 진행 중인 판정이 지운 뒤에 다시 써 넣지 않게.
+  resetForTest(): Promise<void> {
+    const work = async () => {
+      DepartureService.cancelRecheck();
+      await AsyncStorage.multiRemove([ALERT_DATE_KEY, DEPARTED_DATE_KEY]);
+      return null;
+    };
+    const next = running.then(work, work);
+    running = next.catch(() => null);
+    return next.then(() => {});
   },
 
   // 앱 언마운트 시

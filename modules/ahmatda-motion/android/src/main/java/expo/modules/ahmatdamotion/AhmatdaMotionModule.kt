@@ -41,6 +41,13 @@ class AhmatdaMotionModule : Module() {
       ActivityTransitionReceiver.readAll(context).map { it.toDouble() }
     }
 
+    // 진단 화면의 테스트 기록 지우기
+    Function("clearRecords") {
+      val context = appContext.reactContext ?: return@Function null
+      ActivityTransitionReceiver.clearAll(context)
+      null
+    }
+
     // 기록된 탈것 시작 시각들(epoch ms) — 집 밖 머묾 판정에서 "움직이는 중"으로 센다
     Function("getVehicleStarts") {
       val context = appContext.reactContext ?: return@Function emptyList<Double>()

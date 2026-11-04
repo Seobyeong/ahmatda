@@ -269,4 +269,24 @@ export const AwayPlaceService = {
   tick(): Promise<void> {
     return serialized(tickOnce).catch(() => {});
   },
+
+  // 진단 화면용
+  async inspect(): Promise<{ state: State; geofenceStarted: boolean; canRun: boolean }> {
+    const [state, geofenceStarted, ok] = await Promise.all([
+      readState(),
+      Location.hasStartedGeofencingAsync(PLACE_GEOFENCE_TASK).catch(() => false),
+      canRun(),
+    ]);
+    return { state, geofenceStarted, canRun: ok };
+  },
+
+  // 진단 화면의 "테스트 기록 지우기" — 머무는 자리와 오늘 보낸 횟수를 지운다. 이미 처리한 정지(handledStill)는
+  // 남긴다 — 지우면 지금 앉아 있는 자리를 곧바로 다시 잡아 GPS를 켜고 외출 흔적을 새로 남긴다.
+  resetForTest(): Promise<void> {
+    return serialized(async () => {
+      await stopPlaceGeofence();
+      const state = await readState();
+      await writeState({ ...state, sent: 0, place: null });
+    });
+  },
 };

@@ -75,4 +75,9 @@ export const SignalLog = {
   getAll(): Promise<DepartureSignal[]> {
     return serialized(read);
   },
+
+  // 진단 화면의 "테스트 기록 지우기" — 같은 날 실기기 시나리오를 반복할 때
+  clear(): Promise<void> {
+    return serialized(() => AsyncStorage.removeItem(LOG_KEY));
+  },
 };
