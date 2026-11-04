@@ -45,6 +45,14 @@ export async function pressLeave(): Promise<LeaveResult> {
   return { kind: 'reminded', unchecked };
 }
 
+// 앱 화면의 [떠나기]와 위젯 [떠나기]가 같은 토스트를 띄운다.
+export function leaveResultMessage(result: LeaveResult): string {
+  if (result.kind === 'all-packed') return '다 챙겼어요. 다녀오세요!';
+  const names = result.unchecked.slice(0, 2).map((i) => i.label).join(', ');
+  const more = result.unchecked.length > 2 ? ` 외 ${result.unchecked.length - 2}개` : '';
+  return `잠깐! ${names}${more} 아직 안 챙겼어요`;
+}
+
 // 마지막 확인 알림의 [다 챙겼어요]
 export async function markAllPacked(): Promise<void> {
   const useAppStore = await getStore();

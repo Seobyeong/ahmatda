@@ -18,5 +18,11 @@ class AhmatdaWidgetModule : Module() {
         .apply()
       DepartureWidgetProvider.updateAll(context)
     }
+
+    // 위젯 [떠나기] 링크의 n이 위젯이 발급한 값인지 확인하고 쓴다 (한 번만 true). DepartureWidgetProvider 참고.
+    Function("consumeLeaveNonce") { nonce: String ->
+      val context = appContext.reactContext ?: return@Function false
+      DepartureWidgetProvider.consumeLeaveNonce(context, nonce)
+    }
   }
 }

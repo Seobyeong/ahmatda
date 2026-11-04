@@ -3,28 +3,51 @@
   android:id="@+id/widget_root"
   android:layout_width="match_parent"
   android:layout_height="match_parent"
-  android:orientation="vertical"
+  android:orientation="horizontal"
   android:gravity="center_vertical"
   android:padding="12dp"
   android:background="@drawable/ahmatda_widget_background">
 
-  <TextView
-    android:id="@+id/widget_title"
-    android:layout_width="match_parent"
+  <LinearLayout
+    android:layout_width="0dp"
     android:layout_height="wrap_content"
-    android:maxLines="1"
-    android:ellipsize="end"
-    android:textColor="#1e293b"
-    android:textSize="16sp"
-    android:textStyle="bold" />
+    android:layout_weight="1"
+    android:orientation="vertical">
 
+    <TextView
+      android:id="@+id/widget_title"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:maxLines="1"
+      android:ellipsize="end"
+      android:textColor="#1e293b"
+      android:textSize="16sp"
+      android:textStyle="bold" />
+
+    <TextView
+      android:id="@+id/widget_detail"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="2dp"
+      android:maxLines="2"
+      android:ellipsize="end"
+      android:textColor="#475569"
+      android:textSize="13sp" />
+  </LinearLayout>
+
+  <!-- [떠나기] — 앱의 [떠나기]와 같은 흐름 (docs/외출-감지-재설계.md 2장) -->
   <TextView
-    android:id="@+id/widget_detail"
-    android:layout_width="match_parent"
+    android:id="@+id/widget_leave"
+    android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:layout_marginTop="2dp"
-    android:maxLines="2"
-    android:ellipsize="end"
-    android:textColor="#475569"
-    android:textSize="13sp" />
+    android:layout_marginStart="8dp"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
+    android:background="@drawable/ahmatda_widget_leave_background"
+    android:text="@string/ahmatda_widget_leave"
+    android:textColor="#FFFFFF"
+    android:textSize="14sp"
+    android:textStyle="bold" />
 </LinearLayout>

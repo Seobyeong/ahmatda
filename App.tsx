@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import notifee, { EventType } from '@notifee/react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -11,7 +11,9 @@ import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskService';
 import { useAppStore } from '@/store';
 import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
-import { setWidgetSnapshot } from './modules/ahmatda-widget';
+import { consumeLeaveNonce, setWidgetSnapshot } from './modules/ahmatda-widget';
+import { parseLeaveLink } from '@/services/departure/leaveLink';
+import { leaveResultMessage, pressLeave } from '@/services/departure/leave';
 import { addWalkingListener, syncWalkingDetection } from './modules/ahmatda-motion';
 import { DepartureService } from '@/services/departure/DepartureService';
 // 집 지오펜스 태스크 정의 — TaskManager.defineTask는 번들 최상위에서 돌아야 한다
@@ -89,7 +91,22 @@ export default function App() {
       handleNotificationEvent(type, detail);
     });
 
-    return () => { unsubscribe(); appStateSub.remove(); removeWalkingListener(); removeDepartedListener(); DepartureService.cancelRecheck(); };
+    // 홈 위젯 [떠나기] — 앱을 ahmatda://leave?n=… 로 연다. 꺼져 있었으면 처음 URL로, 떠 있었으면 url
+    // 이벤트로 온다. 앱 화면의 [떠나기]와 같은 흐름. 화면과 무관하게 여기서 받는다 (대시보드가 아직 안 떠도
+    // 놓치지 않게). n이 위젯이 발급한 값인지는 네이티브가 확인하고 한 번 쓰면 버린다 — 다른 앱이 보낸 링크,
+    // 최근 앱 목록에서 다시 연 예전 링크는 여기서 걸러진다.
+    const onUrl = async (url: string | null) => {
+      const nonce = parseLeaveLink(url);
+      if (!nonce || !consumeLeaveNonce(nonce)) return;
+      const { whenHydrated } = await import('@/store');
+      await whenHydrated();
+      if (!useAppStore.getState().userSettings.onboarded) return;
+      useAppStore.getState().showToast(leaveResultMessage(await pressLeave()));
+    };
+    Linking.getInitialURL().then(onUrl).catch(() => {});
+    const urlSub = Linking.addEventListener('url', ({ url }) => { onUrl(url).catch(() => {}); });
+
+    return () => { unsubscribe(); appStateSub.remove(); urlSub.remove(); removeWalkingListener(); removeDepartedListener(); DepartureService.cancelRecheck(); };
   }, []);
 
   useEffect(() => {

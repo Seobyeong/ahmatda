@@ -31,6 +31,18 @@
 | 용도 | App Functionality (날씨/미세먼지 조회) |
 | 비고 | Not Linked to You로 확정(2026-07-06) — 원본 좌표는 저장·전송하지 않고, 기상청 격자좌표/시도명으로 변환한 값만 외부 API로 전송되며, 계정 자체가 없어 특정 개인과 연결할 식별자가 없음 |
 
+**백그라운드 위치(외출 감지 재설계, 2026-11-04 추가) — 답변 변화 없음.** 집 반경·머문 장소 지오펜스와
+집 위치·머무는 자리 좌표는 기기 안에서만 쓰고 전송하지 않는다. Apple 정의상 "Collect"는 기기 밖으로
+보내 접근 가능한 것이고 "기기 안에서만 처리한 데이터는 수집이 아니며 공개하지 않아도 된다"
+(developer.apple.com/app-store/app-privacy-details, 2026-11-04 확인). Info.plist에
+`NSLocationAlwaysAndWhenInUseUsageDescription` 문구는 추가해 둠 (iOS 빌드는 macOS 확보 후).
+
+## 1-1. 건강 및 피트니스 (Health & Fitness > Fitness)
+
+- Apple의 Fitness 유형은 "Motion and Fitness API를 포함한 피트니스·운동 데이터"다. iOS 걷기 감지
+  (CMMotionActivity)는 아직 구현 전이고, 구현해도 Android처럼 **시작 시각만 기기 안에 두고 전송하지
+  않으면 "Not Collected"**. 구현할 때 `NSMotionUsageDescription` 문구가 필요하다.
+
 ## 2. 연락처 정보 (Contact Info)
 
 이름, 이메일, 전화번호 등 — **수집하지 않음.**

@@ -42,7 +42,7 @@ import { WeatherTimeline } from '../components/WeatherTimeline';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
 import { AiHintService } from '../services/ai/AiHintService';
-import { pressLeave } from '../services/departure/leave';
+import { leaveResultMessage, pressLeave } from '../services/departure/leave';
 import { TomorrowPreviewModal } from '../components/TomorrowPreviewModal';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import type { CalendarEvent, ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
@@ -401,18 +401,12 @@ export function DashboardScreen() {
     if (leaving) return;
     setLeaving(true);
     try {
-      const result = await pressLeave();
-      if (result.kind === 'all-packed') {
-        showToast('다 챙겼어요. 다녀오세요!');
-      } else {
-        const names = result.unchecked.slice(0, 2).map((i) => i.label).join(', ');
-        const more = result.unchecked.length > 2 ? ` 외 ${result.unchecked.length - 2}개` : '';
-        showToast(`잠깐! ${names}${more} 아직 안 챙겼어요`);
-      }
+      showToast(leaveResultMessage(await pressLeave()));
     } finally {
       setLeaving(false);
     }
   };
+
 
   const handleToggleAll = () => {
     if (allChecked) {
