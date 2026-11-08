@@ -300,7 +300,7 @@ export const NotificationService = {
         importance:  AndroidImportance.HIGH,
         pressAction: { id: 'open-checklist', launchActivity: 'default' },
         sound:       'default',
-        vibrationPattern: [0, 500, 200, 500],
+        vibrationPattern: [1, 500, 200, 500], // notifee는 0을 거부한다(양수만, 짝수 개)
       },
     });
   },
@@ -320,7 +320,7 @@ export const NotificationService = {
         importance:  AndroidImportance.HIGH,
         pressAction: { id: 'open-checklist', launchActivity: 'default' },
         sound:       'default',
-        vibrationPattern: [0, 300],
+        vibrationPattern: [1, 300], // notifee는 0을 거부한다(양수만, 짝수 개)
         timeoutAfter: 30 * 60 * 1000,
       },
     });

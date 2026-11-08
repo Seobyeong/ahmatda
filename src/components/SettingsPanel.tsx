@@ -35,6 +35,8 @@ import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWa
 import type { FeedbackType } from '../types';
 
 interface SettingsPanelProps {
+  /** 패널 윗변 위치 — 화면 기준, 보통 헤더 높이 */
+  top: number;
   visible: boolean;
   onClose: () => void;
 }
@@ -70,7 +72,7 @@ const WEATHER_ITEMS: { label: string; description: string }[] = [
   { label: '물병', description: '폭염 주의보일 때 표시' },
 ];
 
-export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   const translateY = useRef(new Animated.Value(visible ? 0 : -300)).current;
 
   useEffect(() => {
@@ -314,8 +316,22 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
   const recentFeedback = feedbackHistory.slice(-3).reverse();
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ translateY }] }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+    <Animated.View
+      // 패널 높이(maxHeight 420)가 -300 이동보다 커서, 닫힌 상태에서도 아래쪽이 비쳐 보이고
+      // 그 영역의 터치를 막았다. 닫히면 투명 + 터치 통과.
+      pointerEvents={visible ? 'auto' : 'none'}
+      style={[
+        styles.container,
+        {
+          top,
+          transform: [{ translateY }],
+          opacity: translateY.interpolate({ inputRange: [-300, -200, 0], outputRange: [0, 1, 1] }),
+        },
+      ]}
+    >
+      {/* 컨테이너 maxHeight만으로는 ScrollView 높이가 내용 높이로 잡혀 스크롤이 안 되고
+          내용이 패널 밖으로 넘쳤다. ScrollView 자체에도 같은 한도를 준다. */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} nestedScrollEnabled>
         <View style={styles.header}>
           <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting>설정</Text>
           <Pressable onPress={onClose} hitSlop={8}>
@@ -669,7 +685,6 @@ export function SettingsPanel({ visible, onClose }: SettingsPanelProps) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: '100%',
     left: 0,
     right: 0,
     maxHeight: 420,
@@ -682,6 +697,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
+  },
+  scroll: {
+    maxHeight: 420,
   },
   content: {
     padding: 20,

@@ -108,6 +108,7 @@ export function DashboardScreen() {
   const checklistYRef = useRef(0);
 
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const [quickAddText, setQuickAddText] = useState('');
 
   const checklist = useAppStore((s) => s.checklist);
@@ -468,7 +469,7 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.headerWrapper}>
+      <View style={styles.headerWrapper} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>아맞다</Text>
@@ -482,8 +483,6 @@ export function DashboardScreen() {
             <Settings size={20} color={Colors.slate600} />
           </Pressable>
         </View>
-
-        <SettingsPanel visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
       </View>
 
       <ScrollView
@@ -768,6 +767,10 @@ export function DashboardScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* 헤더 안에 두고 top:'100%'로 띄우면 패널이 부모 영역 밖에 놓여, Android에서
+          탭은 되지만 패널 안 스크롤 제스처가 뒤의 대시보드로 가버린다. 화면 직속으로 둔다. */}
+      <SettingsPanel top={headerHeight} visible={settingsVisible} onClose={() => setSettingsVisible(false)} />
 
       <TomorrowPreviewModal visible={tomorrowVisible} onClose={() => setTomorrowVisible(false)} />
 

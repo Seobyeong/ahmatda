@@ -25,8 +25,11 @@
     설정 > 앱 > 특별한 접근 권한 > 알람 및 리마인더에서 직접 허용해야 하며, 거부된 경우
     NotificationService.getExactAlarmStatus()로 확인하고 openExactAlarmSettings()로
     설정 화면으로 안내한다 (거부돼도 알림 자체가 실패하진 않고 배달 시각이 부정확해질 뿐).
+    tsbackgroundfetch 4.1.1이 같은 권한을 maxSdkVersion="33"으로 선언해서, 병합하면 그 제한이
+    앱에 붙어 Android 14+에서 권한 자체가 요청되지 않았다(트리거 알림 예약이 조용히 실패).
+    tools:remove로 그 제한을 떼어낸다.
   -->
-  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:remove="android:maxSdkVersion" />
 
   <!-- Wi-Fi BSSID 읽기 -->
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
