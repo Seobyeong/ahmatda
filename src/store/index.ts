@@ -10,6 +10,7 @@ import { getCurrentSlotIndex, getFeedbackOutingDate, getTodayString } from '../u
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
 import { isOneOff, isRoutineActiveOn, pruneExpiredOneOffs } from '../utils/routines';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
+import { ManualPurpose, isManualPurposeToday, restoredPurposeState } from './manualPurpose';
 import { countRecentForgotten, getForgottenBadge } from '../utils/forgotten';
 import { pruneHintCache, recordCall, type AiSuggestion } from '../services/ai/hints';
 import type { PersonalizePlan } from '../services/personalize/importPlan';
@@ -42,6 +43,8 @@ interface AppState {
   purposeId: PurposeId | null;
   autoDetected: boolean;
   autoDetectedEvent: CalendarEvent | null;
+  // 그날 직접 고른 목적 — store/manualPurpose.ts 참고
+  manualPurpose: ManualPurpose | null;
 
   // 날씨
   currentWeather: CurrentWeather | null;
@@ -210,6 +213,7 @@ const defaultState: AppState = {
   purposeId: null,
   autoDetected: false,
   autoDetectedEvent: null,
+  manualPurpose: null,
 
   currentWeather: null,
   weatherTimeline: [],
@@ -539,10 +543,19 @@ export const useAppStore = create<AppStore>()(
 
       // 목적
       setPurpose: (id) =>
-        set({ purposeId: id, autoDetected: false, autoDetectedEvent: null }),
+        set({
+          purposeId: id,
+          autoDetected: false,
+          autoDetectedEvent: null,
+          manualPurpose: { date: getTodayString(), id },
+        }),
 
-      setAutoDetected: (purposeId, event) =>
-        set({ purposeId, autoDetected: purposeId !== null, autoDetectedEvent: event }),
+      // 오늘 직접 고른 목적이 있으면 자동감지는 무시한다 — 앱을 켤 때마다 도는 감지가
+      // (일정이 없으면 null로) 수동 선택을 지워버리던 문제.
+      setAutoDetected: (purposeId, event) => {
+        if (isManualPurposeToday(get().manualPurpose, getTodayString())) return;
+        set({ purposeId, autoDetected: purposeId !== null, autoDetectedEvent: event });
+      },
 
       // 날씨
       setWeather: (weather) => set({ currentWeather: weather }),
@@ -837,6 +850,9 @@ export const useAppStore = create<AppStore>()(
           ...currentState,
           ...persisted,
           userSettings: { ...currentState.userSettings, ...persisted?.userSettings },
+          // 오늘 직접 고른 목적이면 되살린다. 복원 직후 체크리스트 재빌드가 목적 준비물을
+          // 빼버리지 않게 merge 단계에서 바로 넣는다.
+          ...restoredPurposeState(persisted?.manualPurpose, getTodayString()),
           // ai도 나중에 필드가 늘 수 있어 같은 이유로 한 겹 더 합친다.
           // 해석 결과 캐시는 앱이 켜질 때마다 만료분을 지운다 — 새 호출이 없어도(AI를 끄고
           // 안 쓰는 경우 등) 개인정보처리방침의 "180일 후 자동 삭제"가 지켜지게.
@@ -857,6 +873,8 @@ export const useAppStore = create<AppStore>()(
       partialize: (state) => ({
         checklist: state.checklist,
         checklistDate: state.checklistDate,
+        // 오늘 직접 고른 목적. 목적 id만이라 캘린더 일정 내용은 저장되지 않는다.
+        manualPurpose: state.manualPurpose,
         permanentRoutines: state.permanentRoutines,
         userSettings: state.userSettings,
         feedbackHistory: state.feedbackHistory,
