@@ -13,7 +13,8 @@ import notifee from '@notifee/react-native';
 import * as Location from 'expo-location';
 import NetInfo, { NetInfoStateType } from '@react-native-community/netinfo';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { AlarmClock, Bell, Calendar, Check, Footprints, MapPin } from 'lucide-react-native';
+import { AlarmClock, Bell, Calendar, Check, ChevronLeft, Footprints, MapPin } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -33,6 +34,8 @@ import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWa
 type OnboardingScreenProps = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
 type PermissionState = 'idle' | 'granted' | 'denied';
+
+const STEP_COUNT = 4;
 
 interface PermissionRowProps {
   icon: React.ReactNode;
@@ -66,7 +69,7 @@ function PermissionRow({
           <Check size={16} color={Colors.emerald500} />
         </View>
       ) : (
-        <Pressable style={styles.permissionButton} onPress={onRequest}>
+        <Pressable style={styles.permissionButton} onPress={onRequest} hitSlop={6} accessibilityRole="button">
           <Text style={styles.permissionButtonText}>
             {status === 'denied' && deniedActionLabel ? deniedActionLabel : '허용'}
           </Text>
@@ -77,6 +80,7 @@ function PermissionRow({
 }
 
 export function OnboardingScreen(_props: OnboardingScreenProps) {
+  const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [permissions, setPermissions] = useState<{
     calendar: PermissionState;
@@ -328,7 +332,39 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const locationGranted = permissions.location === 'granted';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 40 }]}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* 몇 단계 중 어디인지, 그리고 되돌아갈 길 — 없으면 잘못 고른 답을 고치려고 앱을 다시 깔아야 한다.
+          앞 단계의 답은 화면 상태에 남아 있어 돌아가도 그대로다. */}
+      <View style={styles.progressRow}>
+        {step > 0 ? (
+          <Pressable
+            style={styles.backButton}
+            onPress={() => setStep((s) => s - 1)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="이전 단계"
+          >
+            <ChevronLeft size={22} color={Colors.slate600} />
+          </Pressable>
+        ) : (
+          <View style={styles.backButton} />
+        )}
+        <View
+          style={styles.progressDots}
+          accessibilityRole="progressbar"
+          accessibilityLabel={`${STEP_COUNT}단계 중 ${step + 1}단계`}
+        >
+          {Array.from({ length: STEP_COUNT }, (_, i) => (
+            <View key={i} style={[styles.progressDot, i <= step && styles.progressDotActive]} />
+          ))}
+        </View>
+        <View style={styles.backButton} />
+      </View>
+
       {step === 0 ? (
         <View>
           <View style={styles.introArea}>
@@ -522,9 +558,32 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgDefault,
   },
   content: {
-    padding: 20,
-    paddingTop: 60,
-    paddingBottom: 60,
+    paddingHorizontal: 20,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  progressDot: {
+    width: 22,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.slate200,
+  },
+  progressDotActive: {
+    backgroundColor: Colors.indigo600,
   },
   introArea: {
     alignItems: 'center',

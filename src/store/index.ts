@@ -164,6 +164,33 @@ function generateItemId(): string {
   });
 }
 
+// 새 항목의 공통 모양. "오늘만" 항목과 루틴(매일·요일·특정 날짜)이 여러 액션에서
+// 만들어지는데, 필드를 각자 나열하면 하나가 빠지거나 어긋나기 쉬워 한 곳에 모은다.
+function newTempItem(label: string): ChecklistItem {
+  return { id: generateItemId(), label, icon: 'sparkles', tier: 0, badge: null, checked: false, temp: true, permanent: false };
+}
+
+function newRoutine(label: string, condition: Pick<ChecklistItem, 'days' | 'onDate'> = {}): ChecklistItem {
+  return {
+    id: generateItemId(),
+    label,
+    icon: 'check-circle',
+    tier: 3,
+    badge: null,
+    checked: false,
+    temp: false,
+    permanent: true,
+    ...condition,
+    updatedAt: Date.now(),
+  };
+}
+
+// 이미 있으면 같은 배열을 그대로 돌려준다 — patchSettings가 참조 비교로 "안 바뀜"을
+// 알아채서 updatedAt을 올리지 않게.
+function appendUnique<T>(list: T[], value: T): T[] {
+  return list.includes(value) ? list : [...list, value];
+}
+
 // 기기 로컬 전용 설정 — 계정 동기화 대상이 아니다.
 // 기기마다 붙는 AP가 다르므로 homeBssid는 기기에 남아야 하고, 따라서 이 값을 바꿨다고
 // userSettings 전체의 동기화 타임스탬프를 올리면 안 된다. 올리면 "집 Wi-Fi만 다시
@@ -284,21 +311,7 @@ export const useAppStore = create<AppStore>()(
         })),
 
       addTempItem: (label) =>
-        set((state) => ({
-          checklist: [
-            ...state.checklist,
-            {
-              id: generateItemId(),
-              label,
-              icon: 'sparkles',
-              tier: 0,
-              badge: null,
-              checked: false,
-              temp: true,
-              permanent: false,
-            },
-          ],
-        })),
+        set((state) => ({ checklist: [...state.checklist, newTempItem(label)] })),
 
       // 특정 날짜 1회 — 자기 전 정리의 "이 날만 추가". 조건 붙은 루틴으로 저장해서
       // 그날 조립 때 나타나고 지나면 정리된다 (docs/체크리스트-항목-속성.md 3장).
@@ -308,88 +321,48 @@ export const useAppStore = create<AppStore>()(
         const exists = get().permanentRoutines.some((r) => r.label === label && r.onDate === date);
         if (exists) return;
         set((state) => ({
-          permanentRoutines: [
-            ...state.permanentRoutines,
-            {
-              id: generateItemId(),
-              label,
-              icon: 'check-circle',
-              tier: 3,
-              badge: null,
-              checked: false,
-              temp: false,
-              permanent: true,
-              onDate: date,
-              updatedAt: Date.now(),
-            },
-          ],
+          permanentRoutines: [...state.permanentRoutines, newRoutine(label, { onDate: date })],
         }));
       },
 
       addPermanentRoutine: (label) =>
-        set((state) => ({
-          permanentRoutines: [
-            ...state.permanentRoutines,
-            {
-              id: generateItemId(),
-              label,
-              icon: 'check-circle',
-              tier: 3,
-              badge: null,
-              checked: false,
-              temp: false,
-              permanent: true,
-              updatedAt: Date.now(),
-            },
-          ],
-        })),
+        set((state) => ({ permanentRoutines: [...state.permanentRoutines, newRoutine(label)] })),
 
-      deleteItem: (id) => {
-        const item = get().checklist.find((i) => i.id === id);
-        if (!item) return;
+      // 한 번의 set으로 끝낸다 — set마다 구독자 알림과 persist 저장(전체 상태 직렬화)이
+      // 따라붙어서, 나눠 부르면 항목 하나 지우는 데 저장이 세 번 일어난다.
+      deleteItem: (id) =>
+        set((state) => {
+          const item = state.checklist.find((i) => i.id === id);
+          if (!item) return {};
 
-        set((state) => ({
-          checklist: state.checklist.filter((i) => i.id !== id),
-        }));
+          const next: Partial<AppState> = { checklist: state.checklist.filter((i) => i.id !== id) };
 
-        // 체크리스트 항목은 조립 때 새 id를 받아서 원래 루틴을 id로 찾을 수 없다. 라벨에 더해
-        // "1회 항목인지"까지 같아야 지운다 — 매일 "노트북"과 그날만 "노트북"이 같이 있을 때
-        // 하나를 지우면 다른 하나까지 사라지면 안 된다. (조립 때 {...routine}이라 onDate가 남아 있다.)
-        if (item.permanent) {
-          set((state) => ({
-            permanentRoutines: state.permanentRoutines.filter(
+          // 체크리스트 항목은 조립 때 새 id를 받아서 원래 루틴을 id로 찾을 수 없다. 라벨에 더해
+          // "1회 항목인지"까지 같아야 지운다 — 매일 "노트북"과 그날만 "노트북"이 같이 있을 때
+          // 하나를 지우면 다른 하나까지 사라지면 안 된다. (조립 때 {...routine}이라 onDate가 남아 있다.)
+          if (item.permanent) {
+            next.permanentRoutines = state.permanentRoutines.filter(
               (routine) => !(routine.label === item.label && routine.onDate === item.onDate)
-            ),
-          }));
-        }
+            );
+          }
 
-        // tier 1(날씨 트리거)·tier 2(목적별) 항목은 매번 새로 생성되므로, 여기서 지우면
-        // 그 순간만 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를
-        // 지속시키려면 영구적으로 비활성화해야 한다.
-        if (item.tier === 1) {
-          set((state) =>
-            patchSettings(state, {
-              disabledWeatherItems: state.userSettings.disabledWeatherItems.includes(item.label)
-                ? state.userSettings.disabledWeatherItems
-                : [...state.userSettings.disabledWeatherItems, item.label],
-            })
-          );
-        }
-
-        if (item.tier === 2) {
-          const { purposeId } = get();
-          if (purposeId) {
-            const key = purposeItemKey(purposeId, item.label);
-            set((state) =>
+          // tier 1(날씨 트리거)·tier 2(목적별) 항목은 매번 새로 생성되므로, 여기서 지우면
+          // 그 순간만 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를
+          // 지속시키려면 영구적으로 비활성화해야 한다.
+          const { disabledWeatherItems, disabledPurposeItems } = state.userSettings;
+          if (item.tier === 1) {
+            Object.assign(next, patchSettings(state, { disabledWeatherItems: appendUnique(disabledWeatherItems, item.label) }));
+          } else if (item.tier === 2 && state.purposeId) {
+            Object.assign(
+              next,
               patchSettings(state, {
-                disabledPurposeItems: state.userSettings.disabledPurposeItems.includes(key)
-                  ? state.userSettings.disabledPurposeItems
-                  : [...state.userSettings.disabledPurposeItems, key],
+                disabledPurposeItems: appendUnique(disabledPurposeItems, purposeItemKey(state.purposeId, item.label)),
               })
             );
           }
-        }
-      },
+
+          return next;
+        }),
 
       removePermanentRoutine: (id) =>
         set((state) => ({
@@ -434,49 +407,31 @@ export const useAppStore = create<AppStore>()(
           !userSettings.disabledWeatherItems.includes(label);
 
         if (currentWeather) {
-          // 지금 비 또는 남은 시간대 예보 — 자차는 지금 비만 (getUmbrellaBadge)
-          const umbrellaBadge = getUmbrellaBadge(
-            userSettings.commuteMode,
-            currentWeather.rainAlert,
-            weatherTimeline,
-            getCurrentSlotIndex()
-          );
-          if (umbrellaBadge && isWeatherItemEnabled('우산')) {
-            items.push({
-              id: nextId(),
+          // 뱃지가 곧 "오늘 띄울 이유"다 — 없으면 그 항목은 오늘 해당 없음.
+          // 우산: 지금 비 또는 남은 시간대 예보 — 자차는 지금 비만 (getUmbrellaBadge)
+          // 라벨은 SettingsPanel의 WEATHER_ITEMS와 일치해야 한다.
+          const weatherTriggers: Array<{ label: string; icon: string; badge: string | null }> = [
+            {
               label: '우산',
               icon: 'umbrella',
-              tier: 1,
-              badge: umbrellaBadge,
-              checked: wasChecked.get('우산') ?? false,
-              temp: false,
-              permanent: false,
-            });
-          }
-          if (currentWeather.dustLevel === '나쁨' && isWeatherItemEnabled('마스크')) {
+              badge: getUmbrellaBadge(userSettings.commuteMode, currentWeather.rainAlert, weatherTimeline, getCurrentSlotIndex()),
+            },
+            { label: '마스크', icon: 'wind', badge: currentWeather.dustLevel === '나쁨' ? '미세먼지 나쁨' : null },
+            { label: '물병', icon: 'droplets', badge: currentWeather.heatAlert ? '폭염 대비' : null },
+          ];
+          weatherTriggers.forEach(({ label, icon, badge }) => {
+            if (!badge || !isWeatherItemEnabled(label)) return;
             items.push({
               id: nextId(),
-              label: '마스크',
-              icon: 'wind',
+              label,
+              icon,
               tier: 1,
-              badge: '미세먼지 나쁨',
-              checked: wasChecked.get('마스크') ?? false,
+              badge,
+              checked: wasChecked.get(label) ?? false,
               temp: false,
               permanent: false,
             });
-          }
-          if (currentWeather.heatAlert && isWeatherItemEnabled('물병')) {
-            items.push({
-              id: nextId(),
-              label: '물병',
-              icon: 'droplets',
-              tier: 1,
-              badge: '폭염 대비',
-              checked: wasChecked.get('물병') ?? false,
-              temp: false,
-              permanent: false,
-            });
-          }
+          });
         }
 
         // tier 2 — 목적별
@@ -595,9 +550,7 @@ export const useAppStore = create<AppStore>()(
           patchSettings(state, {
             disabledWeatherItems: enabled
               ? state.userSettings.disabledWeatherItems.filter((l) => l !== label)
-              : state.userSettings.disabledWeatherItems.includes(label)
-                ? state.userSettings.disabledWeatherItems
-                : [...state.userSettings.disabledWeatherItems, label],
+              : appendUnique(state.userSettings.disabledWeatherItems, label),
           })
         ),
 
@@ -607,9 +560,7 @@ export const useAppStore = create<AppStore>()(
           return patchSettings(state, {
             disabledPurposeItems: enabled
               ? state.userSettings.disabledPurposeItems.filter((k) => k !== key)
-              : state.userSettings.disabledPurposeItems.includes(key)
-                ? state.userSettings.disabledPurposeItems
-                : [...state.userSettings.disabledPurposeItems, key],
+              : appendUnique(state.userSettings.disabledPurposeItems, key),
           });
         }),
 
@@ -744,14 +695,16 @@ export const useAppStore = create<AppStore>()(
         const { purposeId, items, key, title } = suggestion;
         if (purposeId) get().addCustomKeyword(purposeId, title);
 
-        const existing = new Set(get().checklist.map((item) => item.label));
-        items.filter((label) => !existing.has(label)).forEach((label) => get().addTempItem(label));
-
+        // 준비물 추가와 수락 표시는 한 번의 set으로 — 항목마다 따로 부르면 그 수만큼 저장이 돈다.
         set((state) => {
+          const existing = new Set(state.checklist.map((item) => item.label));
+          const added = items.filter((label) => !existing.has(label)).map(newTempItem);
           const entry = state.ai.hintCache[key];
-          if (!entry) return {};
           return {
-            ai: { ...state.ai, hintCache: { ...state.ai.hintCache, [key]: { ...entry, decision: 'accepted' } } },
+            ...(added.length > 0 ? { checklist: [...state.checklist, ...added] } : {}),
+            ...(entry
+              ? { ai: { ...state.ai, hintCache: { ...state.ai.hintCache, [key]: { ...entry, decision: 'accepted' as const } } } }
+              : {}),
           };
         });
       },
@@ -785,18 +738,7 @@ export const useAppStore = create<AppStore>()(
           const existingLabels = new Set(state.permanentRoutines.filter((r) => !isOneOff(r)).map((r) => r.label));
           const newRoutines: ChecklistItem[] = plan.routines
             .filter(({ label }) => !existingLabels.has(label))
-            .map(({ label, days }) => ({
-              id: generateItemId(),
-              label,
-              icon: 'check-circle',
-              tier: 3,
-              badge: null,
-              checked: false,
-              temp: false,
-              permanent: true,
-              ...(days ? { days } : {}),
-              updatedAt: Date.now(),
-            }));
+            .map(({ label, days }) => newRoutine(label, days ? { days } : {}));
 
           return {
             ...patchSettings(state, patch),

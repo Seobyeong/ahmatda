@@ -11,10 +11,11 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
-import { PURPOSES } from '../constants/purposes';
+import { PURPOSES, purposeItemKey } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
 import { getTodayString } from '../utils/time';
 import { isOneOff } from '../utils/routines';
@@ -72,7 +73,70 @@ const WEATHER_ITEMS: { label: string; description: string }[] = [
   { label: '물병', description: '폭염 주의보일 때 표시' },
 ];
 
+// 패널이 화면에서 차지할 수 있는 비율 (헤더 아래 남은 높이 기준)
+const PANEL_HEIGHT_RATIO = 0.78;
+const PANEL_MIN_HEIGHT = 420;
+
+function SettingSwitch(props: Pick<React.ComponentProps<typeof Switch>, 'value' | 'onValueChange' | 'disabled'>) {
+  return <Switch {...props} trackColor={{ false: Colors.slate200, true: Colors.indigo600 }} thumbColor={Colors.white} />;
+}
+
+interface TimeRowProps {
+  label: string;
+  value: string; // "HH:mm"
+  onCommit: (value: string) => void;
+  /** 패널이 닫히면 편집 중이던 값을 버린다 */
+  panelVisible: boolean;
+}
+
+// 시각 설정 한 줄. 매 키 입력마다 store에 커밋하면 그때마다 App.tsx의 알림 재예약 +
+// Wi-Fi 재arm effect가 함께 실행돼 불필요하게 잦다. 임시값에만 반영하다가 "완료"를
+// 눌렀을 때 한 번만 커밋한다.
+function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
+  const [draft, setDraft] = useState<string | null>(null); // null이면 편집 중이 아님
+
+  useEffect(() => {
+    if (!panelVisible) setDraft(null);
+  }, [panelVisible]);
+
+  return (
+    <View style={styles.row}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      {draft !== null ? (
+        <View style={styles.timeEditRow}>
+          <TimeInput value={draft} onChange={setDraft} compact autoFocus />
+          <Pressable
+            style={styles.timeDoneButton}
+            onPress={() => {
+              onCommit(draft);
+              setDraft(null);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`${label} 저장`}
+          >
+            <Check size={14} color={Colors.emerald600} />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => setDraft(value)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${label} ${value}, 눌러서 변경`}
+        >
+          <Text style={[styles.rowValue, styles.rowValueEditable]}>{value}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
+  // 고정 420이면 큰 화면에서도 두세 항목만 보여 스크롤이 길어진다. 화면 높이에 맞춘다.
+  const { height: windowHeight } = useWindowDimensions();
+  const maxHeight = Math.max(PANEL_MIN_HEIGHT, Math.round((windowHeight - top) * PANEL_HEIGHT_RATIO));
+
   const translateY = useRef(new Animated.Value(visible ? 0 : -300)).current;
 
   useEffect(() => {
@@ -120,11 +184,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   const setAiEnabled = useAppStore((s) => s.setAiEnabled);
   const setAiConsent = useAppStore((s) => s.setAiConsent);
 
-  const [editingTime, setEditingTime] = useState(false);
   const [keywordDraft, setKeywordDraft] = useState('');
-  const [timeDraft, setTimeDraft] = useState(departureTime);
-  const [editingNightly, setEditingNightly] = useState(false);
-  const [nightlyDraft, setNightlyDraft] = useState(nightlyCheckTime);
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -164,8 +224,6 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
 
   useEffect(() => {
     if (!visible) {
-      setEditingTime(false);
-      setEditingNightly(false);
       setEditingSensitivity(false);
       setWifiRegisterStatus('idle');
       setHomeRegisterStatus('idle');
@@ -178,36 +236,6 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
     if (!visible) return;
     AiKeyStore.get(ai.provider).then((key) => setAiHasKey(!!key));
   }, [visible, ai.provider]);
-
-  // 출발 시각 입력 — 매 키 입력마다 store에 바로 커밋하면 그때마다 App.tsx의
-  // 알림 재예약 + Wi-Fi 재arm effect가 함께 실행돼 불필요하게 잦다. 로컬 임시값에만
-  // 반영하다가 "완료"를 눌렀을 때 한 번만 커밋한다.
-  const handleTimeEditStart = () => {
-    setTimeDraft(departureTime);
-    setEditingTime(true);
-  };
-
-  const handleTimeDone = () => {
-    updateDepartureTime(timeDraft);
-    setEditingTime(false);
-  };
-
-  // 자기 전 정리 시각도 같은 이유로 "완료"에서만 커밋한다 (바뀔 때마다 알림 재예약).
-  const handleNightlyEditStart = () => {
-    setNightlyDraft(nightlyCheckTime);
-    setEditingNightly(true);
-  };
-
-  const handleNightlyDone = () => {
-    setNightlyCheckTime(nightlyDraft);
-    setEditingNightly(false);
-  };
-
-  // 기준값만 바꾼다. 일일 피드백으로 쌓인 learnedDelta는 그대로 두므로,
-  // 민감도를 다시 골라도 그동안의 학습이 사라지지 않는다.
-  const handleSensitivityChange = (level: 1 | 2 | 3 | 4 | 5) => {
-    setSensitivity(level);
-  };
 
   // 요일 칩 토글 — days가 없으면(매일) 해당 요일 하나만 끈 6일짜리 배열로 시작한다.
   const handleToggleRoutineDay = (routineId: string, currentDays: number[] | undefined, day: number) => {
@@ -316,14 +344,26 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   const recentFeedback = feedbackHistory.slice(-3).reverse();
 
   return (
+    <>
+    {/* 패널 밖(어두워진 영역)을 누르면 닫힌다. 없으면 뒤의 체크리스트가 그대로 눌려서
+        설정을 보다가 항목을 실수로 체크·삭제하게 된다. */}
+    {visible ? (
+      <Pressable
+        style={[styles.backdrop, { top }]}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="설정 닫기"
+      />
+    ) : null}
     <Animated.View
-      // 패널 높이(maxHeight 420)가 -300 이동보다 커서, 닫힌 상태에서도 아래쪽이 비쳐 보이고
+      // 패널 높이가 -300 이동보다 커서, 닫힌 상태에서도 아래쪽이 비쳐 보이고
       // 그 영역의 터치를 막았다. 닫히면 투명 + 터치 통과.
       pointerEvents={visible ? 'auto' : 'none'}
       style={[
         styles.container,
         {
           top,
+          maxHeight,
           transform: [{ translateY }],
           opacity: translateY.interpolate({ inputRange: [-300, -200, 0], outputRange: [0, 1, 1] }),
         },
@@ -331,53 +371,21 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
     >
       {/* 컨테이너 maxHeight만으로는 ScrollView 높이가 내용 높이로 잡혀 스크롤이 안 되고
           내용이 패널 밖으로 넘쳤다. ScrollView 자체에도 같은 한도를 준다. */}
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content} nestedScrollEnabled>
+      <ScrollView
+        style={{ maxHeight }}
+        contentContainerStyle={styles.content}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting>설정</Text>
-          <Pressable onPress={onClose} hitSlop={8}>
+          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="설정 닫기">
             <X size={20} color={Colors.slate500} />
           </Pressable>
         </View>
 
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>외출 시간</Text>
-          {editingTime ? (
-            <View style={styles.timeEditRow}>
-              <TimeInput value={timeDraft} onChange={setTimeDraft} compact autoFocus />
-              <Pressable
-                style={styles.timeDoneButton}
-                onPress={handleTimeDone}
-                hitSlop={8}
-              >
-                <Check size={14} color={Colors.emerald600} />
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable onPress={handleTimeEditStart}>
-              <Text style={styles.rowValue}>{departureTime}</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>자기 전 정리 시간</Text>
-          {editingNightly ? (
-            <View style={styles.timeEditRow}>
-              <TimeInput value={nightlyDraft} onChange={setNightlyDraft} compact autoFocus />
-              <Pressable
-                style={styles.timeDoneButton}
-                onPress={handleNightlyDone}
-                hitSlop={8}
-              >
-                <Check size={14} color={Colors.emerald600} />
-              </Pressable>
-            </View>
-          ) : (
-            <Pressable onPress={handleNightlyEditStart}>
-              <Text style={styles.rowValue}>{nightlyCheckTime}</Text>
-            </Pressable>
-          )}
-        </View>
+        <TimeRow label="외출 시간" value={departureTime} onCommit={updateDepartureTime} panelVisible={visible} />
+        <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} panelVisible={visible} />
 
         <Text style={styles.sectionTitle}>알림 성향</Text>
         <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPreference} onChange={handleAlertPreference} />
@@ -392,13 +400,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                   : '20분 넘게 머문 곳을 떠날 때, 아침에 챙긴 충전기·우산 같은 물건을 알려요 (하루 3번까지)'}
             </Text>
           </View>
-          <Switch
-            value={awayPlaceOn}
-            onValueChange={handleAwayPlaceToggle}
-            disabled={!isMotionSupported()}
-            trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
-            thumbColor={Colors.white}
-          />
+          <SettingSwitch value={awayPlaceOn} onValueChange={handleAwayPlaceToggle} disabled={!isMotionSupported()} />
         </View>
 
         <Text style={styles.sectionTitle}>주 이동수단</Text>
@@ -419,7 +421,9 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
         </View>
         {editingSensitivity ? (
           <View style={styles.sensitivityEditArea}>
-            <SensitivitySelector value={sensitivityLevel} onChange={handleSensitivityChange} />
+            {/* 기준값만 바꾼다. 일일 피드백으로 쌓인 learnedDelta는 그대로 두므로,
+                민감도를 다시 골라도 그동안의 학습이 사라지지 않는다. */}
+            <SensitivitySelector value={sensitivityLevel} onChange={setSensitivity} />
           </View>
         ) : null}
 
@@ -506,12 +510,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                 <Text style={styles.routineLabel}>{weatherItem.label}</Text>
                 <Text style={styles.weatherDescription}>{weatherItem.description}</Text>
               </View>
-              <Switch
-                value={enabled}
-                onValueChange={(value) => setWeatherItemEnabled(weatherItem.label, value)}
-                trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
-                thumbColor={Colors.white}
-              />
+              <SettingSwitch value={enabled} onValueChange={(value) => setWeatherItemEnabled(weatherItem.label, value)} />
             </View>
           );
         })}
@@ -520,18 +519,16 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
           <>
             <Text style={styles.sectionTitle}>{PURPOSES[purposeId].label} 준비물</Text>
             {PURPOSES[purposeId].items.map((purposeItem) => {
-              const enabled = !disabledPurposeItems.includes(`${purposeId}:${purposeItem.label}`);
+              const enabled = !disabledPurposeItems.includes(purposeItemKey(purposeId, purposeItem.label));
               return (
                 <View key={purposeItem.label} style={styles.weatherRow}>
                   <View style={styles.weatherTextArea}>
                     <Text style={styles.routineLabel}>{purposeItem.label}</Text>
                     <Text style={styles.weatherDescription}>{purposeItem.note}</Text>
                   </View>
-                  <Switch
+                  <SettingSwitch
                     value={enabled}
                     onValueChange={(value) => setPurposeItemEnabled(purposeId, purposeItem.label, value)}
-                    trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
-                    thumbColor={Colors.white}
                   />
                 </View>
               );
@@ -553,6 +550,8 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                   style={styles.keywordChip}
                   onPress={() => removeCustomKeyword(purposeId, kw)}
                   hitSlop={4}
+                  accessibilityRole="button"
+                  accessibilityLabel={`키워드 ${kw} 삭제`}
                 >
                   <Text style={styles.keywordChipText}>{kw}</Text>
                   <X size={10} color={Colors.indigo600} />
@@ -586,7 +585,12 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
               <View key={routine.id} style={styles.routineBlock}>
                 <View style={styles.routineRow}>
                   <Text style={styles.routineLabel}>{routine.label}</Text>
-                  <Pressable onPress={() => removePermanentRoutine(routine.id)} hitSlop={8}>
+                  <Pressable
+                    onPress={() => removePermanentRoutine(routine.id)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${routine.label} 루틴 삭제`}
+                  >
                     <X size={16} color={Colors.slate400} />
                   </Pressable>
                 </View>
@@ -599,6 +603,9 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                         style={[styles.dayChip, active && styles.dayChipActive]}
                         onPress={() => handleToggleRoutineDay(routine.id, routine.days, day)}
                         hitSlop={4}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={`${routine.label} ${label}요일`}
                       >
                         <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
                           {label}
@@ -621,12 +628,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
           <>
             <View style={styles.weatherRow}>
               <Text style={styles.routineLabel}>사용하기</Text>
-              <Switch
-                value={ai.enabled}
-                onValueChange={handleAiToggle}
-                trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
-                thumbColor={Colors.white}
-              />
+              <SettingSwitch value={ai.enabled} onValueChange={handleAiToggle} />
             </View>
             {ai.status === 'invalidKey' ? (
               <Text style={styles.wifiStatusError}>API 키가 거부됐어요. 키를 삭제하고 올바른 키를 다시 넣어주세요.</Text>
@@ -679,15 +681,23 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
         )}
       </ScrollView>
     </Animated.View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  backdrop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+    zIndex: 19,
+  },
   container: {
     position: 'absolute',
     left: 0,
     right: 0,
-    maxHeight: 420,
     backgroundColor: Colors.white,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
@@ -697,9 +707,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
-  },
-  scroll: {
-    maxHeight: 420,
   },
   content: {
     padding: 20,
@@ -731,6 +738,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.slate800,
+  },
+  // 눌러서 바꿀 수 있는 값이라는 걸 색으로 알린다 (다른 "변경" 링크들과 같은 색)
+  rowValueEditable: {
+    color: Colors.indigo600,
   },
   calendarSettingsLink: {
     fontSize: 13,

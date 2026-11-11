@@ -22,7 +22,6 @@ export const Colors = {
   sky400:    '#38bdf8',
   sky600:    '#0284c7',
   sky50:     '#f0f9ff',
-  orange500: '#f97316',
   orange400: '#fb923c',
   orange600: '#ea580c',
   orange50:  '#fff7ed',
@@ -48,7 +47,6 @@ export const Colors = {
   emerald500: '#10b981',
   emerald100: '#d1fae5',
   red500:     '#ef4444',
-  red50:      '#fef2f2',
 
   // Background
   bgDefault:  '#f8fafc',

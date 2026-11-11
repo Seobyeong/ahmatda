@@ -3,13 +3,14 @@ import { AppState, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import notifee, { EventType } from '@notifee/react-native';
 import NetInfo from '@react-native-community/netinfo';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AppNavigator from '@/navigation/AppNavigator';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { NotificationService, handleNotificationEvent } from '@/services/notification/NotificationService';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskService';
-import { useAppStore } from '@/store';
+import { useAppStore, whenHydrated } from '@/store';
 import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { consumeLeaveNonce, setWidgetSnapshot } from './modules/ahmatda-widget';
 import { parseLeaveLink } from '@/services/departure/leaveLink';
@@ -103,7 +104,6 @@ export default function App() {
     const onUrl = async (url: string | null) => {
       const nonce = parseLeaveLink(url);
       if (!nonce || !consumeLeaveNonce(nonce)) return;
-      const { whenHydrated } = await import('@/store');
       await whenHydrated();
       if (!useAppStore.getState().userSettings.onboarded) return;
       useAppStore.getState().showToast(leaveResultMessage(await pressLeave()));
@@ -181,8 +181,10 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <StatusBar style="dark" />
-      <AppNavigator />
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <AppNavigator />
+      </SafeAreaProvider>
     </ErrorBoundary>
   );
 }

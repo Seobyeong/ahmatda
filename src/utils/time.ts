@@ -1,13 +1,3 @@
-// "08:15" → "08:15 AM" 변환
-export function formatDisplayTime(time24: string): string {
-  const [hhStr, mmStr] = time24.split(':');
-  const hh = parseInt(hhStr, 10);
-  const mm = parseInt(mmStr, 10);
-  const ampm = hh < 12 ? 'AM' : 'PM';
-  const hh12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
-  return `${String(hh12).padStart(2, '0')}:${String(mm).padStart(2, '0')} ${ampm}`;
-}
-
 // 출발 30분 전 알림 시각 계산
 // "08:15" → "07:45"
 export function getAlertTime(departureTime: string): string {

@@ -59,7 +59,9 @@ function getTierColor(tier: ChecklistItemType['tier'], purposeColor?: string): s
   }
 }
 
-export function ChecklistItem({ item, onToggle, onDelete, purposeColor }: ChecklistItemProps) {
+// memo: 항목 하나를 체크하면 store가 그 항목 객체만 새로 만들고 나머지는 참조를 유지한다.
+// onToggle/onDelete는 store 액션이라 참조가 고정이어서, 바뀐 한 줄만 다시 그려진다.
+export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle, onDelete, purposeColor }: ChecklistItemProps) {
   // 체크 반응성이 이 앱의 핵심 사용성 요건이라, 탭하면 상태를 바로 바꾸고(딜레이 없음)
   // 옅어지는 효과는 그 위에 얹는 순수 시각 효과로만 재생한다. 예전엔 슬라이드+페이드
   // 애니메이션이 끝난 뒤에야 실제 토글이 일어나서 체크할 때마다 220ms 딜레이가 있었다.
@@ -83,7 +85,13 @@ export function ChecklistItem({ item, onToggle, onDelete, purposeColor }: Checkl
 
   return (
     <Animated.View style={[styles.wrapper, { opacity }]}>
-      <Pressable style={styles.row} onPress={handlePress}>
+      <Pressable
+        style={styles.row}
+        onPress={handlePress}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: item.checked }}
+        accessibilityLabel={item.badge ? `${item.label}, ${item.badge}` : item.label}
+      >
         <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
           {item.checked && <Check size={14} color={Colors.white} />}
         </View>
@@ -109,13 +117,19 @@ export function ChecklistItem({ item, onToggle, onDelete, purposeColor }: Checkl
       </Pressable>
 
       {showDelete ? (
-        <Pressable style={styles.deleteButton} onPress={() => onDelete?.(item.id)} hitSlop={8}>
+        <Pressable
+          style={styles.deleteButton}
+          onPress={() => onDelete?.(item.id)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${item.label} 삭제`}
+        >
           <X size={16} color={Colors.slate400} />
         </Pressable>
       ) : null}
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: {

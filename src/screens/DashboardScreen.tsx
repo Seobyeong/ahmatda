@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -18,6 +18,7 @@ import {
   Wind,
   X,
 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -64,8 +65,16 @@ const FEEDBACK_OPTIONS: { val: FeedbackType; label: string }[] = [
   { val: 'hot', label: '더웠음' },
 ];
 
-function sortSection(items: ChecklistItemType[]): ChecklistItemType[] {
-  return [...items].sort((a, b) => Number(a.checked) - Number(b.checked));
+const TIERS = [0, 1, 2, 3] as const;
+
+// 분류별로 나누고, 각 분류 안에서는 안 챙긴 것을 위로 올린다 (정렬은 안정적이라 원래 순서 유지).
+function groupByTier(checklist: ChecklistItemType[]) {
+  return TIERS.map((tier) => ({
+    tier,
+    items: checklist
+      .filter((item) => item.tier === tier)
+      .sort((a, b) => Number(a.checked) - Number(b.checked)),
+  })).filter((section) => section.items.length > 0);
 }
 
 function getCurationBackground(rainAlert: boolean, heatAlert: boolean): string {
@@ -104,6 +113,7 @@ function PulseDot() {
 }
 
 export function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const checklistYRef = useRef(0);
 
@@ -408,7 +418,6 @@ export function DashboardScreen() {
     }
   };
 
-
   const handleToggleAll = () => {
     if (allChecked) {
       uncheckAll();
@@ -417,10 +426,9 @@ export function DashboardScreen() {
     }
   };
 
-  const tier0 = sortSection(checklist.filter((i) => i.tier === 0));
-  const tier1 = sortSection(checklist.filter((i) => i.tier === 1));
-  const tier2 = sortSection(checklist.filter((i) => i.tier === 2));
-  const tier3 = sortSection(checklist.filter((i) => i.tier === 3));
+  // 입력창에 글자를 칠 때마다(quickAddText) 화면이 다시 그려지는데, 그때마다 목록을
+  // 다시 나누고 정렬할 필요는 없다.
+  const tierSections = useMemo(() => groupByTier(checklist), [checklist]);
 
   const activePurposeColor = purposeId ? PurposeColors[PURPOSES[purposeId].color].chip : undefined;
 
@@ -470,7 +478,8 @@ export function DashboardScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.headerWrapper} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
-        <View style={styles.header}>
+        {/* 상태바·노치 높이는 기기마다 달라서 고정값 대신 안전 영역을 쓴다 */}
+        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
           <View>
             <Text style={styles.headerTitle}>아맞다</Text>
             <Text style={styles.headerSubtitle}>Morning OS</Text>
@@ -479,6 +488,8 @@ export function DashboardScreen() {
             style={styles.settingsButton}
             onPress={() => setSettingsVisible((v) => !v)}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={settingsVisible ? '설정 닫기' : '설정 열기'}
           >
             <Settings size={20} color={Colors.slate600} />
           </Pressable>
@@ -489,6 +500,9 @@ export function DashboardScreen() {
         ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        // 키보드가 떠 있을 때도 첫 탭이 바로 먹게 — 없으면 "매일 루틴으로 추가"나 체크박스를
+        // 누른 첫 탭이 키보드만 내리고 사라진다.
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.indigo600} />
         }
@@ -497,12 +511,12 @@ export function DashboardScreen() {
           <View style={styles.statusBar}>
             <View style={styles.statusLeft}>
               <PulseDot />
-              <View style={styles.statusTextArea}>
+              <View>
                 <Text style={styles.statusLabel}>외출 30분 전</Text>
                 <Text style={styles.statusTime}>{userSettings.departureTime}</Text>
               </View>
             </View>
-            <Pressable onPress={dismissStatus} hitSlop={8}>
+            <Pressable onPress={dismissStatus} hitSlop={8} accessibilityRole="button" accessibilityLabel="외출 시간 안내 닫기">
               <X size={18} color={Colors.slate400} />
             </Pressable>
           </View>
@@ -529,9 +543,10 @@ export function DashboardScreen() {
           style={[
             styles.curationCard,
             {
+              // 날씨가 없을 때도 카드로 보이게 흰색 — 화면 배경과 같은 색이면 글자만 떠 보인다.
               backgroundColor: currentWeather
                 ? getCurationBackground(currentWeather.rainAlert, currentWeather.heatAlert)
-                : Colors.slate50,
+                : Colors.white,
             },
           ]}
         >
@@ -578,6 +593,8 @@ export function DashboardScreen() {
                       currentFeedback === opt.val && styles.feedbackChipActive,
                     ]}
                     onPress={() => handleFeedback(opt.val)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: currentFeedback === opt.val }}
                   >
                     <Text
                       style={[
@@ -600,7 +617,7 @@ export function DashboardScreen() {
           ) : (
             <View>
               <Text style={styles.loadingText}>날씨 정보를 가져오지 못했어요.</Text>
-              <Pressable style={styles.retryButton} onPress={handleRefresh}>
+              <Pressable style={styles.retryButton} onPress={handleRefresh} accessibilityRole="button">
                 <Text style={styles.retryButtonText}>다시 시도</Text>
               </Pressable>
             </View>
@@ -637,36 +654,33 @@ export function DashboardScreen() {
                 </Text>
               </View>
             </View>
-            <Pressable onPress={handleToggleAll}>
+            <Pressable onPress={handleToggleAll} hitSlop={8} accessibilityRole="button">
               <Text style={styles.checklistToggleAll}>{allChecked ? '전체해제' : '모두완료'}</Text>
             </Pressable>
           </View>
 
           <ProgressBar checked={checkedCount} total={total} />
 
-          {(
-            [
-              [0, tier0],
-              [1, tier1],
-              [2, tier2],
-              [3, tier3],
-            ] as const
-          ).map(([tier, items]) =>
-            items.length > 0 ? (
-              <View key={tier} style={styles.tierSection}>
-                <Text style={styles.tierLabel}>{TIER_LABELS[tier]}</Text>
-                {items.map((item) => (
-                  <ChecklistItem
-                    key={item.id}
-                    item={item}
-                    onToggle={toggleCheck}
-                    onDelete={deleteItem}
-                    purposeColor={activePurposeColor}
-                  />
-                ))}
-              </View>
-            ) : null
-          )}
+          {total === 0 ? (
+            <Text style={styles.emptyChecklist}>
+              오늘 챙길 것이 아직 없어요. 위에서 목적을 고르거나 아래에 직접 추가해 보세요.
+            </Text>
+          ) : null}
+
+          {tierSections.map(({ tier, items }) => (
+            <View key={tier} style={styles.tierSection}>
+              <Text style={styles.tierLabel}>{TIER_LABELS[tier]}</Text>
+              {items.map((item) => (
+                <ChecklistItem
+                  key={item.id}
+                  item={item}
+                  onToggle={toggleCheck}
+                  onDelete={deleteItem}
+                  purposeColor={activePurposeColor}
+                />
+              ))}
+            </View>
+          ))}
 
           <View style={styles.quickAddRow}>
             <TextInput
@@ -683,6 +697,8 @@ export function DashboardScreen() {
               style={[styles.micButton, isListening && styles.micButtonActive]}
               onPress={handleVoiceAdd}
               hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={isListening ? '음성 입력 취소' : '음성으로 추가'}
             >
               <Mic size={18} color={isListening ? Colors.white : Colors.slate500} />
             </Pressable>
@@ -785,7 +801,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgDefault,
   },
   headerWrapper: {
-    position: 'relative',
     zIndex: 30,
   },
   header: {
@@ -793,7 +808,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 56,
     paddingBottom: 12,
     backgroundColor: Colors.bgDefault,
   },
@@ -860,7 +874,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: Colors.emerald500,
   },
-  statusTextArea: {},
   statusLabel: {
     fontSize: 11,
     color: Colors.slate500,
@@ -1049,6 +1062,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: Colors.indigo600,
+  },
+  emptyChecklist: {
+    marginTop: 16,
+    fontSize: 13,
+    lineHeight: 19,
+    color: Colors.slate400,
   },
   tierSection: {
     marginTop: 14,
