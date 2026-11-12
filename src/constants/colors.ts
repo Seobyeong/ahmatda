@@ -9,6 +9,7 @@ export const Colors = {
   // Purpose colors
   indigo50:  '#eef2ff',
   indigo100: '#e0e7ff',
+  indigo200: '#c7d2fe',
   emerald600:'#059669',
   emerald50: '#ecfdf5',
   violet50:  '#f5f3ff',
@@ -16,6 +17,7 @@ export const Colors = {
   rose50:    '#fff1f2',
   amber500:  '#f59e0b',
   amber50:   '#fffbeb',
+  amber700:  '#b45309',
 
   // Weather
   sky500:    '#0ea5e9',
@@ -32,6 +34,8 @@ export const Colors = {
   indigo400: '#818cf8',
 
   // Neutral
+  // 글자색 기준: 흰 배경에서 slate500 이상만 본문·설명 글자로 쓴다 (대비 4.5:1 이상).
+  // slate400은 2.6:1이라 입력창 안내 문구(placeholder)·장식에만 쓴다.
   slate800:  '#1e293b',
   slate700:  '#334155',
   slate600:  '#475569',

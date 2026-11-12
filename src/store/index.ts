@@ -72,20 +72,32 @@ interface AppState {
   // UI 상태
   statusDismissed: boolean;
   toast: string | null;
+  toastAction: ToastAction | null; // 토스트에 붙는 버튼 하나 (예: 삭제 되돌리기)
   scrollToChecklistRequested: boolean; // 알림 탭(딥링크)으로 체크리스트 스크롤 요청
   tomorrowPreviewRequested: boolean;   // 자기 전 정리 알림 탭 → 다음 외출 준비 화면 열기 요청
 }
+
+// 토스트에 붙는 버튼. 함수라 저장(persist) 대상이 아니다.
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+}
+
+// 삭제를 되돌리는 함수 — 지울 게 없었으면 null
+type Undo = (() => void) | null;
 
 interface AppActions {
   // 체크리스트
   toggleCheck: (id: string) => void;
   checkAll: () => void;
   uncheckAll: () => void;
-  addTempItem: (label: string) => void;
-  addPermanentRoutine: (label: string) => void;
+  // 추가했으면 true, 같은 이름이 이미 있어 넘어갔으면 false
+  addTempItem: (label: string) => boolean;
+  addPermanentRoutine: (label: string) => boolean;
   addOneOffItem: (label: string, date: string) => void;
-  deleteItem: (id: string) => void;
-  removePermanentRoutine: (id: string) => void;
+  // 삭제는 되돌리는 함수를 돌려준다 — ✕ 한 번에 루틴이 영구 삭제되므로 화면이 "되돌리기"를 건다.
+  deleteItem: (id: string) => Undo;
+  removePermanentRoutine: (id: string) => Undo;
   setRoutineDays: (id: string, days: number[] | undefined) => void;
   buildChecklist: () => void;
   startNewDay: () => void;
@@ -140,7 +152,7 @@ interface AppActions {
   clearLeaveIntent: () => void; // 진단 화면의 테스트 기록 지우기
 
   dismissStatus: () => void;
-  showToast: (message: string) => void;
+  showToast: (message: string, action?: ToastAction) => void;
   clearToast: () => void;
   requestScrollToChecklist: () => void;
   clearScrollToChecklistRequest: () => void;
@@ -184,6 +196,38 @@ function newRoutine(label: string, condition: Pick<ChecklistItem, 'days' | 'onDa
     updatedAt: Date.now(),
   };
 }
+
+// 지운 루틴을 원래 자리에 다시 넣는다 (이미 돌아와 있으면 그대로).
+function reinsertRoutines(
+  current: ChecklistItem[],
+  removed: Array<{ routine: ChecklistItem; index: number }>
+): ChecklistItem[] {
+  const routines = [...current];
+  removed.forEach(({ routine, index }) => {
+    if (routines.some((r) => r.id === routine.id)) return;
+    routines.splice(Math.min(index, routines.length), 0, routine);
+  });
+  return routines;
+}
+
+// persist는 set이 불릴 때마다 저장한다 — 토스트·로딩 표시처럼 저장 대상이 아닌 값만 바뀌어도
+// 전체 상태를 다시 쓴다. 직전에 쓴 내용과 같으면 기기 저장소 쓰기를 건너뛴다.
+const lastWritten = new Map<string, string>();
+const dedupedAsyncStorage = {
+  getItem: (key: string) => AsyncStorage.getItem(key),
+  setItem: (key: string, value: string) => {
+    if (lastWritten.get(key) === value) return Promise.resolve();
+    // 쓰기가 끝난 뒤에만 기억한다 — 먼저 기억하면 쓰는 도중 들어온 같은 내용이 건너뛰어지고,
+    // 그 쓰기가 실패했을 때 아무것도 저장되지 않은 채로 남는다.
+    return AsyncStorage.setItem(key, value).then(() => {
+      lastWritten.set(key, value);
+    });
+  },
+  removeItem: (key: string) => {
+    lastWritten.delete(key);
+    return AsyncStorage.removeItem(key);
+  },
+};
 
 // 이미 있으면 같은 배열을 그대로 돌려준다 — patchSettings가 참조 비교로 "안 바뀜"을
 // 알아채서 updatedAt을 올리지 않게.
@@ -283,6 +327,7 @@ const defaultState: AppState = {
 
   statusDismissed: false,
   toast: null,
+  toastAction: null,
   scrollToChecklistRequested: false,
   tomorrowPreviewRequested: false,
 };
@@ -310,8 +355,13 @@ export const useAppStore = create<AppStore>()(
           checklist: state.checklist.map((item) => ({ ...item, checked: false })),
         })),
 
-      addTempItem: (label) =>
-        set((state) => ({ checklist: [...state.checklist, newTempItem(label)] })),
+      // 체크 상태를 이름으로 기억하므로(buildChecklist의 wasChecked) 같은 이름이 두 줄이면
+      // 하나만 눌러도 재조립 때 둘 다 체크된다. 이미 있으면 더하지 않는다.
+      addTempItem: (label) => {
+        if (get().checklist.some((item) => item.label === label)) return false;
+        set((state) => ({ checklist: [...state.checklist, newTempItem(label)] }));
+        return true;
+      },
 
       // 특정 날짜 1회 — 자기 전 정리의 "이 날만 추가". 조건 붙은 루틴으로 저장해서
       // 그날 조립 때 나타나고 지나면 정리된다 (docs/체크리스트-항목-속성.md 3장).
@@ -325,49 +375,83 @@ export const useAppStore = create<AppStore>()(
         }));
       },
 
-      addPermanentRoutine: (label) =>
-        set((state) => ({ permanentRoutines: [...state.permanentRoutines, newRoutine(label)] })),
+      addPermanentRoutine: (label) => {
+        if (get().permanentRoutines.some((r) => r.label === label && !isOneOff(r))) return false;
+        set((state) => ({ permanentRoutines: [...state.permanentRoutines, newRoutine(label)] }));
+        return true;
+      },
 
-      // 한 번의 set으로 끝낸다 — set마다 구독자 알림과 persist 저장(전체 상태 직렬화)이
-      // 따라붙어서, 나눠 부르면 항목 하나 지우는 데 저장이 세 번 일어난다.
-      deleteItem: (id) =>
+      deleteItem: (id) => {
+        const before = get();
+        const index = before.checklist.findIndex((i) => i.id === id);
+        if (index < 0) return null;
+        const item = before.checklist[index];
+
+        // 체크리스트 항목은 조립 때 새 id를 받아서 원래 루틴을 id로 찾을 수 없다. 라벨에 더해
+        // "1회 항목인지"까지 같아야 지운다 — 매일 "노트북"과 그날만 "노트북"이 같이 있을 때
+        // 하나를 지우면 다른 하나까지 사라지면 안 된다. (조립 때 {...routine}이라 onDate가 남아 있다.)
+        const removedRoutines = item.permanent
+          ? before.permanentRoutines.flatMap((routine, i) =>
+              routine.label === item.label && routine.onDate === item.onDate ? [{ routine, index: i }] : []
+            )
+          : [];
+
+        // tier 1(날씨 트리거)·tier 2(목적별) 항목은 매번 새로 생성되므로, 여기서 지우면
+        // 그 순간만 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를
+        // 지속시키려면 영구적으로 비활성화해야 한다.
+        const { disabledWeatherItems, disabledPurposeItems } = before.userSettings;
+        const purposeKey = item.tier === 2 && before.purposeId ? purposeItemKey(before.purposeId, item.label) : null;
+        // 되돌릴 때는 이번 삭제로 새로 꺼진 것만 다시 켠다.
+        const newlyDisabledWeather = item.tier === 1 && !disabledWeatherItems.includes(item.label);
+        const newlyDisabledPurpose = purposeKey !== null && !disabledPurposeItems.includes(purposeKey);
+
+        // 한 번의 set으로 끝낸다 — set마다 구독자 알림과 persist 저장(전체 상태 직렬화)이
+        // 따라붙어서, 나눠 부르면 항목 하나 지우는 데 저장이 세 번 일어난다.
         set((state) => {
-          const item = state.checklist.find((i) => i.id === id);
-          if (!item) return {};
-
           const next: Partial<AppState> = { checklist: state.checklist.filter((i) => i.id !== id) };
-
-          // 체크리스트 항목은 조립 때 새 id를 받아서 원래 루틴을 id로 찾을 수 없다. 라벨에 더해
-          // "1회 항목인지"까지 같아야 지운다 — 매일 "노트북"과 그날만 "노트북"이 같이 있을 때
-          // 하나를 지우면 다른 하나까지 사라지면 안 된다. (조립 때 {...routine}이라 onDate가 남아 있다.)
-          if (item.permanent) {
-            next.permanentRoutines = state.permanentRoutines.filter(
-              (routine) => !(routine.label === item.label && routine.onDate === item.onDate)
-            );
+          if (removedRoutines.length > 0) {
+            const removedIds = new Set(removedRoutines.map(({ routine }) => routine.id));
+            next.permanentRoutines = state.permanentRoutines.filter((routine) => !removedIds.has(routine.id));
           }
-
-          // tier 1(날씨 트리거)·tier 2(목적별) 항목은 매번 새로 생성되므로, 여기서 지우면
-          // 그 순간만 사라졌다가 다음 재빌드 때 다시 나타난다. 사용자의 "삭제" 의도를
-          // 지속시키려면 영구적으로 비활성화해야 한다.
-          const { disabledWeatherItems, disabledPurposeItems } = state.userSettings;
           if (item.tier === 1) {
-            Object.assign(next, patchSettings(state, { disabledWeatherItems: appendUnique(disabledWeatherItems, item.label) }));
-          } else if (item.tier === 2 && state.purposeId) {
-            Object.assign(
-              next,
-              patchSettings(state, {
-                disabledPurposeItems: appendUnique(disabledPurposeItems, purposeItemKey(state.purposeId, item.label)),
-              })
-            );
+            Object.assign(next, patchSettings(state, { disabledWeatherItems: appendUnique(state.userSettings.disabledWeatherItems, item.label) }));
+          } else if (purposeKey) {
+            Object.assign(next, patchSettings(state, { disabledPurposeItems: appendUnique(state.userSettings.disabledPurposeItems, purposeKey) }));
           }
-
           return next;
-        }),
+        });
 
-      removePermanentRoutine: (id) =>
+        // 되돌리기 — 그 사이 다른 항목을 체크했을 수 있으니 통째로 덮어쓰지 않고 지운 것만 제자리에 넣는다.
+        return () =>
+          set((state) => {
+            const next: Partial<AppState> = {};
+            if (!state.checklist.some((i) => i.label === item.label)) {
+              const checklist = [...state.checklist];
+              checklist.splice(Math.min(index, checklist.length), 0, item);
+              next.checklist = checklist;
+            }
+            if (removedRoutines.length > 0) {
+              next.permanentRoutines = reinsertRoutines(state.permanentRoutines, removedRoutines);
+            }
+            if (newlyDisabledWeather) {
+              Object.assign(next, patchSettings(state, { disabledWeatherItems: state.userSettings.disabledWeatherItems.filter((l) => l !== item.label) }));
+            } else if (newlyDisabledPurpose) {
+              Object.assign(next, patchSettings(state, { disabledPurposeItems: state.userSettings.disabledPurposeItems.filter((k) => k !== purposeKey) }));
+            }
+            return next;
+          });
+      },
+
+      removePermanentRoutine: (id) => {
+        const index = get().permanentRoutines.findIndex((routine) => routine.id === id);
+        if (index < 0) return null;
+        const routine = get().permanentRoutines[index];
         set((state) => ({
-          permanentRoutines: state.permanentRoutines.filter((routine) => routine.id !== id),
-        })),
+          permanentRoutines: state.permanentRoutines.filter((r) => r.id !== id),
+        }));
+        return () =>
+          set((state) => ({ permanentRoutines: reinsertRoutines(state.permanentRoutines, [{ routine, index }]) }));
+      },
 
       // 루틴 요일 조건 설정 — 7일 전부 선택은 undefined(매일)로 정규화해서
       // "매일"과 "월~일 전부 체크"가 다른 상태로 남지 않게 한다.
@@ -381,8 +465,17 @@ export const useAppStore = create<AppStore>()(
         })),
 
       buildChecklist: () => {
-        const { currentWeather, weatherTimeline, purposeId, permanentRoutines, userSettings, checklist: prevChecklist, forgottenHistory } = get();
+        const { currentWeather, weatherTimeline, purposeId, permanentRoutines, userSettings, checklist, checklistDate, forgottenHistory } = get();
         const nextId = generateItemId;
+
+        // 어제 만든 목록이면 조립이 아니라 하루 전환이다 — startNewDay가 목록을 비우고
+        // 당일 한정 상태를 함께 넘긴 뒤 다시 이 함수를 부른다. 여기서 날짜만 오늘로 찍고 넘어가면
+        // 뒤따르는 "날짜가 다르면 startNewDay" 확인들이 전부 건너뛰어진다.
+        if (checklistDate !== getTodayString()) {
+          get().startNewDay();
+          return;
+        }
+        const prevChecklist = checklist;
 
         // 최근 7일간 2회 이상 안 챙기고 나간 항목에 "이번 주 N번 놓침" 뱃지를 단다.
         // 날씨/일정 뱃지가 이미 있는 항목은 그쪽이 더 시급한 정보라 덮어쓰지 않는다.
@@ -489,11 +582,30 @@ export const useAppStore = create<AppStore>()(
       startNewDay: () => {
         // 날짜가 지난 1회 항목은 하루가 바뀔 때 한 번만 정리한다. buildChecklist에서 하면
         // permanentRoutines 변화 → DashboardScreen 재조립 → 또 정리로 이어진다.
-        const { permanentRoutines } = get();
-        const pruned = pruneExpiredOneOffs(permanentRoutines, getTodayString());
-        if (pruned.length !== permanentRoutines.length) set({ permanentRoutines: pruned });
+        const today = getTodayString();
+        const { permanentRoutines, manualPurpose } = get();
+        const pruned = pruneExpiredOneOffs(permanentRoutines, today);
+        set({
+          ...(pruned.length !== permanentRoutines.length ? { permanentRoutines: pruned } : {}),
+          // 어제 목록은 아무것도 이어받지 않는다. 이어받으면 어제 체크한 항목이 오늘도 체크된 채로
+          // 뜨고("다 챙겼어요"), "오늘만" 넣은 항목이 다음 날에도 남는다. 날짜를 먼저 오늘로 찍어야
+          // 아래 buildChecklist가 다시 이 함수로 돌아오지 않는다.
+          checklist: [],
+          checklistDate: today,
+          // 메모리에 남은 어제 날씨로 오늘 목록을 만들면 어제 비 예보의 우산이 오늘 날짜로 뜬다.
+          // 비워 두면 대시보드가 새로 받아 채우고, 못 받으면 "가져오지 못했어요"가 보인다.
+          currentWeather: null,
+          weatherTimeline: [],
+          // 앱을 켜 둔 채 날이 바뀌면 어제 목적이 메모리에 남아 있다 — 오늘 직접 고른 게 아니면 비운다.
+          // 캘린더 자동감지는 대시보드가 열릴 때 다시 돈다. 앱 밖(출발 알림·위젯)에서 전환되면
+          // 앱을 열기 전까지 목적 준비물 없이 루틴만 알린다 — 어제 일정으로 고른 목적을 쓰는 것보다 낫다.
+          ...(isManualPurposeToday(manualPurpose, today)
+            ? {}
+            : { purposeId: null, autoDetected: false, autoDetectedEvent: null }),
+          todayFeedback: null,
+          statusDismissed: false,
+        });
         get().buildChecklist();
-        set({ todayFeedback: null, statusDismissed: false });
       },
 
       // 목적
@@ -751,8 +863,8 @@ export const useAppStore = create<AppStore>()(
 
       // UI
       dismissStatus: () => set({ statusDismissed: true }),
-      showToast: (message) => set({ toast: message }),
-      clearToast: () => set({ toast: null }),
+      showToast: (message, action) => set({ toast: message, toastAction: action ?? null }),
+      clearToast: () => set({ toast: null, toastAction: null }),
       requestScrollToChecklist: () => set({ scrollToChecklistRequested: true }),
       clearScrollToChecklistRequest: () => set({ scrollToChecklistRequested: false }),
       requestTomorrowPreview: () => set({ tomorrowPreviewRequested: true }),
@@ -760,7 +872,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: 'ahmatda-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => dedupedAsyncStorage),
 
       // 저장 스키마 버전. 앞으로 필드 이름이나 구조가 바뀔 때마다 올리고 migrate에
       // 변환을 추가한다. version 없이 출시하면 이미 기기에 깔린 데이터를 나중에

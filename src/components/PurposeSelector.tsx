@@ -15,10 +15,11 @@ interface ChipProps {
   active: boolean;
   activeColor: string;
   onPress: () => void;
+  label: string; // 화면 낭독기용 — 이모지를 뺀 이름
   children: React.ReactNode;
 }
 
-function Chip({ active, activeColor, onPress, children }: ChipProps) {
+function Chip({ active, activeColor, onPress, label, children }: ChipProps) {
   const scale = useRef(new Animated.Value(active ? 1.05 : 1)).current;
 
   useEffect(() => {
@@ -34,6 +35,9 @@ function Chip({ active, activeColor, onPress, children }: ChipProps) {
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
         onPress={onPress}
+        accessibilityRole="radio"
+        accessibilityState={{ checked: active }}
+        accessibilityLabel={label}
         style={[
           styles.chip,
           active
@@ -65,8 +69,14 @@ export function PurposeSelector({
               </Text>
             ) : null}
           </View>
-          <Pressable onPress={() => onSelect(null)} style={styles.resetButton}>
-            <Text style={styles.resetButtonText}>초기화</Text>
+          <Pressable
+            onPress={() => onSelect(null)}
+            style={styles.resetButton}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="자동 감지된 목적 해제"
+          >
+            <Text style={styles.resetButtonText}>해제</Text>
           </Pressable>
         </View>
       ) : null}
@@ -75,8 +85,10 @@ export function PurposeSelector({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        accessibilityRole="radiogroup"
+        accessibilityLabel="오늘 외출 목적"
       >
-        <Chip active={purposeId === null} activeColor={Colors.slate800} onPress={() => onSelect(null)}>
+        <Chip active={purposeId === null} activeColor={Colors.slate800} onPress={() => onSelect(null)} label="목적 없음">
           🔓 목적 없음
         </Chip>
 
@@ -85,7 +97,7 @@ export function PurposeSelector({
           const active = purposeId === id;
           const activeColor = PurposeColors[purpose.color].chip;
           return (
-            <Chip key={id} active={active} activeColor={activeColor} onPress={() => onSelect(id)}>
+            <Chip key={id} active={active} activeColor={activeColor} onPress={() => onSelect(id)} label={purpose.label}>
               {purpose.emoji} {purpose.shortLabel}
             </Chip>
           );
@@ -134,9 +146,11 @@ const styles = StyleSheet.create({
     color: Colors.slate600,
     fontWeight: '500',
   },
+  // 선택된 칩이 1.05배로 커질 때 가장자리가 잘리지 않게 여유를 둔다.
   scrollContent: {
     gap: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
   },
   clothingHint: {
     marginTop: 10,
@@ -144,8 +158,9 @@ const styles = StyleSheet.create({
     color: Colors.slate500,
   },
   chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     borderRadius: 50,
     borderWidth: 1,
     borderColor: Colors.slate200,
@@ -154,9 +169,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   chipText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: Colors.slate500,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.slate600,
   },
   chipTextActive: {
     color: Colors.white,

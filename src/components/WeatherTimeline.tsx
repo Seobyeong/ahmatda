@@ -86,9 +86,12 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
               key={`${slot.label}-${i}`}
               style={[
                 styles.slot,
-                { backgroundColor: colors.bg, opacity: isPast ? 0.4 : 1 },
+                { backgroundColor: colors.bg, opacity: isPast ? 0.5 : 1 },
                 isCurrent && styles.slotCurrent,
               ]}
+              // 칸 하나를 한 문장으로 읽게 한다 — 안 묶으면 "오전", "18도", "30퍼센트"가 따로 읽힌다.
+              accessible
+              accessibilityLabel={`${slot.label}${isCurrent ? ' (지금)' : ''}, ${slot.temp}도, 강수확률 ${slot.rain}%`}
             >
               <Text style={[styles.slotLabel, { color: colors.text }]}>{slot.label}</Text>
               <WeatherIcon size={18} color={colors.text} style={styles.slotIcon} />
@@ -141,7 +144,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 11,
-    color: Colors.slate400,
+    color: Colors.slate500,
   },
   row: {
     flexDirection: 'row',
@@ -162,7 +165,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   slotLabel: {
-    fontSize: 10,
+    fontSize: 11,
     marginBottom: 4,
   },
   slotIcon: {
@@ -179,6 +182,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   slotRainText: {
-    fontSize: 9,
+    fontSize: 11,
   },
 });

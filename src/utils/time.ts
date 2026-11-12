@@ -158,3 +158,46 @@ export function getCurrentSlotIndex(): number {
   if (hour < 20) return 3;
   return 4;
 }
+
+// 대시보드 맨 위 "외출까지 남은 시간" 한 줄.
+// 12시간 안이면 남은 시간을 세고, 그보다 멀면(방금 나간 직후 등) 다음 외출 시각만 알린다.
+export const COUNTDOWN_HORIZON_MIN = 12 * 60;
+export const DEPARTURE_SOON_MIN = DEPARTURE_ALERT_LEAD_MS / 60000; // 출발 전 알림과 같은 기준
+// 출발 시각이 지나도 이만큼은 "늦었다"고 알린다 — 정각이 되자마자 "내일 08:15"로 바뀌면
+// 아직 짐을 싸는 사람에게 가장 급한 순간에 경고가 사라진다.
+export const DEPARTURE_OVERDUE_MIN = 30;
+
+export interface DepartureCountdown {
+  label: string;  // 작은 글씨 — "외출까지" / "곧 나갈 시간이에요" / "다음 외출"
+  value: string;  // 큰 글씨 — "1시간 12분" / "내일 08:15"
+  detail: string | null; // 남은 시간을 셀 때 옆에 붙는 출발 시각 — "08:15 출발"
+  soon: boolean;  // 30분 안 — 강조 표시
+}
+
+export function getDepartureCountdown(departureTime: string, now: Date = new Date()): DepartureCountdown {
+  const next = getNextDepartureDate(departureTime, now);
+  const minutes = Math.ceil((next.getTime() - now.getTime()) / 60000);
+
+  const previous = new Date(next);
+  previous.setDate(previous.getDate() - 1);
+  const overdue = Math.floor((now.getTime() - previous.getTime()) / 60000);
+  if (overdue < DEPARTURE_OVERDUE_MIN) {
+    return {
+      label: '나갈 시간이 지났어요',
+      value: overdue === 0 ? '지금' : `${overdue}분 지남`,
+      detail: `${departureTime} 출발`,
+      soon: true,
+    };
+  }
+
+  if (minutes > COUNTDOWN_HORIZON_MIN) {
+    const day = toDateString(next) === toDateString(now) ? '오늘' : '내일';
+    return { label: '다음 외출', value: `${day} ${departureTime}`, detail: null, soon: false };
+  }
+
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const value = h === 0 ? `${m}분` : m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
+  const soon = minutes <= DEPARTURE_SOON_MIN;
+  return { label: soon ? '곧 나갈 시간이에요' : '외출까지', value, detail: `${departureTime} 출발`, soon };
+}

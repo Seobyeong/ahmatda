@@ -72,6 +72,8 @@ export function TimeInput({ value, onChange, autoFocus, compact }: TimeInputProp
         placeholderTextColor={Colors.slate400}
         autoFocus={autoFocus}
         onBlur={handleBlur}
+        selectTextOnFocus
+        accessibilityLabel="시 (0~23)"
       />
       <Text style={compact ? styles.colonCompact : styles.colon}>:</Text>
       <TextInput
@@ -84,6 +86,8 @@ export function TimeInput({ value, onChange, autoFocus, compact }: TimeInputProp
         placeholder="15"
         placeholderTextColor={Colors.slate400}
         onBlur={handleBlur}
+        selectTextOnFocus
+        accessibilityLabel="분 (0~59)"
       />
     </View>
   );
@@ -115,10 +119,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.slate200,
     borderRadius: 8,
-    paddingVertical: 4,
-    width: 34,
+    paddingVertical: 6,
+    width: 44,
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.slate800,
   },
   colonCompact: {

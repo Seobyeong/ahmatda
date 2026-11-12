@@ -1,4 +1,4 @@
-import { getAlertTime, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs, getFeedbackOutingDate, getNextDepartureDate, isValidHHmm } from './time';
+import { getAlertTime, isWithinDepartureWindow, getNextAlertDate, getNextDailyDate, getDepartureWindowRemainingMs, getFeedbackOutingDate, getNextDepartureDate, isValidHHmm, getDepartureCountdown } from './time';
 
 // 기존에 테스트가 없던 시간 유틸도 함께 커버
 describe('getAlertTime', () => {
@@ -155,5 +155,49 @@ describe('getNextDepartureDate — 자기 전 정리의 "내일 준비"가 가�
 
   it('출발 시각 정각이면 이미 나간 것으로 보고 다음 날', () => {
     expect(day(getNextDepartureDate('08:15', new Date(2026, 10, 4, 8, 15)))).toBe('11/5 8:15');
+  });
+});
+
+describe('getDepartureCountdown — 대시보드의 남은 시간 표시', () => {
+  it('출발 전이면 남은 시간을 센다', () => {
+    expect(getDepartureCountdown('08:15', new Date(2026, 10, 4, 7, 3))).toEqual({
+      label: '외출까지', value: '1시간 12분', detail: '08:15 출발', soon: false,
+    });
+  });
+
+  it('30분 안이면 강조한다', () => {
+    const c = getDepartureCountdown('08:15', new Date(2026, 10, 4, 7, 45));
+    expect(c).toMatchObject({ label: '곧 나갈 시간이에요', value: '30분', soon: true });
+  });
+
+  it('초 단위는 올림 — 59초 남았으면 1분', () => {
+    expect(getDepartureCountdown('08:15', new Date(2026, 10, 4, 8, 14, 1)).value).toBe('1분');
+  });
+
+  it('정각 시간은 분을 생략한다', () => {
+    expect(getDepartureCountdown('08:15', new Date(2026, 10, 4, 6, 15)).value).toBe('2시간');
+  });
+
+  it('출발 시각 직후 30분은 늦었다고 알린다', () => {
+    expect(getDepartureCountdown('08:15', new Date(2026, 10, 4, 8, 15))).toMatchObject({
+      label: '나갈 시간이 지났어요', value: '지금', soon: true,
+    });
+    expect(getDepartureCountdown('08:15', new Date(2026, 10, 4, 8, 20))).toMatchObject({
+      label: '나갈 시간이 지났어요', value: '5분 지남', detail: '08:15 출발', soon: true,
+    });
+  });
+
+  it('30분이 더 지나면 내일 시각만 알린다', () => {
+    expect(getDepartureCountdown('08:15', new Date(2026, 10, 4, 8, 45))).toEqual({
+      label: '다음 외출', value: '내일 08:15', detail: null, soon: false,
+    });
+  });
+
+  it('자정을 넘는 출발도 남은 시간으로 센다', () => {
+    expect(getDepartureCountdown('00:15', new Date(2026, 10, 4, 23, 50)).value).toBe('25분');
+  });
+
+  it('12시간보다 먼 오늘 출발은 "오늘"로 알린다', () => {
+    expect(getDepartureCountdown('13:00', new Date(2026, 10, 4, 0, 10)).value).toBe('오늘 13:00');
   });
 });

@@ -35,10 +35,10 @@ export function AiSuggestionCard({ suggestions, onAccept, onReject }: AiSuggesti
             <Text style={styles.itemsText}>{s.items.join(', ')} 챙기기</Text>
           ) : null}
           <View style={styles.buttonRow}>
-            <Pressable style={styles.rejectButton} onPress={() => onReject(s)} hitSlop={6}>
+            <Pressable style={styles.rejectButton} onPress={() => onReject(s)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`${s.title} 제안 거절`}>
               <Text style={styles.rejectText}>아니요</Text>
             </Pressable>
-            <Pressable style={styles.acceptButton} onPress={() => onAccept(s)} hitSlop={6}>
+            <Pressable style={styles.acceptButton} onPress={() => onAccept(s)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`${s.title} 제안 추가`}>
               <Text style={styles.acceptText}>추가</Text>
             </Pressable>
           </View>
@@ -92,24 +92,24 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   rejectButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
     borderRadius: 50,
     backgroundColor: Colors.slate100,
   },
   rejectText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: Colors.slate500,
+    color: Colors.slate600,
   },
   acceptButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     borderRadius: 50,
     backgroundColor: Colors.violet50,
   },
   acceptText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.violet600,
   },

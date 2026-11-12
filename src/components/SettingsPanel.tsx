@@ -13,7 +13,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Check, X } from 'lucide-react-native';
+import { Check, Plus, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { PURPOSES, purposeItemKey } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
@@ -33,7 +33,7 @@ import { DiagnosticsModal } from './DiagnosticsModal';
 import { ChoiceList } from './ChoiceList';
 import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
 import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
-import type { FeedbackType } from '../types';
+import type { FeedbackType, MapApp } from '../types';
 
 interface SettingsPanelProps {
   /** 패널 윗변 위치 — 화면 기준, 보통 헤더 높이 */
@@ -49,6 +49,14 @@ const FEEDBACK_LABELS: Record<FeedbackType, string> = {
 };
 
 const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+
+const MAP_APP_CHOICES: { value: MapApp; label: string }[] = [
+  { value: 'kakao', label: '카카오맵' },
+  { value: 'naver', label: '네이버지도' },
+];
+
+// 글자만 있는 링크("등록", "켜기")는 글자 높이만큼만 눌린다 — 위아래로 넉넉히 넓힌다.
+const LINK_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 };
 
 // 개인정보처리방침(legal/privacy-policy.ko.md)의 문의 연락처와 같아야 한다.
 const SUPPORT_EMAIL = 'ko021954@gmail.com';
@@ -77,7 +85,7 @@ const WEATHER_ITEMS: { label: string; description: string }[] = [
 const PANEL_HEIGHT_RATIO = 0.78;
 const PANEL_MIN_HEIGHT = 420;
 
-function SettingSwitch(props: Pick<React.ComponentProps<typeof Switch>, 'value' | 'onValueChange' | 'disabled'>) {
+function SettingSwitch(props: Pick<React.ComponentProps<typeof Switch>, 'value' | 'onValueChange' | 'disabled' | 'accessibilityLabel'>) {
   return <Switch {...props} trackColor={{ false: Colors.slate200, true: Colors.indigo600 }} thumbColor={Colors.white} />;
 }
 
@@ -115,17 +123,17 @@ function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
             accessibilityRole="button"
             accessibilityLabel={`${label} 저장`}
           >
-            <Check size={14} color={Colors.emerald600} />
+            <Check size={16} color={Colors.emerald600} />
           </Pressable>
         </View>
       ) : (
         <Pressable
           onPress={() => setDraft(value)}
-          hitSlop={8}
+          hitSlop={LINK_HIT_SLOP}
           accessibilityRole="button"
           accessibilityLabel={`${label} ${value}, 눌러서 변경`}
         >
-          <Text style={[styles.rowValue, styles.rowValueEditable]}>{value}</Text>
+          <Text style={[styles.rowValue, styles.rowValueEditable]}>{value} · 변경</Text>
         </Pressable>
       )}
     </View>
@@ -184,6 +192,10 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   const setAiEnabled = useAppStore((s) => s.setAiEnabled);
   const setAiConsent = useAppStore((s) => s.setAiConsent);
 
+  const addPermanentRoutine = useAppStore((s) => s.addPermanentRoutine);
+  const showToast = useAppStore((s) => s.showToast);
+  const [routineDraft, setRoutineDraft] = useState('');
+  const [routineMessage, setRoutineMessage] = useState<string | null>(null);
   const [keywordDraft, setKeywordDraft] = useState('');
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
@@ -228,6 +240,8 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
       setWifiRegisterStatus('idle');
       setHomeRegisterStatus('idle');
       setKeywordDraft('');
+      setRoutineDraft('');
+      setRoutineMessage(null);
       setAiKeyDraft('');
     }
   }, [visible]);
@@ -242,6 +256,23 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
     const days = currentDays ?? [0, 1, 2, 3, 4, 5, 6];
     const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
     setRoutineDays(routineId, next);
+  };
+
+  // 루틴은 대시보드 입력창의 작은 링크로만 넣을 수 있었다 — 루틴을 보는 자리에서 바로 넣게 한다.
+  const handleAddRoutine = () => {
+    const label = routineDraft.trim();
+    if (!label) return;
+    if (addPermanentRoutine(label)) {
+      setRoutineDraft('');
+      setRoutineMessage(null);
+    } else {
+      setRoutineMessage(`'${label}'은(는) 이미 루틴에 있어요.`);
+    }
+  };
+
+  const handleRemoveRoutine = (id: string, label: string) => {
+    const undo = removePermanentRoutine(id);
+    if (undo) showToast(`'${label}' 루틴을 지웠어요.`, { label: '되돌리기', onPress: undo });
   };
 
   const handleAddKeyword = () => {
@@ -378,12 +409,14 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting>설정</Text>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="설정 닫기">
-            <X size={20} color={Colors.slate500} />
+          <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting accessibilityRole="header">설정</Text>
+          <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="설정 닫기">
+            <X size={22} color={Colors.slate600} />
           </Pressable>
         </View>
 
+
+        <Text style={[styles.groupTitle, styles.groupTitleFirst]} accessibilityRole="header">시간 · 알림</Text>
         <TimeRow label="외출 시간" value={departureTime} onCommit={updateDepartureTime} panelVisible={visible} />
         <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} panelVisible={visible} />
 
@@ -400,106 +433,82 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                   : '20분 넘게 머문 곳을 떠날 때, 아침에 챙긴 충전기·우산 같은 물건을 알려요 (하루 3번까지)'}
             </Text>
           </View>
-          <SettingSwitch value={awayPlaceOn} onValueChange={handleAwayPlaceToggle} disabled={!isMotionSupported()} />
+          <SettingSwitch value={awayPlaceOn} onValueChange={handleAwayPlaceToggle} disabled={!isMotionSupported()} accessibilityLabel="집 밖에서 떠날 때 알림" />
         </View>
 
-        <Text style={styles.sectionTitle}>주 이동수단</Text>
-        <ChoiceList choices={COMMUTE_CHOICES} value={commuteMode} onChange={setCommuteMode} />
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Δt 보정치</Text>
-          <Text style={[styles.rowValue, { color: deltaColor }]}>{deltaLabel}°C</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>체온 민감도</Text>
-          <Pressable onPress={() => setEditingSensitivity((v) => !v)}>
-            <Text style={styles.calendarSettingsLink}>
-              {editingSensitivity ? '닫기' : '재조정'}
-            </Text>
+        <Text style={styles.groupTitle} accessibilityRole="header">내 체크리스트</Text>
+        <Text style={styles.sectionTitle}>내 루틴</Text>
+        <Text style={styles.weatherDescription}>나갈 때마다 챙기는 것. 요일을 눌러 그 요일에만 뜨게 할 수 있어요.</Text>
+        <View style={styles.keywordAddRow}>
+          <TextInput
+            style={styles.keywordInput}
+            value={routineDraft}
+            onChangeText={(text) => {
+              setRoutineDraft(text);
+              setRoutineMessage(null);
+            }}
+            placeholder="루틴 추가 (예: 사원증)"
+            placeholderTextColor={Colors.slate500}
+            onSubmitEditing={handleAddRoutine}
+            returnKeyType="done"
+            submitBehavior="submit"
+            maxLength={40}
+            accessibilityLabel="루틴 추가"
+          />
+          <Pressable
+            style={[styles.addButton, !routineDraft.trim() && styles.addButtonDisabled]}
+            onPress={handleAddRoutine}
+            disabled={!routineDraft.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="루틴 추가"
+          >
+            <Plus size={18} color={Colors.white} />
           </Pressable>
         </View>
-        {editingSensitivity ? (
-          <View style={styles.sensitivityEditArea}>
-            {/* 기준값만 바꾼다. 일일 피드백으로 쌓인 learnedDelta는 그대로 두므로,
-                민감도를 다시 골라도 그동안의 학습이 사라지지 않는다. */}
-            <SensitivitySelector value={sensitivityLevel} onChange={setSensitivity} />
-          </View>
-        ) : null}
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>홈 Wi-Fi</Text>
-          <Pressable onPress={handleRegisterWifi}>
-            <Text style={styles.calendarSettingsLink}>{homeBssid ? '재등록' : '등록'}</Text>
-          </Pressable>
-        </View>
-        {wifiRegisterStatus === 'success' ? (
-          <Text style={styles.wifiStatusSuccess}>지금 연결된 Wi-Fi를 홈으로 등록했어요.</Text>
-        ) : null}
-        {wifiRegisterStatus === 'error' ? (
-          <Text style={styles.wifiStatusError}>Wi-Fi에 연결돼 있지 않아요.</Text>
-        ) : null}
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>집 위치</Text>
-          <Pressable onPress={handleRegisterHome} disabled={homeRegisterStatus === 'busy'}>
-            <Text style={styles.calendarSettingsLink}>
-              {homeRegisterStatus === 'busy' ? '확인 중…' : hasHome ? '지금 위치로 재등록' : '지금 위치로 등록'}
-            </Text>
-          </Pressable>
-        </View>
-        {homeRegisterStatus === 'active' ? (
-          <Text style={styles.wifiStatusSuccess}>지금 위치를 집으로 등록했어요. 이 기기에만 저장돼요.</Text>
-        ) : null}
-        {homeRegisterStatus === 'saved' ? (
-          <Text style={styles.wifiStatusSuccess}>집 위치를 저장했어요. 아래 '위치 항상 허용'을 켜야 집을 벗어나는 걸 알아채요.</Text>
-        ) : null}
-        {homeRegisterStatus === 'error' ? (
-          <Text style={styles.wifiStatusError}>위치를 가져오지 못했어요. 위치 권한과 위치 서비스를 확인해주세요.</Text>
-        ) : null}
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>위치 항상 허용 (권장)</Text>
-          {bgLocation === 'granted' ? (
-            <Text style={styles.rowValue}>허용됨</Text>
-          ) : (
-            <Pressable onPress={handleBackgroundLocation}>
-              <Text style={styles.calendarSettingsLink}>켜기</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>캘린더 연동</Text>
-          {calendarConnected ? (
-            <Text style={styles.rowValue}>연결됨</Text>
-          ) : (
-            <Pressable onPress={() => CalendarService.openSettings()}>
-              <Text style={styles.calendarSettingsLink}>권한 없음 · 설정 열기</Text>
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>길찾기 앱</Text>
-          <Pressable onPress={() => setMapApp(mapApp === 'kakao' ? 'naver' : 'kakao')}>
-            <Text style={styles.calendarSettingsLink}>
-              {mapApp === 'kakao' ? '카카오맵' : '네이버지도'} · 변경
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.weatherTextArea}>
-            <Text style={styles.rowLabel}>AI로 개인화하기</Text>
-            <Text style={styles.weatherDescription}>쓰고 있는 AI 앱과 대화해 루틴·키워드를 한 번에 설정 (추가 비용 없음)</Text>
-          </View>
-          <Pressable onPress={() => setPersonalizeVisible(true)} hitSlop={8}>
-            <Text style={styles.calendarSettingsLink}>시작</Text>
-          </Pressable>
-        </View>
-        <PersonalizeModal visible={personalizeVisible} onClose={() => setPersonalizeVisible(false)} />
-        <DiagnosticsModal visible={diagnosticsVisible} onClose={() => setDiagnosticsVisible(false)} />
+        {routineMessage ? <Text style={styles.wifiStatusError}>{routineMessage}</Text> : null}
+        {permanentRoutines.length === 0 ? (
+          <Text style={styles.emptyText}>등록된 루틴이 없어요.</Text>
+        ) : (
+          permanentRoutines.map((routine) => {
+            const activeDays = routine.days ?? [0, 1, 2, 3, 4, 5, 6];
+            return (
+              <View key={routine.id} style={styles.routineBlock}>
+                <View style={styles.routineRow}>
+                  <Text style={styles.routineName}>{routine.label}</Text>
+                  <Text style={styles.routineDaysSummary}>{routine.days && routine.days.length > 0 ? '고른 요일만' : '매일'}</Text>
+                  <Pressable
+                    style={styles.closeButton}
+                    onPress={() => handleRemoveRoutine(routine.id, routine.label)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${routine.label} 루틴 삭제`}
+                  >
+                    <X size={18} color={Colors.slate500} />
+                  </Pressable>
+                </View>
+                <View style={styles.dayChipRow}>
+                  {DAY_LABELS.map((label, day) => {
+                    const active = activeDays.includes(day);
+                    return (
+                      <Pressable
+                        key={day}
+                        style={[styles.dayChip, active && styles.dayChipActive]}
+                        onPress={() => handleToggleRoutineDay(routine.id, routine.days, day)}
+                        hitSlop={{ top: 8, bottom: 8, left: 3, right: 3 }}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: active }}
+                        accessibilityLabel={`${routine.label} ${label}요일`}
+                      >
+                        <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })
+        )}
 
         <Text style={styles.sectionTitle}>날씨 알림 항목</Text>
         {WEATHER_ITEMS.map((weatherItem) => {
@@ -510,7 +519,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                 <Text style={styles.routineLabel}>{weatherItem.label}</Text>
                 <Text style={styles.weatherDescription}>{weatherItem.description}</Text>
               </View>
-              <SettingSwitch value={enabled} onValueChange={(value) => setWeatherItemEnabled(weatherItem.label, value)} />
+              <SettingSwitch value={enabled} onValueChange={(value) => setWeatherItemEnabled(weatherItem.label, value)} accessibilityLabel={`${weatherItem.label}, ${weatherItem.description}`} />
             </View>
           );
         })}
@@ -529,6 +538,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                   <SettingSwitch
                     value={enabled}
                     onValueChange={(value) => setPurposeItemEnabled(purposeId, purposeItem.label, value)}
+                    accessibilityLabel={`${purposeItem.label}, ${purposeItem.note}`}
                   />
                 </View>
               );
@@ -549,7 +559,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                   key={kw}
                   style={styles.keywordChip}
                   onPress={() => removeCustomKeyword(purposeId, kw)}
-                  hitSlop={4}
+                  hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={`키워드 ${kw} 삭제`}
                 >
@@ -564,109 +574,50 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                 value={keywordDraft}
                 onChangeText={setKeywordDraft}
                 placeholder="키워드 추가 (예: 회의)"
-                placeholderTextColor={Colors.slate400}
+                placeholderTextColor={Colors.slate500}
                 onSubmitEditing={handleAddKeyword}
                 returnKeyType="done"
               />
-              <Pressable style={styles.timeDoneButton} onPress={handleAddKeyword} hitSlop={8}>
+              <Pressable style={styles.timeDoneButton} onPress={handleAddKeyword} hitSlop={8} accessibilityRole="button" accessibilityLabel="키워드 추가">
                 <Check size={14} color={Colors.emerald600} />
               </Pressable>
             </View>
           </>
         )}
 
-        <Text style={styles.sectionTitle}>내 루틴</Text>
-        {permanentRoutines.length === 0 ? (
-          <Text style={styles.emptyText}>등록된 루틴이 없어요.</Text>
-        ) : (
-          permanentRoutines.map((routine) => {
-            const activeDays = routine.days ?? [0, 1, 2, 3, 4, 5, 6];
-            return (
-              <View key={routine.id} style={styles.routineBlock}>
-                <View style={styles.routineRow}>
-                  <Text style={styles.routineLabel}>{routine.label}</Text>
-                  <Pressable
-                    onPress={() => removePermanentRoutine(routine.id)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${routine.label} 루틴 삭제`}
-                  >
-                    <X size={16} color={Colors.slate400} />
-                  </Pressable>
-                </View>
-                <View style={styles.dayChipRow}>
-                  {DAY_LABELS.map((label, day) => {
-                    const active = activeDays.includes(day);
-                    return (
-                      <Pressable
-                        key={day}
-                        style={[styles.dayChip, active && styles.dayChipActive]}
-                        onPress={() => handleToggleRoutineDay(routine.id, routine.days, day)}
-                        hitSlop={4}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={`${routine.label} ${label}요일`}
-                      >
-                        <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
-                          {label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            );
-          })
-        )}
+        <Text style={styles.groupTitle} accessibilityRole="header">날씨 · 체감온도</Text>
+        <Text style={styles.sectionTitle}>주 이동수단</Text>
+        <ChoiceList choices={COMMUTE_CHOICES} value={commuteMode} onChange={setCommuteMode} />
 
-        <Text style={styles.sectionTitle}>AI 일정 해석 (선택)</Text>
-        <Text style={styles.weatherDescription}>
-          키워드로 알 수 없는 일정(예: 부산 출장)을 Claude가 해석해 준비물을 제안해요. 본인의
-          Anthropic API 키가 필요해요.
-        </Text>
-        {aiHasKey ? (
-          <>
-            <View style={styles.weatherRow}>
-              <Text style={styles.routineLabel}>사용하기</Text>
-              <SettingSwitch value={ai.enabled} onValueChange={handleAiToggle} />
-            </View>
-            {ai.status === 'invalidKey' ? (
-              <Text style={styles.wifiStatusError}>API 키가 거부됐어요. 키를 삭제하고 올바른 키를 다시 넣어주세요.</Text>
-            ) : null}
-            {ai.status === 'quotaExceeded' ? (
-              <Text style={styles.wifiStatusError}>요청 한도나 잔액이 부족해요. 내일 다시 시도해요.</Text>
-            ) : null}
-            <View style={styles.row}>
-              <Text style={styles.rowLabel}>
-                이번 달 {ai.usage.month === getTodayString().slice(0, 7) ? ai.usage.monthCalls : 0}회 호출 · 하루 최대 {DAILY_CALL_LIMIT}회
-              </Text>
-              <Pressable onPress={handleAiKeyRemove} hitSlop={8}>
-                <Text style={styles.calendarSettingsLink}>키 삭제</Text>
-              </Pressable>
-            </View>
-            <Pressable onPress={handleAiReport} hitSlop={8}>
-              <Text style={styles.aiReportLink}>이상한 제안 신고하기</Text>
-            </Pressable>
-          </>
-        ) : (
-          <View style={styles.keywordAddRow}>
-            <TextInput
-              style={styles.keywordInput}
-              value={aiKeyDraft}
-              onChangeText={setAiKeyDraft}
-              placeholder="Anthropic API 키 (sk-ant-...)"
-              placeholderTextColor={Colors.slate400}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              onSubmitEditing={handleAiKeySave}
-              returnKeyType="done"
-            />
-            <Pressable style={styles.timeDoneButton} onPress={handleAiKeySave} hitSlop={8}>
-              <Check size={14} color={Colors.emerald600} />
-            </Pressable>
+        <View style={styles.row}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.rowLabel}>체감온도 보정</Text>
+            <Text style={styles.weatherDescription}>민감도와 옷차림 피드백으로 정해져요. 실제 기온에 이만큼 더해 보여줘요.</Text>
           </View>
-        )}
+          <Text style={[styles.rowValue, { color: deltaColor }]}>{deltaLabel}°C</Text>
+        </View>
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>체온 민감도</Text>
+          <Pressable
+            onPress={() => setEditingSensitivity((v) => !v)}
+            hitSlop={LINK_HIT_SLOP}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: editingSensitivity }}
+            accessibilityLabel="체온 민감도 다시 고르기"
+          >
+            <Text style={styles.calendarSettingsLink}>
+              {editingSensitivity ? '닫기' : '다시 고르기'}
+            </Text>
+          </Pressable>
+        </View>
+        {editingSensitivity ? (
+          <View style={styles.sensitivityEditArea}>
+            {/* 기준값만 바꾼다. 일일 피드백으로 쌓인 learnedDelta는 그대로 두므로,
+                민감도를 다시 골라도 그동안의 학습이 사라지지 않는다. */}
+            <SensitivitySelector value={sensitivityLevel} onChange={setSensitivity} />
+          </View>
+        ) : null}
 
         <Text style={styles.sectionTitle}>최근 피드백 기록</Text>
         {recentFeedback.length === 0 ? (
@@ -678,6 +629,143 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
               <Text style={styles.feedbackValue}>{FEEDBACK_LABELS[record.val]}</Text>
             </View>
           ))
+        )}
+
+        <Text style={styles.groupTitle} accessibilityRole="header">외출 감지</Text>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>홈 Wi-Fi</Text>
+          <Pressable onPress={handleRegisterWifi} hitSlop={LINK_HIT_SLOP} accessibilityRole="button" accessibilityLabel={homeBssid ? '홈 Wi-Fi 다시 등록' : '홈 Wi-Fi 등록'}>
+            <Text style={styles.calendarSettingsLink}>{homeBssid ? '등록됨 · 다시 등록' : '지금 Wi-Fi로 등록'}</Text>
+          </Pressable>
+        </View>
+        {wifiRegisterStatus === 'success' ? (
+          <Text style={styles.wifiStatusSuccess}>지금 연결된 Wi-Fi를 홈으로 등록했어요.</Text>
+        ) : null}
+        {wifiRegisterStatus === 'error' ? (
+          <Text style={styles.wifiStatusError}>Wi-Fi에 연결돼 있지 않아요.</Text>
+        ) : null}
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>집 위치</Text>
+          <Pressable onPress={handleRegisterHome} disabled={homeRegisterStatus === 'busy'} hitSlop={LINK_HIT_SLOP} accessibilityRole="button">
+            <Text style={styles.calendarSettingsLink}>
+              {homeRegisterStatus === 'busy' ? '확인 중…' : hasHome ? '등록됨 · 지금 위치로 다시 등록' : '지금 위치로 등록'}
+            </Text>
+          </Pressable>
+        </View>
+        {homeRegisterStatus === 'active' ? (
+          <Text style={styles.wifiStatusSuccess}>지금 위치를 집으로 등록했어요. 이 기기에만 저장돼요.</Text>
+        ) : null}
+        {homeRegisterStatus === 'saved' ? (
+          <Text style={styles.wifiStatusSuccess}>집 위치를 저장했어요. 아래 '위치 항상 허용'을 켜야 집을 벗어나는 걸 알아채요.</Text>
+        ) : null}
+        {homeRegisterStatus === 'error' ? (
+          <Text style={styles.wifiStatusError}>위치를 가져오지 못했어요. 위치 권한과 위치 서비스를 확인해주세요.</Text>
+        ) : null}
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>위치 항상 허용 (권장)</Text>
+          {bgLocation === 'granted' ? (
+            <Text style={styles.rowValue}>허용됨</Text>
+          ) : (
+            <Pressable onPress={handleBackgroundLocation} hitSlop={LINK_HIT_SLOP} accessibilityRole="button" accessibilityLabel="위치 항상 허용 켜기">
+              <Text style={styles.calendarSettingsLink}>켜기</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Text style={styles.groupTitle} accessibilityRole="header">연결</Text>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>캘린더 연동</Text>
+          {calendarConnected ? (
+            <Text style={styles.rowValue}>연결됨</Text>
+          ) : (
+            <Pressable onPress={() => CalendarService.openSettings()} hitSlop={LINK_HIT_SLOP} accessibilityRole="button">
+              <Text style={styles.calendarSettingsLink}>권한 없음 · 설정 열기</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>길찾기 앱</Text>
+          <View style={styles.segment} accessibilityRole="radiogroup">
+            {MAP_APP_CHOICES.map((choice) => {
+              const selected = mapApp === choice.value;
+              return (
+                <Pressable
+                  key={choice.value}
+                  style={[styles.segmentOption, selected && styles.segmentOptionSelected]}
+                  onPress={() => setMapApp(choice.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={choice.label}
+                >
+                  <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{choice.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.row}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.rowLabel}>AI로 개인화하기</Text>
+            <Text style={styles.weatherDescription}>쓰고 있는 AI 앱과 대화해 루틴·키워드를 한 번에 설정 (추가 비용 없음)</Text>
+          </View>
+          <Pressable onPress={() => setPersonalizeVisible(true)} hitSlop={LINK_HIT_SLOP} accessibilityRole="button" accessibilityLabel="AI로 개인화하기 시작">
+            <Text style={styles.calendarSettingsLink}>시작</Text>
+          </Pressable>
+        </View>
+        <PersonalizeModal visible={personalizeVisible} onClose={() => setPersonalizeVisible(false)} />
+        <DiagnosticsModal visible={diagnosticsVisible} onClose={() => setDiagnosticsVisible(false)} />
+
+        <Text style={styles.sectionTitle}>AI 일정 해석 (선택)</Text>
+        <Text style={styles.weatherDescription}>
+          키워드로 알 수 없는 일정(예: 부산 출장)을 Claude가 해석해 준비물을 제안해요. 본인의
+          Anthropic API 키가 필요해요.
+        </Text>
+        {aiHasKey ? (
+          <>
+            <View style={styles.weatherRow}>
+              <Text style={styles.routineLabel}>사용하기</Text>
+              <SettingSwitch value={ai.enabled} onValueChange={handleAiToggle} accessibilityLabel="AI 일정 해석 사용하기" />
+            </View>
+            {ai.status === 'invalidKey' ? (
+              <Text style={styles.wifiStatusError}>API 키가 거부됐어요. 키를 삭제하고 올바른 키를 다시 넣어주세요.</Text>
+            ) : null}
+            {ai.status === 'quotaExceeded' ? (
+              <Text style={styles.wifiStatusError}>요청 한도나 잔액이 부족해요. 내일 다시 시도해요.</Text>
+            ) : null}
+            <View style={styles.row}>
+              <Text style={styles.rowLabel}>
+                이번 달 {ai.usage.month === getTodayString().slice(0, 7) ? ai.usage.monthCalls : 0}회 호출 · 하루 최대 {DAILY_CALL_LIMIT}회
+              </Text>
+              <Pressable onPress={handleAiKeyRemove} hitSlop={LINK_HIT_SLOP} accessibilityRole="button">
+                <Text style={styles.calendarSettingsLink}>키 삭제</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={handleAiReport} hitSlop={LINK_HIT_SLOP} accessibilityRole="link">
+              <Text style={styles.aiReportLink}>이상한 제안 신고하기</Text>
+            </Pressable>
+          </>
+        ) : (
+          <View style={styles.keywordAddRow}>
+            <TextInput
+              style={styles.keywordInput}
+              value={aiKeyDraft}
+              onChangeText={setAiKeyDraft}
+              placeholder="Anthropic API 키 (sk-ant-...)"
+              placeholderTextColor={Colors.slate500}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={handleAiKeySave}
+              returnKeyType="done"
+            />
+            <Pressable style={styles.timeDoneButton} onPress={handleAiKeySave} hitSlop={8} accessibilityRole="button" accessibilityLabel="API 키 저장">
+              <Check size={14} color={Colors.emerald600} />
+            </Pressable>
+          </View>
         )}
       </ScrollView>
     </Animated.View>
@@ -715,10 +803,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+  },
+  // 아이콘만 있는 버튼의 터치 영역 (44×44). 오른쪽 여백만큼 당겨 아이콘이 가장자리에 맞게.
+  closeButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -12,
+  },
+  // 묶음 제목 — 설정이 한 줄로 길게 이어져 원하는 항목을 찾기 어려웠다. 다섯 묶음으로 나눈다.
+  groupTitle: {
+    marginTop: 22,
+    marginBottom: 4,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.slate200,
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.slate800,
+  },
+  groupTitleFirst: {
+    marginTop: 8,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: Colors.slate800,
   },
@@ -726,13 +835,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 48,
     paddingVertical: 10,
+    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.slate100,
   },
   rowLabel: {
-    fontSize: 13,
-    color: Colors.slate500,
+    fontSize: 14,
+    color: Colors.slate700,
   },
   rowValue: {
     fontSize: 14,
@@ -744,7 +855,7 @@ const styles = StyleSheet.create({
     color: Colors.indigo600,
   },
   calendarSettingsLink: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.indigo600,
   },
@@ -753,15 +864,15 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   wifiStatusSuccess: {
-    marginTop: -4,
+    marginTop: 6,
     marginBottom: 8,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.emerald600,
   },
   wifiStatusError: {
-    marginTop: -4,
+    marginTop: 6,
     marginBottom: 8,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.red500,
   },
   timeEditRow: {
@@ -770,9 +881,9 @@ const styles = StyleSheet.create({
   },
   timeDoneButton: {
     marginLeft: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.emerald100,
     alignItems: 'center',
     justifyContent: 'center',
@@ -780,13 +891,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginTop: 18,
     marginBottom: 8,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
-    color: Colors.slate600,
+    color: Colors.slate700,
   },
   emptyText: {
-    fontSize: 12,
-    color: Colors.slate400,
+    marginTop: 8,
+    fontSize: 13,
+    color: Colors.slate500,
   },
   routineBlock: {
     paddingVertical: 4,
@@ -794,18 +906,27 @@ const styles = StyleSheet.create({
   routineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
+    gap: 8,
+  },
+  routineName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.slate800,
+  },
+  routineDaysSummary: {
+    fontSize: 12,
+    color: Colors.slate500,
   },
   dayChipRow: {
     flexDirection: 'row',
-    gap: 4,
-    paddingBottom: 8,
+    gap: 6,
+    paddingBottom: 10,
   },
   dayChip: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.slate100,
@@ -814,30 +935,33 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.indigo600,
   },
   dayChipText: {
-    fontSize: 11,
-    color: Colors.slate400,
+    fontSize: 13,
+    color: Colors.slate500,
     fontWeight: '600',
   },
   dayChipTextActive: {
     color: Colors.white,
   },
   routineLabel: {
-    fontSize: 13,
-    color: Colors.slate700,
+    fontSize: 14,
+    color: Colors.slate800,
   },
   weatherRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 48,
     paddingVertical: 8,
+    gap: 12,
   },
   weatherTextArea: {
     flex: 1,
   },
   weatherDescription: {
     marginTop: 2,
-    fontSize: 11,
-    color: Colors.slate400,
+    fontSize: 12,
+    lineHeight: 17,
+    color: Colors.slate500,
   },
   keywordChipRow: {
     flexDirection: 'row',
@@ -872,17 +996,53 @@ const styles = StyleSheet.create({
   },
   keywordInput: {
     flex: 1,
-    fontSize: 13,
+    minHeight: 44,
+    fontSize: 14,
     color: Colors.slate800,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.slate100,
+  },
+  addButton: {
+    marginLeft: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.indigo600,
+  },
+  addButtonDisabled: {
+    backgroundColor: Colors.slate300,
+  },
+  segment: {
+    flexDirection: 'row',
+    backgroundColor: Colors.slate100,
+    borderRadius: 10,
+    padding: 3,
+  },
+  segmentOption: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: Colors.slate50,
+  },
+  segmentOptionSelected: {
+    backgroundColor: Colors.white,
+  },
+  segmentText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.slate500,
+  },
+  segmentTextSelected: {
+    color: Colors.indigo600,
   },
   aiReportLink: {
-    marginTop: 8,
-    fontSize: 12,
-    color: Colors.slate400,
+    marginTop: 12,
+    fontSize: 13,
+    color: Colors.slate500,
     textDecorationLine: 'underline',
   },
   feedbackRow: {
@@ -892,11 +1052,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   feedbackDate: {
-    fontSize: 12,
-    color: Colors.slate400,
+    fontSize: 13,
+    color: Colors.slate500,
   },
   feedbackValue: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.slate600,
   },
