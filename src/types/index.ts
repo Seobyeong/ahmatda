@@ -49,7 +49,6 @@ export interface Purpose {
   id: PurposeId;
   label: string;
   shortLabel: string;
-  emoji: string;
   color: string;
   calKeywords: string[];
   items: PurposeItem[];

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { SENSITIVITY_LABELS } from '../constants/feedback';
 
 interface SensitivityButtonProps {
@@ -71,7 +72,7 @@ const styles = StyleSheet.create({
   sensitivityButton: {
     width: 52,
     height: 52,
-    borderRadius: 26,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
     borderColor: Colors.slate200,
     backgroundColor: Colors.white,
@@ -83,7 +84,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.indigo600,
   },
   sensitivityButtonText: {
-    fontSize: 18,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate500,
   },
@@ -96,12 +97,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   spectrumLabel: {
-    fontSize: 11,
+    fontSize: FontSize.caption,
     color: Colors.slate400,
   },
   sensitivityCurrentLabel: {
     marginTop: 20,
-    fontSize: 16,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.indigo600,
     textAlign: 'center',

@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Check, Plus, X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { PURPOSES, purposeItemKey } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
 import { getTodayString } from '../utils/time';
@@ -819,7 +820,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: Colors.slate200,
-    fontSize: 16,
+    fontSize: FontSize.heading,
     fontWeight: '800',
     color: Colors.slate800,
   },
@@ -827,7 +828,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate800,
   },
@@ -842,11 +843,11 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.slate100,
   },
   rowLabel: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     color: Colors.slate700,
   },
   rowValue: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate800,
   },
@@ -855,7 +856,7 @@ const styles = StyleSheet.create({
     color: Colors.indigo600,
   },
   calendarSettingsLink: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.indigo600,
   },
@@ -866,13 +867,13 @@ const styles = StyleSheet.create({
   wifiStatusSuccess: {
     marginTop: 6,
     marginBottom: 8,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.emerald600,
   },
   wifiStatusError: {
     marginTop: 6,
     marginBottom: 8,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.red500,
   },
   timeEditRow: {
@@ -883,7 +884,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.emerald100,
     alignItems: 'center',
     justifyContent: 'center',
@@ -891,13 +892,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginTop: 18,
     marginBottom: 8,
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.slate700,
   },
   emptyText: {
     marginTop: 8,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
   },
   routineBlock: {
@@ -910,12 +911,12 @@ const styles = StyleSheet.create({
   },
   routineName: {
     flex: 1,
-    fontSize: 15,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate800,
   },
   routineDaysSummary: {
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   dayChipRow: {
@@ -926,7 +927,7 @@ const styles = StyleSheet.create({
   dayChip: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.slate100,
@@ -935,7 +936,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.indigo600,
   },
   dayChipText: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
     fontWeight: '600',
   },
@@ -943,7 +944,7 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   routineLabel: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     color: Colors.slate800,
   },
   weatherRow: {
@@ -959,7 +960,7 @@ const styles = StyleSheet.create({
   },
   weatherDescription: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     lineHeight: 17,
     color: Colors.slate500,
   },
@@ -972,7 +973,7 @@ const styles = StyleSheet.create({
   keywordChipReadonly: {
     paddingVertical: 5,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.slate100,
   },
   keywordChip: {
@@ -981,11 +982,11 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 5,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.emerald100,
   },
   keywordChipText: {
-    fontSize: 12,
+    fontSize: FontSize.caption,
     fontWeight: '600',
     color: Colors.slate700,
   },
@@ -997,18 +998,18 @@ const styles = StyleSheet.create({
   keywordInput: {
     flex: 1,
     minHeight: 44,
-    fontSize: 14,
+    fontSize: FontSize.body,
     color: Colors.slate800,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.slate100,
   },
   addButton: {
     marginLeft: 8,
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.indigo600,
@@ -1019,20 +1020,20 @@ const styles = StyleSheet.create({
   segment: {
     flexDirection: 'row',
     backgroundColor: Colors.slate100,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 3,
   },
   segmentOption: {
     minHeight: 36,
     justifyContent: 'center',
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
   },
   segmentOptionSelected: {
     backgroundColor: Colors.white,
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '600',
     color: Colors.slate500,
   },
@@ -1041,7 +1042,7 @@ const styles = StyleSheet.create({
   },
   aiReportLink: {
     marginTop: 12,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
     textDecorationLine: 'underline',
   },
@@ -1052,11 +1053,11 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   feedbackDate: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
   },
   feedbackValue: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '600',
     color: Colors.slate600,
   },

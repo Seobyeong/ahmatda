@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import type { ToastAction } from '../store';
 
 interface ToastProps {
@@ -9,13 +10,15 @@ interface ToastProps {
   /** 버튼 하나 (예: 되돌리기). 누르면 실행하고 토스트를 닫는다. */
   action?: ToastAction | null;
   onDone: () => void;
+  /** 화면 아래에 고정된 버튼이 있으면 그 위로 띄운다. */
+  bottomOffset?: number;
 }
 
 const DURATION_MS = 2600;
 // 버튼이 있으면 읽고 누를 시간이 필요하다 — 되돌리기를 놓치면 루틴이 영구 삭제된다.
 const DURATION_WITH_ACTION_MS = 6000;
 
-export function Toast({ message, action, onDone }: ToastProps) {
+export function Toast({ message, action, onDone, bottomOffset = 80 }: ToastProps) {
   const translateY = useRef(new Animated.Value(10)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -37,7 +40,7 @@ export function Toast({ message, action, onDone }: ToastProps) {
 
   return (
     // box-none: 토스트 바깥은 뒤 화면으로 터치가 통과하고, 버튼만 눌린다.
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={[styles.container, { bottom: bottomOffset }]} pointerEvents="box-none">
       <Animated.View
         style={[styles.pill, { opacity, transform: [{ translateY }] }]}
         // 화면 낭독기가 새 메시지를 읽어 준다 — 없으면 시각 사용자만 결과를 안다.
@@ -68,7 +71,6 @@ export function Toast({ message, action, onDone }: ToastProps) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 80,
     left: 20,
     right: 20,
     alignItems: 'center',
@@ -82,13 +84,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.slate800,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 24,
+    borderRadius: Radius.pill,
     gap: 8,
   },
   text: {
     flexShrink: 1,
     color: Colors.white,
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '500',
   },
   actionButton: {
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     color: Colors.indigo200,
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
   },
 });

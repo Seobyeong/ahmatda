@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { PURPOSES } from '../constants/purposes';
 import { SENSITIVITY_LABELS } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -201,7 +202,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: {
-    fontSize: 16,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate800,
   },
@@ -212,7 +213,7 @@ const styles = StyleSheet.create({
   stepTitle: {
     marginTop: 8,
     marginBottom: 6,
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.slate700,
   },
@@ -221,7 +222,7 @@ const styles = StyleSheet.create({
   },
   description: {
     marginBottom: 10,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     lineHeight: 18,
     color: Colors.slate500,
   },
@@ -229,21 +230,21 @@ const styles = StyleSheet.create({
     minHeight: 120,
     maxHeight: 220,
     padding: 10,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.slate50,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate800,
     marginBottom: 10,
   },
   error: {
     marginBottom: 10,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     lineHeight: 18,
     color: Colors.red500,
   },
   planLine: {
     paddingVertical: 6,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate700,
     borderBottomWidth: 1,
     borderBottomColor: Colors.slate100,
@@ -251,18 +252,18 @@ const styles = StyleSheet.create({
   skippedTitle: {
     marginTop: 14,
     marginBottom: 4,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     fontWeight: '700',
     color: Colors.slate400,
   },
   skippedLine: {
     paddingVertical: 2,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate400,
   },
   note: {
     marginTop: 14,
-    fontSize: 11,
+    fontSize: FontSize.caption,
     color: Colors.slate400,
   },
   buttonRow: {
@@ -276,22 +277,22 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.indigo600,
   },
   primaryText: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.white,
   },
   secondaryButton: {
     alignItems: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     backgroundColor: Colors.slate100,
   },
   secondaryText: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate600,
   },

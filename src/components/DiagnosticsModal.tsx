@@ -9,6 +9,7 @@ import notifee from '@notifee/react-native';
 import * as Location from 'expo-location';
 import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { DepartureService } from '../services/departure/DepartureService';
 import { AwayPlaceService } from '../services/departure/AwayPlaceService';
 import { HOME_GEOFENCE_TASK, HomeGeofence } from '../services/departure/homeGeofence';
@@ -221,15 +222,15 @@ export function DiagnosticsModal({ visible, onClose }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgDefault, paddingTop: 48 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.slate800 },
+  title: { fontSize: FontSize.heading, fontWeight: '700', color: Colors.slate800 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, marginBottom: 8 },
-  action: { backgroundColor: Colors.indigo600, borderRadius: 50, paddingVertical: 8, paddingHorizontal: 12, margin: 4 },
-  actionText: { color: Colors.white, fontSize: 12, fontWeight: '600' },
+  action: { backgroundColor: Colors.indigo600, borderRadius: Radius.pill, paddingVertical: 8, paddingHorizontal: 12, margin: 4 },
+  actionText: { color: Colors.white, fontSize: FontSize.caption, fontWeight: '600' },
   loading: { marginTop: 40 },
   content: { padding: 16, paddingBottom: 48 },
-  section: { backgroundColor: Colors.white, borderRadius: 14, padding: 14, marginBottom: 12 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.slate700, marginBottom: 6 },
+  section: { backgroundColor: Colors.white, borderRadius: Radius.md, padding: 14, marginBottom: 12 },
+  sectionTitle: { fontSize: FontSize.label, fontWeight: '700', color: Colors.slate700, marginBottom: 6 },
   row: { flexDirection: 'row', paddingVertical: 4 },
-  label: { width: 120, fontSize: 12, color: Colors.slate500 },
-  value: { flex: 1, fontSize: 12, color: Colors.slate800 },
+  label: { width: 120, fontSize: FontSize.caption, color: Colors.slate500 },
+  value: { flex: 1, fontSize: FontSize.caption, color: Colors.slate800 },
 });

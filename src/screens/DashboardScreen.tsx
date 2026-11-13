@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   Animated,
   AppState,
+  Keyboard,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,12 +13,23 @@ import {
   View,
 } from 'react-native';
 import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Cloud,
+  CloudDrizzle,
   CloudFog,
+  CloudRain,
   Droplets,
+  Flame,
   MapPin,
   Mic,
+  Moon,
+  Pin,
   Plus,
   Settings,
+  Shirt,
+  Sun,
   Wind,
   X,
 } from 'lucide-react-native';
@@ -27,6 +39,7 @@ import {
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 import { Colors, PurposeColors } from '../constants/colors';
+import { FontSize, Radius, Role, Shadow, Space } from '../constants/theme';
 import { PURPOSES, detectPurposeFromEvents, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_MESSAGES } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -45,11 +58,14 @@ import { Toast } from '../components/Toast';
 import { WeatherTimeline } from '../components/WeatherTimeline';
 import { SettingsPanel } from '../components/SettingsPanel';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
+import { Mascot } from '../components/Mascot';
+import { PurposeIcon } from '../components/PurposeIcon';
+import { Button, Card } from '../components/ui';
 import { AiHintService } from '../services/ai/AiHintService';
 import { leaveResultMessage, pressLeave } from '../services/departure/leave';
 import { TomorrowPreviewModal } from '../components/TomorrowPreviewModal';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
-import type { CalendarEvent, ChecklistItem as ChecklistItemType, FeedbackType, PurposeId } from '../types';
+import type { CalendarEvent, ChecklistItem as ChecklistItemType, CurrentWeather, FeedbackType, PurposeId, WeatherType } from '../types';
 
 // 위치 권한이 없거나 좌표 조회에 실패했을 때만 쓰이는 폴백 좌표 (서울시청)
 const FALLBACK_LAT = 37.5665;
@@ -87,10 +103,27 @@ function groupByTier(checklist: ChecklistItemType[]) {
   })).filter((section) => section.items.length > 0);
 }
 
-function getCurationBackground(rainAlert: boolean, heatAlert: boolean): string {
-  if (rainAlert) return Colors.sky50;
-  if (heatAlert) return Colors.orange50;
-  return Colors.indigo50;
+const WEATHER_ICONS: Record<WeatherType, typeof Sun> = {
+  sunny: Sun,
+  cloudy: Cloud,
+  rainy: CloudRain,
+  drizzle: CloudDrizzle,
+  hot: Flame,
+};
+
+const WEATHER_ICON_COLORS: Record<WeatherType, string> = {
+  sunny: Colors.amber500,
+  cloudy: Colors.slate500,
+  rainy: Colors.sky500,
+  drizzle: Colors.sky500,
+  hot: Colors.orange600,
+};
+
+// 날씨 영역의 바탕 — 비·폭염일 때만 색을 입혀 평소와 다른 날임을 알린다.
+function getWeatherTint(weather: CurrentWeather | null): string {
+  if (weather?.rainAlert) return Colors.sky50;
+  if (weather?.heatAlert) return Colors.orange50;
+  return Role.surfaceSoft;
 }
 
 function PulseDot({ color }: { color: string }) {
@@ -146,6 +179,18 @@ export function DashboardScreen() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [quickAddText, setQuickAddText] = useState('');
+  const [weatherExpanded, setWeatherExpanded] = useState(false);
+  const [leaveBarHeight, setLeaveBarHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const checklist = useAppStore((s) => s.checklist);
   const purposeId = useAppStore((s) => s.purposeId);
@@ -528,6 +573,10 @@ export function DashboardScreen() {
   const tierSections = useMemo(() => groupByTier(checklist), [checklist]);
 
   const activePurposeColor = purposeId ? PurposeColors[PURPOSES[purposeId].color].chip : undefined;
+  // 목적 색은 체크리스트 머리와 진행 막대에 쓴다 — 목적을 바꾸면 주인공 카드의 색이 따라 바뀐다.
+  const purposeAccent = activePurposeColor ?? Role.textMuted;
+  const leaveSub =
+    total === 0 ? '챙길 것 없음' : allChecked ? '다 챙겼어요' : `아직 ${total - checkedCount}개 남음`;
 
   const basePerceived = currentWeather
     ? calcPerceivedTemp(
@@ -539,6 +588,8 @@ export function DashboardScreen() {
     : null;
   const exposureAdj = basePerceived !== null ? getExposureAdjust(basePerceived, userSettings.commuteMode) : 0;
   const perceivedTemp = basePerceived !== null ? basePerceived + exposureAdj : null;
+  const shownTemp = currentWeather ? perceivedTemp ?? currentWeather.temp : null;
+  const WeatherIcon = WEATHER_ICONS[currentWeather?.weather ?? 'sunny'];
 
   const perceivedFormula =
     currentWeather && perceivedTemp !== null
@@ -557,9 +608,6 @@ export function DashboardScreen() {
   const banners: string[] = [];
   if (currentWeather?.rainAlert) banners.push('오늘 비 예보가 있어요 — 우산을 챙기세요.');
   if (currentWeather?.heatAlert) banners.push('폭염 주의 — 물을 충분히 마시세요.');
-  if (autoDetectedEvent) {
-    banners.push(`${autoDetectedEvent.time} '${autoDetectedEvent.title}' 일정이 있어요.`);
-  }
 
   const alertTime = getAlertTime(userSettings.departureTime);
   const countdown = getDepartureCountdown(userSettings.departureTime, now);
@@ -578,10 +626,13 @@ export function DashboardScreen() {
     <View style={styles.screen}>
       <View style={styles.headerWrapper} onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
         {/* 상태바·노치 높이는 기기마다 달라서 고정값 대신 안전 영역을 쓴다 */}
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <View>
-            <Text style={styles.headerTitle} accessibilityRole="header">아맞다</Text>
-            <Text style={styles.headerSubtitle}>{todayLabel}</Text>
+        <View style={[styles.header, { paddingTop: insets.top + Space.md }]}>
+          <View style={styles.headerBrand}>
+            <Mascot mood="logo" size={40} />
+            <View>
+              <Text style={styles.headerTitle} accessibilityRole="header">아맞다</Text>
+              <Text style={styles.headerSubtitle}>{todayLabel}</Text>
+            </View>
           </View>
           <Pressable
             style={styles.settingsButton}
@@ -590,7 +641,7 @@ export function DashboardScreen() {
             accessibilityRole="button"
             accessibilityLabel={settingsVisible ? '설정 닫기' : '설정 열기'}
           >
-            <Settings size={22} color={Colors.slate600} />
+            <Settings size={22} color={Role.textSub} />
           </Pressable>
         </View>
       </View>
@@ -598,29 +649,26 @@ export function DashboardScreen() {
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        // 아래에 고정된 [떠나기] 뒤로 마지막 내용이 가려지지 않게 그 높이만큼 비운다.
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: leaveBarHeight + Space.xxl }]}
         // 키보드가 떠 있을 때도 첫 탭이 바로 먹게 — 없으면 "매일 루틴으로 추가"나 체크박스를
         // 누른 첫 탭이 키보드만 내리고 사라진다.
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.indigo600} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Role.action} />
         }
       >
         {!statusDismissed ? (
-          <View style={[styles.statusBar, countdown.soon && styles.statusBarSoon]}>
+          <View style={[styles.statusRow, countdown.soon && styles.statusRowSoon]}>
             <View
               style={styles.statusLeft}
               accessible
               accessibilityLabel={[countdown.label, countdown.value, countdown.detail].filter(Boolean).join(', ')}
             >
               <PulseDot color={countdown.soon ? Colors.amber500 : Colors.emerald500} />
-              <View>
-                <Text style={[styles.statusLabel, countdown.soon && styles.statusLabelSoon]}>{countdown.label}</Text>
-                <View style={styles.statusValueRow}>
-                  <Text style={styles.statusTime}>{countdown.value}</Text>
-                  {countdown.detail ? <Text style={styles.statusDetail}>{countdown.detail}</Text> : null}
-                </View>
-              </View>
+              <Text style={[styles.statusLabel, countdown.soon && styles.statusLabelSoon]}>{countdown.label}</Text>
+              <Text style={styles.statusTime}>{countdown.value}</Text>
+              {countdown.detail ? <Text style={styles.statusDetail}>{countdown.detail}</Text> : null}
             </View>
             <Pressable
               style={styles.iconButton}
@@ -628,62 +676,47 @@ export function DashboardScreen() {
               accessibilityRole="button"
               accessibilityLabel="외출 시간 안내 닫기"
             >
-              <X size={18} color={Colors.slate500} />
+              <X size={18} color={Role.textMuted} />
             </Pressable>
           </View>
         ) : null}
 
-        {nextPlaceEvent ? (
-          <View style={styles.placeCard}>
-            <MapPin size={16} color={Colors.indigo600} />
-            <View style={styles.placeTextArea}>
-              <Text style={styles.placeTitle} numberOfLines={1}>
-                {nextPlaceEvent.time} · {nextPlaceEvent.title}
-              </Text>
-              <Text style={styles.placeLocation} numberOfLines={1}>
-                {nextPlaceEvent.location}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.placeButton}
-              onPress={handleOpenDirections}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`${nextPlaceEvent.title} 길찾기`}
-            >
-              <Text style={styles.placeButtonText}>길찾기</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <View
-          style={[
-            styles.curationCard,
-            {
-              // 날씨가 없을 때도 카드로 보이게 흰색 — 화면 배경과 같은 색이면 글자만 떠 보인다.
-              backgroundColor: currentWeather
-                ? getCurationBackground(currentWeather.rainAlert, currentWeather.heatAlert)
-                : Colors.white,
-            },
-          ]}
-        >
-          <Text style={styles.curationLocation}>내 위치 날씨</Text>
-
-          {currentWeather ? (
+        {/* 날씨 — 평소엔 요약 한 덩어리만 보인다. 계산 근거·시간대별 예보·피드백은 눌렀을 때 편다.
+            체크리스트가 화면 위쪽에 오도록 하기 위해서다. */}
+        <View style={[styles.weatherBlock, { backgroundColor: getWeatherTint(currentWeather) }]}>
+          {currentWeather && shownTemp !== null ? (
             <>
-              <Text style={styles.curationWeatherLabel}>{currentWeather.label}</Text>
-
-              {perceivedFormula ? (
-                <View
-                  style={styles.perceivedBox}
-                  accessible
-                  accessibilityLabel={`나에게 맞춘 체감온도 ${formatTemp(perceivedTemp ?? currentWeather.temp)}`}
-                >
-                  <Text style={styles.perceivedCaption}>나에게 맞춘 체감온도</Text>
-                  <Text style={styles.perceivedTemp}>{formatTemp(perceivedTemp ?? currentWeather.temp)}</Text>
-                  <Text style={styles.perceivedFormula}>{perceivedFormula}</Text>
+              <Pressable
+                style={styles.weatherSummary}
+                onPress={() => setWeatherExpanded((v) => !v)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: weatherExpanded }}
+                accessibilityLabel={`내 위치 날씨 ${currentWeather.label}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
+                accessibilityHint={weatherExpanded ? '자세한 날씨를 접어요' : '시간대별 예보와 계산 근거를 펴요'}
+              >
+                <WeatherIcon
+                  size={44}
+                  strokeWidth={1.75}
+                  color={WEATHER_ICON_COLORS[currentWeather.weather]}
+                />
+                <View style={styles.weatherSummaryText}>
+                  <Text style={styles.weatherCaption}>나에게 맞춘 체감온도</Text>
+                  <Text style={styles.weatherTemp}>{formatTemp(shownTemp)}</Text>
+                  <Text style={styles.weatherLabel}>내 위치 · {currentWeather.label}</Text>
                 </View>
-              ) : null}
+                <View style={styles.weatherChevron}>
+                  {weatherExpanded ? (
+                    <ChevronUp size={20} color={Role.action} />
+                  ) : (
+                    <ChevronDown size={20} color={Role.action} />
+                  )}
+                </View>
+              </Pressable>
+
+              <View style={styles.adviceRow}>
+                <Shirt size={16} color={Role.textSub} />
+                <Text style={styles.adviceText}>{currentWeather.recommendation}</Text>
+              </View>
 
               {banners.map((banner, i) => (
                 <View key={i} style={styles.alertBanner}>
@@ -691,66 +724,122 @@ export function DashboardScreen() {
                 </View>
               ))}
 
-              <Text style={styles.recommendation}>
-                {currentWeather.recommendEmoji} {currentWeather.recommendation}
-              </Text>
-
               {timelineHint ? (
-                <View style={[styles.timelineHintBox, { backgroundColor: timelineHint.bg }]}>
-                  <Text style={[styles.timelineHintText, { color: timelineHint.color }]}>
-                    {timelineHint.text}
-                  </Text>
+                <View style={[styles.alertBanner, { backgroundColor: timelineHint.bg }]}>
+                  <Text style={[styles.alertBannerText, { color: timelineHint.color }]}>{timelineHint.text}</Text>
                 </View>
               ) : null}
 
-              {/* 버튼만 있으면 무엇을 묻는지 알 수 없다 — 무엇에 대한 답이고 왜 묻는지 한 줄로 알린다. */}
-              <Text style={styles.feedbackCaption}>
-                최근 외출 때 옷차림은 어땠나요? 답할수록 체감온도가 나에게 맞춰져요.
-              </Text>
-              <View style={styles.feedbackRow} accessibilityRole="radiogroup">
-                {FEEDBACK_OPTIONS.map((opt) => (
-                  <Pressable
-                    key={opt.val}
-                    style={[
-                      styles.feedbackChip,
-                      currentFeedback === opt.val && styles.feedbackChipActive,
-                    ]}
-                    onPress={() => handleFeedback(opt.val)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: currentFeedback === opt.val }}
-                    accessibilityLabel={`옷차림 ${opt.label}`}
-                  >
-                    <Text
-                      style={[
-                        styles.feedbackChipText,
-                        currentFeedback === opt.val && styles.feedbackChipTextActive,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
+              {weatherExpanded ? (
+                <View style={styles.weatherDetail}>
+                  {perceivedFormula ? (
+                    <View>
+                      <Text style={styles.detailTitle}>체감온도 계산</Text>
+                      <Text style={styles.detailText}>{perceivedFormula}</Text>
+                    </View>
+                  ) : null}
+
+                  <View style={styles.envStrip}>
+                    <View style={styles.envCell}>
+                      <CloudFog size={18} color={Role.textMuted} />
+                      <Text style={styles.envValue}>{currentWeather.dustLevel}</Text>
+                      <Text style={styles.envLabel}>미세먼지</Text>
+                    </View>
+                    <View style={styles.envCell}>
+                      <Droplets size={18} color={Role.textMuted} />
+                      <Text style={styles.envValue}>{currentWeather.humidity}%</Text>
+                      <Text style={styles.envLabel}>습도</Text>
+                    </View>
+                    <View style={styles.envCell}>
+                      <Wind size={18} color={Role.textMuted} />
+                      <Text style={styles.envValue}>{currentWeather.wind}m/s</Text>
+                      <Text style={styles.envLabel}>바람</Text>
+                    </View>
+                  </View>
+
+                  {weatherTimeline.length > 0 ? (
+                    <WeatherTimeline slots={weatherTimeline} currentSlot={getCurrentSlotIndex()} />
+                  ) : null}
+
+                  {/* 버튼만 있으면 무엇을 묻는지 알 수 없다 — 무엇에 대한 답이고 왜 묻는지 한 줄로 알린다. */}
+                  <View>
+                    <Text style={styles.detailTitle}>최근 외출 때 옷차림은 어땠나요?</Text>
+                    <Text style={styles.detailText}>답할수록 체감온도가 나에게 맞춰져요.</Text>
+                    <View style={styles.feedbackRow} accessibilityRole="radiogroup">
+                      {FEEDBACK_OPTIONS.map((opt) => (
+                        <Pressable
+                          key={opt.val}
+                          style={[
+                            styles.feedbackChip,
+                            currentFeedback === opt.val && styles.feedbackChipActive,
+                          ]}
+                          onPress={() => handleFeedback(opt.val)}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: currentFeedback === opt.val }}
+                          accessibilityLabel={`옷차림 ${opt.label}`}
+                        >
+                          <Text
+                            style={[
+                              styles.feedbackChipText,
+                              currentFeedback === opt.val && styles.feedbackChipTextActive,
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              ) : null}
             </>
-          ) : weatherOutOfArea ? (
-            <Text style={styles.loadingText}>
-              기상청 API는 국내 전용이에요 — 해외에서는 날씨 정보를 제공할 수 없어요.
-            </Text>
-          ) : weatherLoading ? (
-            <Text style={styles.loadingText}>날씨 정보를 불러오는 중...</Text>
           ) : (
-            <View>
-              <Text style={styles.loadingText}>날씨 정보를 가져오지 못했어요.</Text>
-              <Pressable style={styles.retryButton} onPress={handleRefresh} accessibilityRole="button">
-                <Text style={styles.retryButtonText}>다시 시도</Text>
-              </Pressable>
+            <View style={styles.stateRow}>
+              <Mascot mood={weatherLoading && !weatherOutOfArea ? 'idle' : 'sorry'} size={56} />
+              <View style={styles.stateTextArea}>
+                {weatherOutOfArea ? (
+                  <Text style={styles.stateText}>
+                    기상청 API는 국내 전용이에요 — 해외에서는 날씨 정보를 제공할 수 없어요.
+                  </Text>
+                ) : weatherLoading ? (
+                  <Text style={styles.stateText}>날씨 정보를 불러오는 중...</Text>
+                ) : (
+                  <>
+                    <Text style={styles.stateText}>날씨 정보를 가져오지 못했어요.</Text>
+                    <Button
+                      label="다시 시도"
+                      variant="soft"
+                      size="sm"
+                      pill
+                      onPress={handleRefresh}
+                      style={styles.stateButton}
+                    />
+                  </>
+                )}
+              </View>
             </View>
           )}
         </View>
 
-        {weatherTimeline.length > 0 ? (
-          <View style={styles.sectionSpacing}>
-            <WeatherTimeline slots={weatherTimeline} currentSlot={getCurrentSlotIndex()} />
+        {nextPlaceEvent ? (
+          <View style={[styles.lightRow, styles.sectionSpacing]}>
+            <MapPin size={18} color={Role.textMuted} />
+            <View style={styles.lightRowText}>
+              <Text style={styles.lightRowTitle} numberOfLines={1}>
+                {nextPlaceEvent.time} · {nextPlaceEvent.title}
+              </Text>
+              <Text style={styles.lightRowSub} numberOfLines={1}>
+                {nextPlaceEvent.location}
+              </Text>
+            </View>
+            <Button
+              label="길찾기"
+              variant="soft"
+              size="sm"
+              pill
+              onPress={handleOpenDirections}
+              accessibilityLabel={`${nextPlaceEvent.title} 길찾기`}
+            />
           </View>
         ) : null}
 
@@ -763,38 +852,61 @@ export function DashboardScreen() {
           />
         </View>
 
-        <View
-          style={[styles.checklistCard, styles.sectionSpacing]}
+        {/* 이 화면의 주인공 — 흰 면과 그림자는 여기에만 쓴다. */}
+        <Card
+          variant="hero"
+          style={styles.sectionSpacing}
           onLayout={(e) => {
             checklistYRef.current = e.nativeEvent.layout.y;
           }}
         >
           <View style={styles.checklistHeader}>
             <View style={styles.checklistHeaderLeft}>
-              <Text style={styles.checklistTitle} accessibilityRole="header">오늘의 체크리스트</Text>
-              <View
-                style={[styles.checklistCountBadge, allChecked && styles.checklistCountBadgeDone]}
-                accessible
-                accessibilityLabel={`${total}개 중 ${checkedCount}개 챙김`}
-              >
-                <Text style={[styles.checklistCountText, allChecked && styles.checklistCountTextDone]}>
-                  {checkedCount}/{total}
+              {purposeId ? (
+                <View style={[styles.purposeBadge, { backgroundColor: PurposeColors[PURPOSES[purposeId].color].badge }]}>
+                  <PurposeIcon id={purposeId} size={18} color={purposeAccent} />
+                </View>
+              ) : null}
+              <View>
+                <Text style={styles.checklistTitle} accessibilityRole="header">오늘의 체크리스트</Text>
+                <Text
+                  style={[styles.checklistMeta, allChecked && styles.checklistMetaDone]}
+                  accessibilityLabel={`${purposeId ? `${PURPOSES[purposeId].shortLabel}, ` : ''}${total}개 중 ${checkedCount}개 챙김`}
+                >
+                  {purposeId ? `${PURPOSES[purposeId].shortLabel} · ` : ''}
+                  {total}개 중 {checkedCount}개 챙김
                 </Text>
               </View>
             </View>
             {total > 0 ? (
-              <Pressable onPress={handleToggleAll} hitSlop={12} accessibilityRole="button">
-                <Text style={styles.checklistToggleAll}>{allChecked ? '전체 해제' : '모두 챙김'}</Text>
-              </Pressable>
+              <Button
+                label={allChecked ? '전체 해제' : '모두 챙김'}
+                variant="text"
+                size="sm"
+                onPress={handleToggleAll}
+              />
             ) : null}
           </View>
 
-          <ProgressBar checked={checkedCount} total={total} />
+          <ProgressBar checked={checkedCount} total={total} color={purposeAccent} />
+
+          {allChecked ? (
+            <View style={styles.doneBanner}>
+              <Mascot mood="happy" size={52} />
+              <View style={styles.stateTextArea}>
+                <Text style={styles.doneTitle}>다 챙겼어요</Text>
+                <Text style={styles.doneSub}>이대로 나가면 돼요.</Text>
+              </View>
+            </View>
+          ) : null}
 
           {total === 0 ? (
-            <Text style={styles.emptyChecklist}>
-              오늘 챙길 것이 아직 없어요. 위에서 목적을 고르거나 아래에 직접 추가해 보세요.
-            </Text>
+            <View style={styles.emptyState}>
+              <Mascot mood="idle" size={52} />
+              <Text style={[styles.stateText, styles.stateTextArea]}>
+                오늘 챙길 것이 아직 없어요. 위에서 목적을 고르거나 아래에 직접 추가해 보세요.
+              </Text>
+            </View>
           ) : null}
 
           {tierSections.map(({ tier, items }) => (
@@ -818,7 +930,7 @@ export function DashboardScreen() {
               value={quickAddText}
               onChangeText={setQuickAddText}
               placeholder={isListening ? '듣고 있어요…' : '오늘만 챙길 것 추가'}
-              placeholderTextColor={Colors.slate500}
+              placeholderTextColor={Role.placeholder}
               onSubmitEditing={handleQuickAddToday}
               returnKeyType="done"
               submitBehavior="submit"
@@ -834,7 +946,7 @@ export function DashboardScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`${quickAddText.trim()} 오늘만 추가`}
               >
-                <Plus size={20} color={Colors.white} />
+                <Plus size={20} color={Role.onAction} />
               </Pressable>
             ) : (
               <Pressable
@@ -843,35 +955,23 @@ export function DashboardScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={isListening ? '음성 입력 취소' : '음성으로 추가'}
               >
-                <Mic size={20} color={isListening ? Colors.white : Colors.slate600} />
+                <Mic size={20} color={isListening ? Role.onAction : Role.action} />
               </Pressable>
             )}
           </View>
 
           {quickAddText.trim() && !isListening ? (
-            <Pressable
-              style={styles.quickAddPermanentButton}
+            <Button
+              label="오늘만이 아니라 매일 루틴으로 추가"
+              variant="text"
+              size="sm"
+              icon={<Pin size={14} color={Role.action} />}
               onPress={handleQuickAddPermanent}
-              accessibilityRole="button"
+              style={styles.quickAddPermanentButton}
               accessibilityLabel={`${quickAddText.trim()} 매일 루틴으로 추가`}
-            >
-              <Text style={styles.quickAddPermanentLink}>📌 오늘만이 아니라 매일 루틴으로 추가</Text>
-            </Pressable>
+            />
           ) : null}
-        </View>
-
-        <Pressable
-          style={({ pressed }) => [styles.leaveButton, styles.sectionSpacing, pressed && styles.leaveButtonPressed]}
-          onPress={handleLeave}
-          disabled={leaving}
-          accessibilityRole="button"
-          accessibilityLabel="떠나기 — 나가기 전에 남은 것 확인"
-        >
-          <Text style={styles.leaveButtonText}>떠나기</Text>
-          <Text style={styles.leaveButtonSub}>
-            {allChecked ? '다 챙겼어요' : `아직 ${total - checkedCount}개 남음`}
-          </Text>
-        </Pressable>
+        </Card>
 
         {aiSuggestions.length > 0 ? (
           <View style={styles.sectionSpacing}>
@@ -883,37 +983,24 @@ export function DashboardScreen() {
           </View>
         ) : null}
 
-        {currentWeather ? (
-          <View style={[styles.envStrip, styles.sectionSpacing]}>
-            <View style={styles.envCell}>
-              <CloudFog size={18} color={Colors.slate500} />
-              <Text style={styles.envValue}>{currentWeather.dustLevel}</Text>
-              <Text style={styles.envLabel}>미세먼지</Text>
-            </View>
-            <View style={styles.envCell}>
-              <Droplets size={18} color={Colors.slate500} />
-              <Text style={styles.envValue}>{currentWeather.humidity}%</Text>
-              <Text style={styles.envLabel}>습도</Text>
-            </View>
-            <View style={styles.envCell}>
-              <Wind size={18} color={Colors.slate500} />
-              <Text style={styles.envValue}>{currentWeather.wind}m/s</Text>
-              <Text style={styles.envLabel}>바람</Text>
-            </View>
-          </View>
-        ) : null}
-
         <Pressable
-          style={[styles.tomorrowButton, styles.sectionSpacing]}
+          style={({ pressed }) => [styles.lightRow, styles.sectionSpacing, pressed && styles.pressed]}
           onPress={() => setTomorrowVisible(true)}
           accessibilityRole="button"
+          accessibilityLabel="다음 외출 준비 미리보기"
+          accessibilityHint="그날 일정과 예보로 뜰 것을 보고, 그날만 챙길 것을 더해요"
         >
-          <Text style={styles.tomorrowButtonText}>🌙 다음 외출 준비 미리보기</Text>
-          <Text style={styles.tomorrowButtonSub}>그날 일정·예보로 뜰 것을 보고, 그날만 챙길 것을 더해요</Text>
+          <Moon size={18} color={Role.action} />
+          <View style={styles.lightRowText}>
+            <Text style={styles.lightRowTitle}>다음 외출 준비 미리보기</Text>
+            <Text style={styles.lightRowSub}>그날 일정·예보로 뜰 것을 보고, 그날만 챙길 것을 더해요</Text>
+          </View>
+          <ChevronRight size={18} color={Role.action} />
         </Pressable>
 
-        <View style={[styles.notificationPreview, styles.sectionSpacing]}>
-          <Text style={styles.notificationTitle}>알림 미리보기</Text>
+        {/* 안내는 누르는 게 아니라서 면 없이 글로만 둔다. */}
+        <View style={styles.notificationPreview}>
+          <Text style={styles.notificationTitle}>이렇게 알려드려요</Text>
           {userSettings.alertPreference !== 'minimal' ? (
             <View style={styles.notificationRow}>
               <Text style={styles.notificationStep}>출발 30분 전 · {alertTime}</Text>
@@ -929,9 +1016,27 @@ export function DashboardScreen() {
             <Text style={styles.notificationText}>오늘 착장 피드백을 남기고 다음 외출 준비를 봐요.</Text>
           </View>
         </View>
-
-        <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* [떠나기]는 나가는 순간에 누르는 버튼이라 스크롤 위치와 상관없이 항상 엄지 아래에 둔다.
+          글자를 치는 동안에는 키보드 위로 올라와 입력창을 가리므로 숨긴다. */}
+      {!keyboardVisible ? (
+        <View
+          style={[styles.leaveBar, { paddingBottom: insets.bottom + Space.md }]}
+          onLayout={(e) => setLeaveBarHeight(e.nativeEvent.layout.height)}
+        >
+          <Pressable
+            style={({ pressed }) => [styles.leaveButton, pressed && styles.pressed]}
+            onPress={handleLeave}
+            disabled={leaving}
+            accessibilityRole="button"
+            accessibilityLabel={`떠나기 — 나가기 전에 남은 것 확인. ${leaveSub}`}
+          >
+            <Text style={styles.leaveButtonText}>떠나기</Text>
+            <Text style={styles.leaveButtonSub}>{leaveSub}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* 헤더 안에 두고 top:'100%'로 띄우면 패널이 부모 영역 밖에 놓여, Android에서
           탭은 되지만 패널 안 스크롤 제스처가 뒤의 대시보드로 가버린다. 화면 직속으로 둔다. */}
@@ -939,7 +1044,14 @@ export function DashboardScreen() {
 
       <TomorrowPreviewModal visible={tomorrowVisible} onClose={() => setTomorrowVisible(false)} />
 
-      {toast ? <Toast message={toast} action={toastAction} onDone={clearToast} /> : null}
+      {toast ? (
+        <Toast
+          message={toast}
+          action={toastAction}
+          onDone={clearToast}
+          bottomOffset={keyboardVisible ? Space.lg : leaveBarHeight + Space.md}
+        />
+      ) : null}
     </View>
   );
 }
@@ -947,34 +1059,40 @@ export function DashboardScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: Colors.bgDefault,
+    backgroundColor: Role.bg,
+  },
+  pressed: {
+    opacity: 0.8,
   },
   headerWrapper: {
     zIndex: 30,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    backgroundColor: Colors.bgDefault,
+    paddingHorizontal: Space.xl,
+    paddingBottom: Space.md,
+    backgroundColor: Role.bg,
+  },
+  headerBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: FontSize.title,
     fontWeight: '800',
-    color: Colors.indigo600,
+    color: Role.text,
   },
   headerSubtitle: {
-    marginTop: 2,
-    fontSize: 13,
-    color: Colors.slate500,
+    fontSize: FontSize.label,
+    color: Role.textMuted,
   },
   settingsButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.white,
+    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -982,42 +1100,48 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: Space.xl,
   },
-  statusBar: {
+  sectionSpacing: {
+    marginTop: Space.lg,
+  },
+
+  // 외출까지 남은 시간 — 한 줄
+  statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    shadowColor: Colors.slate800,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    minHeight: 44,
+    paddingLeft: Space.md,
+    marginBottom: Space.sm,
+    borderRadius: Radius.md,
   },
-  statusBarSoon: {
-    backgroundColor: Colors.amber50,
+  statusRowSoon: {
+    backgroundColor: Role.warnSoft,
   },
   statusLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: Space.sm,
+  },
+  statusLabel: {
+    fontSize: FontSize.label,
+    color: Role.textMuted,
   },
   statusLabelSoon: {
-    color: Colors.amber700,
+    color: Role.warn,
     fontWeight: '700',
   },
-  statusValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
+  statusTime: {
+    fontSize: FontSize.heading,
+    fontWeight: '700',
+    color: Role.text,
   },
   statusDetail: {
-    fontSize: 13,
-    color: Colors.slate500,
+    fontSize: FontSize.label,
+    color: Role.textMuted,
   },
   // 아이콘만 있는 버튼의 공통 터치 영역 (44×44)
   iconButton: {
@@ -1025,14 +1149,13 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: -10,
   },
   pulseWrapper: {
     width: 10,
     height: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 2,
   },
   pulseDotCore: {
     position: 'absolute',
@@ -1046,306 +1169,87 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  statusLabel: {
-    fontSize: 12,
-    color: Colors.slate500,
+
+  // 날씨
+  weatherBlock: {
+    borderRadius: Radius.lg,
+    padding: Space.lg,
   },
-  statusTime: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.slate800,
-  },
-  placeCard: {
+  weatherSummary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 12,
-    shadowColor: Colors.slate800,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    gap: Space.lg,
   },
-  placeTextArea: {
+  weatherSummaryText: {
     flex: 1,
   },
-  placeTitle: {
-    fontSize: 13,
+  weatherCaption: {
+    fontSize: FontSize.caption,
     fontWeight: '600',
-    color: Colors.slate800,
+    color: Role.textSub,
   },
-  placeLocation: {
-    marginTop: 2,
-    fontSize: 12,
-    color: Colors.slate500,
-  },
-  placeButton: {
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 50,
-    backgroundColor: Colors.indigo50,
-  },
-  placeButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.indigo600,
-  },
-  curationCard: {
-    borderRadius: 20,
-    padding: 18,
-  },
-  curationLocation: {
-    fontSize: 12,
-    color: Colors.slate500,
-  },
-  curationWeatherLabel: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.slate800,
-  },
-  perceivedBox: {
-    marginTop: 12,
-    alignItems: 'flex-start',
-  },
-  perceivedCaption: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.slate600,
-  },
-  perceivedTemp: {
-    marginTop: 2,
-    fontSize: 40,
+  weatherTemp: {
+    fontSize: FontSize.display,
+    lineHeight: 46,
     fontWeight: '800',
-    color: Colors.slate800,
+    color: Role.text,
   },
-  // 계산 근거 — 큰 숫자 아래에 두어 "무엇"을 먼저, "왜"를 나중에 읽게 한다.
-  perceivedFormula: {
-    marginTop: 2,
-    fontSize: 12,
-    color: Colors.slate500,
+  weatherLabel: {
+    fontSize: FontSize.label,
+    color: Role.textSub,
+  },
+  weatherChevron: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -Space.sm,
+  },
+  adviceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    marginTop: Space.md,
+  },
+  adviceText: {
+    flex: 1,
+    fontSize: FontSize.body,
+    lineHeight: 21,
+    color: Role.textStrong,
   },
   alertBanner: {
-    marginTop: 10,
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    marginTop: Space.sm,
+    backgroundColor: Role.surface,
+    borderRadius: Radius.md,
+    paddingVertical: Space.sm,
+    paddingHorizontal: Space.md,
   },
   alertBannerText: {
-    fontSize: 13,
-    color: Colors.slate700,
+    fontSize: FontSize.label,
+    lineHeight: 18,
     fontWeight: '600',
+    color: Role.textStrong,
   },
-  recommendation: {
-    marginTop: 14,
-    fontSize: 14,
-    color: Colors.slate700,
+  weatherDetail: {
+    marginTop: Space.lg,
+    paddingTop: Space.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.slate300,
+    gap: Space.lg,
   },
-  timelineHintBox: {
-    marginTop: 10,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  timelineHintText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  feedbackCaption: {
-    marginTop: 18,
-    fontSize: 12,
-    lineHeight: 17,
-    color: Colors.slate600,
-  },
-  feedbackRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  feedbackChip: {
-    flex: 1,
-    minHeight: 44,
-    justifyContent: 'center',
-    borderRadius: 12,
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-  },
-  feedbackChipActive: {
-    backgroundColor: Colors.indigo600,
-  },
-  feedbackChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.slate600,
-  },
-  feedbackChipTextActive: {
-    color: Colors.white,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 14,
-    lineHeight: 20,
-    color: Colors.slate500,
-  },
-  retryButton: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    borderRadius: 50,
-    backgroundColor: Colors.indigo50,
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.indigo600,
-  },
-  sectionSpacing: {
-    marginTop: 16,
-  },
-  checklistCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 18,
-  },
-  checklistHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  checklistHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checklistTitle: {
-    fontSize: 17,
+  detailTitle: {
+    fontSize: FontSize.label,
     fontWeight: '700',
-    color: Colors.slate800,
+    color: Role.textStrong,
   },
-  checklistCountBadge: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 50,
-    backgroundColor: Colors.indigo50,
-  },
-  checklistCountText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.indigo600,
-  },
-  checklistCountBadgeDone: {
-    backgroundColor: Colors.emerald50,
-  },
-  checklistCountTextDone: {
-    color: Colors.emerald600,
-  },
-  checklistToggleAll: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.indigo600,
-  },
-  emptyChecklist: {
-    marginTop: 16,
-    fontSize: 14,
-    lineHeight: 20,
-    color: Colors.slate500,
-  },
-  tierSection: {
-    marginTop: 14,
-  },
-  tierLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.slate500,
-    marginBottom: 2,
-  },
-  quickAddRow: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  quickAddInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.slate200,
-    borderRadius: 12,
-    minHeight: 46,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    color: Colors.slate800,
-  },
-  micButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.slate100,
-  },
-  micButtonActive: {
-    backgroundColor: Colors.indigo600,
-  },
-  tomorrowButton: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
-  },
-  tomorrowButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.slate800,
-  },
-  tomorrowButtonSub: {
-    marginTop: 4,
-    fontSize: 12,
-    color: Colors.slate500,
-  },
-  leaveButton: {
-    backgroundColor: Colors.indigo600,
-    borderRadius: 16,
-    paddingVertical: 16,
-    minHeight: 64,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  leaveButtonPressed: {
-    opacity: 0.85,
-  },
-  leaveButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.white,
-  },
-  leaveButtonSub: {
+  detailText: {
     marginTop: 2,
-    fontSize: 13,
-    color: Colors.indigo100,
-  },
-  quickAddPermanentButton: {
-    alignSelf: 'flex-start',
-    minHeight: 40,
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  quickAddPermanentLink: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.indigo600,
+    fontSize: FontSize.caption,
+    lineHeight: 17,
+    color: Role.textSub,
   },
   envStrip: {
     flexDirection: 'row',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 14,
   },
   envCell: {
     flex: 1,
@@ -1353,41 +1257,240 @@ const styles = StyleSheet.create({
   },
   envValue: {
     marginTop: 6,
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
-    color: Colors.slate800,
+    color: Role.text,
   },
   envLabel: {
     marginTop: 2,
-    fontSize: 12,
-    color: Colors.slate500,
+    fontSize: FontSize.caption,
+    color: Role.textMuted,
   },
+  feedbackRow: {
+    flexDirection: 'row',
+    marginTop: Space.sm,
+    gap: Space.sm,
+  },
+  feedbackChip: {
+    flex: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: Radius.md,
+    backgroundColor: Role.surface,
+  },
+  feedbackChipActive: {
+    backgroundColor: Role.action,
+  },
+  feedbackChipText: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    color: Role.action,
+  },
+  feedbackChipTextActive: {
+    color: Role.onAction,
+  },
+
+  // 상태 화면 (불러오는 중·실패·빈 목록) — 캐릭터 + 한 줄
+  stateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+  },
+  stateTextArea: {
+    flex: 1,
+  },
+  stateText: {
+    fontSize: FontSize.body,
+    lineHeight: 21,
+    color: Role.textSub,
+  },
+  stateButton: {
+    alignSelf: 'flex-start',
+    marginTop: Space.sm,
+  },
+
+  // 가벼운 줄 — 길찾기, 다음 외출 미리보기
+  lightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    minHeight: 56,
+    paddingVertical: Space.md,
+    paddingHorizontal: Space.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Role.surfaceSoft,
+  },
+  lightRowText: {
+    flex: 1,
+  },
+  lightRowTitle: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    color: Role.text,
+  },
+  lightRowSub: {
+    marginTop: 2,
+    fontSize: FontSize.caption,
+    lineHeight: 17,
+    color: Role.textMuted,
+  },
+
+  // 체크리스트
+  checklistHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Space.md,
+  },
+  checklistHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+  },
+  purposeBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checklistTitle: {
+    fontSize: FontSize.heading,
+    fontWeight: '700',
+    color: Role.text,
+  },
+  checklistMeta: {
+    marginTop: 2,
+    fontSize: FontSize.label,
+    color: Role.textMuted,
+  },
+  checklistMetaDone: {
+    color: Role.done,
+    fontWeight: '700',
+  },
+  doneBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    marginTop: Space.lg,
+    padding: Space.md,
+    borderRadius: Radius.md,
+    backgroundColor: Role.doneSoft,
+  },
+  doneTitle: {
+    fontSize: FontSize.heading,
+    fontWeight: '700',
+    color: Role.done,
+  },
+  doneSub: {
+    marginTop: 2,
+    fontSize: FontSize.label,
+    color: Role.textSub,
+  },
+  emptyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    marginTop: Space.lg,
+  },
+  tierSection: {
+    marginTop: 14,
+  },
+  tierLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    color: Role.textMuted,
+    marginBottom: 2,
+  },
+  quickAddRow: {
+    marginTop: Space.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+  },
+  quickAddInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Role.border,
+    borderRadius: Radius.md,
+    minHeight: 46,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: FontSize.body,
+    color: Role.text,
+  },
+  micButton: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Role.actionSoft,
+  },
+  micButtonActive: {
+    backgroundColor: Role.action,
+  },
+  quickAddPermanentButton: {
+    alignSelf: 'flex-start',
+    marginTop: Space.xs,
+  },
+
+  // 알림 안내
   notificationPreview: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 16,
+    marginTop: Space.xxl,
+    paddingHorizontal: Space.xs,
   },
   notificationTitle: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '700',
-    color: Colors.slate800,
-    marginBottom: 10,
+    color: Role.textStrong,
+    marginBottom: Space.sm,
   },
   notificationRow: {
-    marginBottom: 8,
+    marginBottom: Space.sm,
   },
   notificationStep: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.indigo600,
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    color: Role.textSub,
   },
   notificationText: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: FontSize.label,
     lineHeight: 18,
-    color: Colors.slate600,
+    color: Role.textMuted,
   },
-  bottomSpacer: {
-    height: 120,
+
+  // 하단 고정 [떠나기]
+  leaveBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: Space.md,
+    paddingHorizontal: Space.xl,
+    backgroundColor: Role.bg,
+    ...Shadow.floating,
+  },
+  leaveButton: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: Space.sm,
+    minHeight: 56,
+    paddingVertical: Space.lg,
+    borderRadius: Radius.lg,
+    backgroundColor: Role.action,
+  },
+  leaveButtonText: {
+    fontSize: FontSize.heading,
+    fontWeight: '700',
+    color: Role.onAction,
+  },
+  leaveButtonSub: {
+    fontSize: FontSize.label,
+    color: Role.onActionSub,
   },
 });

@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Cloud, CloudDrizzle, CloudRain, Droplets, Flame, Sun } from 'lucide-react-native';
 import { Circle, Path, Svg } from 'react-native-svg';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import type { WeatherSlot, WeatherType } from '../types';
 
 interface WeatherTimelineProps {
@@ -19,7 +20,8 @@ const WEATHER_ICONS: Record<WeatherType, typeof Sun> = {
 };
 
 function getSlotColors(slot: WeatherSlot, isCurrent: boolean): { bg: string; text: string } {
-  if (isCurrent) return { bg: Colors.indigo600, text: Colors.white };
+  // 지금 칸은 표시일 뿐 누르는 게 아니라서 남색이 아니라 진한 회색이다.
+  if (isCurrent) return { bg: Colors.slate800, text: Colors.white };
   switch (slot.alert) {
     case 'rain':
       return { bg: Colors.sky50, text: Colors.sky600 };
@@ -33,7 +35,7 @@ function getSlotColors(slot: WeatherSlot, isCurrent: boolean): { bg: string; tex
 }
 
 function getDotColor(slot: WeatherSlot, isCurrent: boolean, isPast: boolean): string {
-  if (isCurrent) return Colors.indigo600;
+  if (isCurrent) return Colors.slate800;
   if (isPast) return Colors.slate300;
   switch (slot.alert) {
     case 'rain':
@@ -43,7 +45,7 @@ function getDotColor(slot: WeatherSlot, isCurrent: boolean, isPast: boolean): st
     case 'heat':
       return Colors.orange400;
     default:
-      return Colors.indigo400;
+      return Colors.slate400;
   }
 }
 
@@ -107,9 +109,9 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
 
       <Svg width="100%" height={28} viewBox="0 0 100 28">
         <Path d={fullPath} stroke={Colors.slate200} strokeWidth={1.5} fill="none" />
-        <Path d={pastPath} stroke={Colors.indigo400} strokeWidth={1.5} fill="none" />
+        <Path d={pastPath} stroke={Colors.slate500} strokeWidth={1.5} fill="none" />
         {currentPoint ? (
-          <Circle cx={currentPoint.x} cy={currentPoint.y} r={5} fill={Colors.indigo600} opacity={0.2} />
+          <Circle cx={currentPoint.x} cy={currentPoint.y} r={5} fill={Colors.slate800} opacity={0.2} />
         ) : null}
         {points.map((p, i) => (
           <Circle
@@ -126,11 +128,8 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 14,
-  },
+  // 날씨 영역 안에 들어가는 부분이라 자기 카드를 갖지 않는다.
+  container: {},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -138,12 +137,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate800,
   },
   subtitle: {
-    fontSize: 11,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   row: {
@@ -155,7 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     marginHorizontal: 2,
-    borderRadius: 10,
+    borderRadius: Radius.md,
   },
   slotCurrent: {
     shadowColor: Colors.slate800,
@@ -165,14 +164,14 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   slotLabel: {
-    fontSize: 11,
+    fontSize: FontSize.caption,
     marginBottom: 4,
   },
   slotIcon: {
     marginBottom: 4,
   },
   slotTemp: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '600',
     marginBottom: 4,
   },
@@ -182,6 +181,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   slotRainText: {
-    fontSize: 11,
+    fontSize: FontSize.caption,
   },
 });

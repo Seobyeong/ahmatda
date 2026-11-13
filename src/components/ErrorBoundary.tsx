@@ -1,6 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../constants/colors';
+import { Mascot } from './Mascot';
+import { FontSize, Radius } from '../constants/theme';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -32,7 +34,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     if (this.state.error) {
       return (
         <View style={styles.container}>
-          <Text style={styles.emoji}>😵</Text>
+          <View style={styles.mascot}>
+            <Mascot mood="sorry" size={88} />
+          </View>
           <Text style={styles.title}>문제가 발생했어요</Text>
           <Text style={styles.description}>
             화면을 표시하는 중 오류가 났어요. 다시 시도해도 반복되면 앱을 재시작해주세요.
@@ -56,18 +60,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     backgroundColor: Colors.bgDefault,
   },
-  emoji: {
-    fontSize: 40,
+  mascot: {
     marginBottom: 12,
   },
   title: {
-    fontSize: 18,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate800,
     marginBottom: 8,
   },
   description: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
     textAlign: 'center',
     lineHeight: 20,
@@ -75,12 +78,12 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: Colors.indigo600,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.white,
   },

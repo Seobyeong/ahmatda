@@ -1,8 +1,10 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Sparkles } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { PURPOSES } from '../constants/purposes';
+import { Button } from './ui';
 import type { AiSuggestion } from '../services/ai/hints';
 
 interface AiSuggestionCardProps {
@@ -35,12 +37,8 @@ export function AiSuggestionCard({ suggestions, onAccept, onReject }: AiSuggesti
             <Text style={styles.itemsText}>{s.items.join(', ')} 챙기기</Text>
           ) : null}
           <View style={styles.buttonRow}>
-            <Pressable style={styles.rejectButton} onPress={() => onReject(s)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`${s.title} 제안 거절`}>
-              <Text style={styles.rejectText}>아니요</Text>
-            </Pressable>
-            <Pressable style={styles.acceptButton} onPress={() => onAccept(s)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`${s.title} 제안 추가`}>
-              <Text style={styles.acceptText}>추가</Text>
-            </Pressable>
+            <Button label="아니요" variant="neutral" size="sm" pill onPress={() => onReject(s)} style={styles.rejectButton} accessibilityLabel={`${s.title} 제안 거절`} />
+            <Button label="추가" variant="primary" size="sm" pill onPress={() => onAccept(s)} accessibilityLabel={`${s.title} 제안 추가`} />
           </View>
         </View>
       ))}
@@ -50,9 +48,10 @@ export function AiSuggestionCard({ suggestions, onAccept, onReject }: AiSuggesti
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: 18,
+    // 체크리스트 카드와 겨루지 않게 옅은 면으로 둔다.
+    backgroundColor: Colors.slate100,
+    borderRadius: Radius.lg,
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
@@ -61,29 +60,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '700',
     color: Colors.slate700,
   },
   row: {
     paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: Colors.slate100,
+    borderTopColor: Colors.slate200,
   },
   eventTitle: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate800,
   },
   purposeText: {
-    fontSize: 12,
+    fontSize: FontSize.caption,
     fontWeight: '400',
     color: Colors.slate500,
   },
   itemsText: {
     marginTop: 4,
-    fontSize: 13,
-    color: Colors.violet600,
+    fontSize: FontSize.label,
+    color: Colors.slate700,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -92,25 +91,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   rejectButton: {
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 50,
-    backgroundColor: Colors.slate100,
-  },
-  rejectText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.slate600,
-  },
-  acceptButton: {
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 50,
-    backgroundColor: Colors.violet50,
-  },
-  acceptText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.violet600,
+    backgroundColor: Colors.white,
   },
 });

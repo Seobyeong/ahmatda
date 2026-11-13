@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import type { Choice } from '../constants/preferences';
 
 interface ChoiceListProps<T extends string> {
@@ -38,7 +39,7 @@ const styles = StyleSheet.create({
   },
   option: {
     padding: 12,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Colors.slate200,
     backgroundColor: Colors.white,
@@ -48,7 +49,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.indigo50,
   },
   label: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate700,
   },
@@ -57,7 +58,7 @@ const styles = StyleSheet.create({
   },
   description: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
 });

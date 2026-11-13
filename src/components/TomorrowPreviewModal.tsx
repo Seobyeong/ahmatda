@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { PURPOSES } from '../constants/purposes';
 import { useAppStore } from '../store';
 import type { DayOutlook } from '../services/weather/forecastDate';
@@ -134,7 +135,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
             </View>
             {preview.purposeId ? (
               <Text style={styles.purposeText}>
-                {PURPOSES[preview.purposeId].emoji} 일정으로 보면 {PURPOSES[preview.purposeId].shortLabel} 준비가 필요해요
+                일정으로 보면 {PURPOSES[preview.purposeId].shortLabel} 준비가 필요해요
               </Text>
             ) : null}
 
@@ -217,7 +218,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: {
-    fontSize: 16,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate800,
   },
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
   },
   heading: {
     marginTop: 4,
-    fontSize: 15,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.slate700,
   },
@@ -238,17 +239,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   weatherText: {
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   purposeText: {
     marginTop: 6,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.indigo600,
   },
   empty: {
     marginTop: 16,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
   },
   itemRow: {
@@ -262,12 +263,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemLabel: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     color: Colors.slate800,
   },
   itemReason: {
     marginTop: 2,
-    fontSize: 11,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   addRow: {
@@ -280,19 +281,19 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.slate50,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate800,
   },
   addButton: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.indigo600,
   },
   addButtonText: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '600',
     color: Colors.white,
   },
@@ -301,24 +302,24 @@ const styles = StyleSheet.create({
   },
   message: {
     marginTop: 8,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate600,
   },
   note: {
     marginTop: 12,
-    fontSize: 11,
+    fontSize: FontSize.caption,
     lineHeight: 16,
     color: Colors.slate400,
   },
   primaryButton: {
     marginTop: 16,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     alignItems: 'center',
     backgroundColor: Colors.indigo600,
   },
   primaryText: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.white,
   },

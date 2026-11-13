@@ -1,13 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { Colors } from '../constants/colors';
+import { Role } from '../constants/theme';
 
 interface ProgressBarProps {
   checked: number;
   total: number;
+  /** 진행 중 색 — 고른 목적의 색을 넘긴다. 다 챙기면 항상 초록이다. */
+  color?: string;
 }
 
-export function ProgressBar({ checked, total }: ProgressBarProps) {
+export function ProgressBar({ checked, total, color = Role.textMuted }: ProgressBarProps) {
   const pct = total === 0 ? 0 : (checked / total) * 100;
   const widthAnim = useRef(new Animated.Value(pct)).current;
 
@@ -19,15 +21,13 @@ export function ProgressBar({ checked, total }: ProgressBarProps) {
     }).start();
   }, [pct, widthAnim]);
 
-  const color = pct === 100 ? Colors.emerald500 : Colors.indigo600;
-
   return (
     <View style={styles.track}>
       <Animated.View
         style={[
           styles.fill,
           {
-            backgroundColor: color,
+            backgroundColor: pct === 100 ? Role.done : color,
             width: widthAnim.interpolate({
               inputRange: [0, 100],
               outputRange: ['0%', '100%'],
@@ -42,13 +42,13 @@ export function ProgressBar({ checked, total }: ProgressBarProps) {
 
 const styles = StyleSheet.create({
   track: {
-    height: 4,
-    backgroundColor: Colors.slate100,
-    borderRadius: 2,
+    height: 6,
+    backgroundColor: Role.surfaceSoft,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   fill: {
-    height: 4,
-    borderRadius: 2,
+    height: 6,
+    borderRadius: 3,
   },
 });

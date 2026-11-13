@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 
 interface TimeInputProps {
   value: string; // "HH:mm"
@@ -101,16 +102,16 @@ const styles = StyleSheet.create({
   box: {
     borderWidth: 1,
     borderColor: Colors.slate200,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 12,
     width: 56,
     textAlign: 'center',
-    fontSize: 16,
+    fontSize: FontSize.heading,
     color: Colors.slate800,
     backgroundColor: Colors.white,
   },
   colon: {
-    fontSize: 18,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate400,
     marginHorizontal: 8,
@@ -118,15 +119,15 @@ const styles = StyleSheet.create({
   boxCompact: {
     borderWidth: 1,
     borderColor: Colors.slate200,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     paddingVertical: 6,
     width: 44,
     textAlign: 'center',
-    fontSize: 15,
+    fontSize: FontSize.body,
     color: Colors.slate800,
   },
   colonCompact: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.slate400,
     marginHorizontal: 4,

@@ -1,7 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CalendarCheck } from 'lucide-react-native';
 import { Colors, PurposeColors } from '../constants/colors';
+import { FontSize, Radius, Role, Space } from '../constants/theme';
 import { PURPOSES, PURPOSE_ORDER } from '../constants/purposes';
+import { PurposeIcon } from './PurposeIcon';
+import { Button } from './ui';
 import type { CalendarEvent, PurposeId } from '../types';
 
 interface PurposeSelectorProps {
@@ -15,11 +19,12 @@ interface ChipProps {
   active: boolean;
   activeColor: string;
   onPress: () => void;
-  label: string; // 화면 낭독기용 — 이모지를 뺀 이름
-  children: React.ReactNode;
+  label: string; // 화면 낭독기용 전체 이름
+  text: string;
+  icon?: (color: string) => React.ReactNode;
 }
 
-function Chip({ active, activeColor, onPress, label, children }: ChipProps) {
+function Chip({ active, activeColor, onPress, label, text, icon }: ChipProps) {
   const scale = useRef(new Animated.Value(active ? 1.05 : 1)).current;
 
   useEffect(() => {
@@ -45,7 +50,9 @@ function Chip({ active, activeColor, onPress, label, children }: ChipProps) {
             : styles.chipInactive,
         ]}
       >
-        <Text style={[styles.chipText, active && styles.chipTextActive]}>{children}</Text>
+        {/* 고르지 않은 칩도 아이콘은 목적 색으로 둔다 — 색만 보고도 어느 목적인지 익힌다. */}
+        {icon ? icon(active ? Colors.white : activeColor) : null}
+        <Text style={[styles.chipText, active && styles.chipTextActive]}>{text}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -61,23 +68,22 @@ export function PurposeSelector({
     <View>
       {autoDetected ? (
         <View style={styles.banner}>
+          <CalendarCheck size={16} color={Role.textMuted} />
           <View style={styles.bannerTextArea}>
-            <Text style={styles.bannerTitle}>캘린더에서 자동 감지됨</Text>
+            <Text style={styles.bannerTitle}>캘린더 일정으로 목적을 골랐어요</Text>
             {autoDetectedEvent ? (
-              <Text style={styles.bannerSubtitle}>
+              <Text style={styles.bannerSubtitle} numberOfLines={1}>
                 {autoDetectedEvent.time} · {autoDetectedEvent.title}
               </Text>
             ) : null}
           </View>
-          <Pressable
+          <Button
+            label="해제"
+            variant="text"
+            size="sm"
             onPress={() => onSelect(null)}
-            style={styles.resetButton}
-            hitSlop={8}
-            accessibilityRole="button"
             accessibilityLabel="자동 감지된 목적 해제"
-          >
-            <Text style={styles.resetButtonText}>해제</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
 
@@ -88,18 +94,26 @@ export function PurposeSelector({
         accessibilityRole="radiogroup"
         accessibilityLabel="오늘 외출 목적"
       >
-        <Chip active={purposeId === null} activeColor={Colors.slate800} onPress={() => onSelect(null)} label="목적 없음">
-          🔓 목적 없음
-        </Chip>
+        <Chip
+          active={purposeId === null}
+          activeColor={Colors.slate800}
+          onPress={() => onSelect(null)}
+          label="목적 없음"
+          text="목적 없음"
+        />
 
         {PURPOSE_ORDER.map((id) => {
           const purpose = PURPOSES[id];
-          const active = purposeId === id;
-          const activeColor = PurposeColors[purpose.color].chip;
           return (
-            <Chip key={id} active={active} activeColor={activeColor} onPress={() => onSelect(id)} label={purpose.label}>
-              {purpose.emoji} {purpose.shortLabel}
-            </Chip>
+            <Chip
+              key={id}
+              active={purposeId === id}
+              activeColor={PurposeColors[purpose.color].chip}
+              onPress={() => onSelect(id)}
+              label={purpose.label}
+              text={purpose.shortLabel}
+              icon={(color) => <PurposeIcon id={id} color={color} />}
+            />
           );
         })}
       </ScrollView>
@@ -115,63 +129,54 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.indigo50,
-    borderRadius: 12,
-    paddingVertical: 10,
+    gap: Space.sm,
+    backgroundColor: Role.surfaceSoft,
+    borderRadius: Radius.md,
+    paddingVertical: Space.sm,
     paddingHorizontal: 14,
-    marginBottom: 10,
+    marginBottom: Space.sm,
   },
   bannerTextArea: {
     flex: 1,
   },
   bannerTitle: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     fontWeight: '600',
-    color: Colors.indigo600,
+    color: Role.textStrong,
   },
   bannerSubtitle: {
     marginTop: 2,
-    fontSize: 12,
-    color: Colors.slate600,
-  },
-  resetButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 50,
-    backgroundColor: Colors.white,
-  },
-  resetButtonText: {
-    fontSize: 12,
-    color: Colors.slate600,
-    fontWeight: '500',
+    fontSize: FontSize.caption,
+    color: Role.textSub,
   },
   // 선택된 칩이 1.05배로 커질 때 가장자리가 잘리지 않게 여유를 둔다.
   scrollContent: {
-    gap: 8,
-    paddingVertical: 4,
+    gap: Space.sm,
+    paddingVertical: Space.xs,
     paddingHorizontal: 2,
   },
   clothingHint: {
-    marginTop: 10,
-    fontSize: 12,
-    color: Colors.slate500,
+    marginTop: Space.sm,
+    fontSize: FontSize.caption,
+    color: Role.textMuted,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    borderRadius: 50,
+    paddingHorizontal: Space.lg,
+    borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.slate200,
+    borderColor: Role.border,
   },
   chipInactive: {
-    backgroundColor: Colors.white,
+    backgroundColor: Role.surface,
   },
   chipText: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
-    color: Colors.slate600,
+    color: Role.textSub,
   },
   chipTextActive: {
     color: Colors.white,

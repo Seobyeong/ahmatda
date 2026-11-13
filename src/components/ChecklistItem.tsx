@@ -20,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import type { ChecklistItem as ChecklistItemType } from '../types';
 
 interface ChecklistItemProps {
@@ -158,7 +159,7 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 24,
     height: 24,
-    borderRadius: 7,
+    borderRadius: Radius.sm,
     borderWidth: 2,
     borderColor: Colors.slate400,
     alignItems: 'center',
@@ -166,8 +167,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   checkboxChecked: {
-    backgroundColor: Colors.indigo600,
-    borderColor: Colors.indigo600,
+    // 챙긴 것은 초록 — 남색은 누를 수 있는 것에만 쓴다.
+    backgroundColor: Colors.emerald600,
+    borderColor: Colors.emerald600,
   },
   icon: {
     marginRight: 10,
@@ -181,7 +183,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   label: {
-    fontSize: 16,
+    fontSize: FontSize.heading,
     color: Colors.slate800,
     fontWeight: '500',
   },
@@ -191,24 +193,25 @@ const styles = StyleSheet.create({
   },
   note: {
     marginLeft: 6,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   tempPill: {
     marginLeft: 6,
     paddingHorizontal: 6,
     paddingVertical: 1,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.slate100,
   },
   tempPillText: {
-    fontSize: 11,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   badge: {
     marginTop: 2,
-    fontSize: 12,
-    color: Colors.indigo600,
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    color: Colors.amber700,
   },
   // 삭제는 체크 바로 옆이라 잘못 누르기 쉽다 — 44×44로 키우고, 눌러도 되돌릴 수 있게 했다.
   deleteButton: {

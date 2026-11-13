@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AlarmClock, Bell, Calendar, Check, ChevronLeft, Footprints, MapPin } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
+import { FontSize, Radius } from '../constants/theme';
 import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
@@ -590,11 +591,11 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   introEmoji: {
-    fontSize: 40,
+    fontSize: FontSize.display,
     marginBottom: 12,
   },
   introText: {
-    fontSize: 18,
+    fontSize: FontSize.heading,
     fontWeight: '700',
     color: Colors.slate800,
     textAlign: 'center',
@@ -602,7 +603,7 @@ const styles = StyleSheet.create({
   },
   introSubtext: {
     marginTop: 8,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
     textAlign: 'center',
   },
@@ -610,7 +611,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     padding: 14,
     marginBottom: 10,
   },
@@ -620,7 +621,7 @@ const styles = StyleSheet.create({
   permissionIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: Radius.md,
     backgroundColor: Colors.indigo50,
     alignItems: 'center',
     justifyContent: 'center',
@@ -630,35 +631,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   permissionTitle: {
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '600',
     color: Colors.slate800,
   },
   permissionDescription: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.slate500,
   },
   permissionHint: {
     marginTop: 2,
-    fontSize: 11,
+    fontSize: FontSize.caption,
     color: Colors.slate400,
   },
   permissionButton: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    borderRadius: 50,
+    borderRadius: Radius.pill,
     backgroundColor: Colors.indigo600,
   },
   permissionButtonText: {
-    fontSize: 12,
+    fontSize: FontSize.caption,
     fontWeight: '600',
     color: Colors.white,
   },
   permissionGranted: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     backgroundColor: Colors.emerald100,
     alignItems: 'center',
     justifyContent: 'center',
@@ -666,7 +667,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 16,
     backgroundColor: Colors.indigo600,
-    borderRadius: 14,
+    borderRadius: Radius.md,
     paddingVertical: 14,
     alignItems: 'center',
   },
@@ -674,18 +675,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.slate300,
   },
   primaryButtonText: {
-    fontSize: 15,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.white,
   },
   title: {
-    fontSize: 20,
+    fontSize: FontSize.title,
     fontWeight: '700',
     color: Colors.slate800,
     marginBottom: 8,
   },
   description: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate500,
     marginBottom: 24,
     lineHeight: 20,
@@ -693,11 +694,11 @@ const styles = StyleSheet.create({
   infoBox: {
     marginTop: 20,
     backgroundColor: Colors.indigo50,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     padding: 14,
   },
   infoBoxText: {
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.indigo600,
     fontWeight: '500',
     textAlign: 'center',
@@ -705,7 +706,7 @@ const styles = StyleSheet.create({
   surveyQuestion: {
     marginTop: 20,
     marginBottom: 8,
-    fontSize: 14,
+    fontSize: FontSize.body,
     fontWeight: '700',
     color: Colors.slate700,
   },
@@ -716,23 +717,23 @@ const styles = StyleSheet.create({
   },
   wifiSuccessText: {
     marginTop: 10,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.emerald600,
     fontWeight: '500',
   },
   wifiErrorText: {
     marginTop: 10,
-    fontSize: 12,
+    fontSize: FontSize.caption,
     color: Colors.red500,
   },
   bssidInput: {
     marginTop: 12,
     borderWidth: 1,
     borderColor: Colors.slate200,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    fontSize: 13,
+    fontSize: FontSize.label,
     color: Colors.slate800,
     backgroundColor: Colors.white,
   },

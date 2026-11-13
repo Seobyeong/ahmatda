@@ -5,7 +5,6 @@ export const PURPOSES: Record<PurposeId, Purpose> = {
     id: 'work',
     label: '출근 · 비즈니스',
     shortLabel: '출근',
-    emoji: '💼',
     color: 'indigo',
     calKeywords: ['미팅', '회의', '면접', '클라이언트', '출근', '업무', '발표'],
     items: [
@@ -19,7 +18,6 @@ export const PURPOSES: Record<PurposeId, Purpose> = {
     id: 'workout',
     label: '운동 · 헬스',
     shortLabel: '운동',
-    emoji: '🏋️',
     color: 'emerald',
     calKeywords: ['운동', '헬스', '필라테스', '요가', '러닝', '수영', '클라이밍'],
     items: [
@@ -34,7 +32,6 @@ export const PURPOSES: Record<PurposeId, Purpose> = {
     id: 'study',
     label: '공부 · 카페',
     shortLabel: '공부',
-    emoji: '📚',
     color: 'violet',
     calKeywords: ['스터디', '공부', '도서관', '카페', '독서', '과외', '강의'],
     items: [
@@ -49,7 +46,6 @@ export const PURPOSES: Record<PurposeId, Purpose> = {
     id: 'date',
     label: '데이트 · 약속',
     shortLabel: '데이트',
-    emoji: '💛',
     color: 'rose',
     calKeywords: ['데이트', '약속', '만남', '식사', '영화'],
     items: [
@@ -63,7 +59,6 @@ export const PURPOSES: Record<PurposeId, Purpose> = {
     id: 'trip',
     label: '여행 · 나들이',
     shortLabel: '여행',
-    emoji: '🗺️',
     color: 'amber',
     calKeywords: ['여행', '나들이', '피크닉', '캠핑', '등산', '소풍'],
     items: [
