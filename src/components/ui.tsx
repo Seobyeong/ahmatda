@@ -1,7 +1,7 @@
 // 공용 부품 — 버튼과 카드. 화면마다 따로 만들던 "주요 버튼"·"흰 카드"를 하나로 모은다.
 import React from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { FontSize, Radius, Role, Shadow, Space } from '../constants/theme';
+import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { FontSize, Radius, Space, makeStyles } from '../constants/theme';
 
 type ButtonVariant = 'primary' | 'soft' | 'neutral' | 'text';
 type ButtonSize = 'md' | 'sm';
@@ -23,6 +23,7 @@ interface ButtonProps {
 export function Button({
   label, onPress, variant = 'primary', size = 'md', pill = false, icon, disabled, style, accessibilityLabel,
 }: ButtonProps) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -36,14 +37,14 @@ export function Button({
         styles.base,
         size === 'sm' ? styles.sm : styles.md,
         pill && styles.pill,
-        containerStyles[variant],
+        styles[variant],
         pressed && styles.pressed,
         disabled && styles.disabled,
         style,
       ]}
     >
       {icon}
-      <Text style={[styles.label, size === 'sm' && styles.labelSm, labelStyles[variant]]}>{label}</Text>
+      <Text style={[styles.label, size === 'sm' && styles.labelSm, styles[`${variant}Label`]]}>{label}</Text>
     </Pressable>
   );
 }
@@ -57,6 +58,7 @@ interface CardProps {
 }
 
 export function Card({ variant = 'soft', style, children, onLayout }: CardProps) {
+  const styles = useStyles();
   return (
     <View style={[variant === 'hero' ? styles.cardHero : styles.cardSoft, style]} onLayout={onLayout}>
       {children}
@@ -64,7 +66,7 @@ export function Card({ variant = 'soft', style, children, onLayout }: CardProps)
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Role, Shadow }) => ({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -108,18 +110,14 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: Space.lg,
   },
-});
 
-const containerStyles = StyleSheet.create({
+  // 버튼 종류별 면과 글자색
   primary: { backgroundColor: Role.action },
   soft: { backgroundColor: Role.actionSoft },
   neutral: { backgroundColor: Role.surfaceSoft },
   text: { backgroundColor: 'transparent', paddingHorizontal: 0 },
-});
-
-const labelStyles = StyleSheet.create({
-  primary: { color: Role.onAction },
-  soft: { color: Role.action },
-  neutral: { color: Role.textSub },
-  text: { color: Role.action },
-});
+  primaryLabel: { color: Role.onAction },
+  softLabel: { color: Role.actionText },
+  neutralLabel: { color: Role.textSub },
+  textLabel: { color: Role.actionText },
+}));

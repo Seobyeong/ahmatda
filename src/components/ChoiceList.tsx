@@ -1,7 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { Pressable, Text, View } from 'react-native';
+import { FontSize, Radius, makeStyles } from '../constants/theme';
 import type { Choice } from '../constants/preferences';
 
 interface ChoiceListProps<T extends string> {
@@ -12,6 +11,7 @@ interface ChoiceListProps<T extends string> {
 
 // 설명이 붙은 단일 선택 목록 — 첫 사용 설문과 설정 화면 공용
 export function ChoiceList<T extends string>({ choices, value, onChange }: ChoiceListProps<T>) {
+  const styles = useStyles();
   return (
     <View style={styles.list}>
       {choices.map((choice) => {
@@ -33,7 +33,7 @@ export function ChoiceList<T extends string>({ choices, value, onChange }: Choic
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   list: {
     gap: 8,
   },
@@ -54,11 +54,11 @@ const styles = StyleSheet.create({
     color: Colors.slate700,
   },
   labelSelected: {
-    color: Colors.indigo600,
+    color: Colors.indigoText,
   },
   description: {
     marginTop: 2,
     fontSize: FontSize.caption,
     color: Colors.slate500,
   },
-});
+}));

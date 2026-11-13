@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
-import { Role } from '../constants/theme';
+import { Animated, View } from 'react-native';
+import { makeStyles, useTheme } from '../constants/theme';
 
 interface ProgressBarProps {
   checked: number;
@@ -9,7 +9,9 @@ interface ProgressBarProps {
   color?: string;
 }
 
-export function ProgressBar({ checked, total, color = Role.textMuted }: ProgressBarProps) {
+export function ProgressBar({ checked, total, color }: ProgressBarProps) {
+  const { Role } = useTheme();
+  const styles = useStyles();
   const pct = total === 0 ? 0 : (checked / total) * 100;
   const widthAnim = useRef(new Animated.Value(pct)).current;
 
@@ -27,7 +29,7 @@ export function ProgressBar({ checked, total, color = Role.textMuted }: Progress
         style={[
           styles.fill,
           {
-            backgroundColor: pct === 100 ? Role.done : color,
+            backgroundColor: pct === 100 ? Role.done : color ?? Role.textMuted,
             width: widthAnim.interpolate({
               inputRange: [0, 100],
               outputRange: ['0%', '100%'],
@@ -40,7 +42,7 @@ export function ProgressBar({ checked, total, color = Role.textMuted }: Progress
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   track: {
     height: 6,
     backgroundColor: Role.surfaceSoft,
@@ -51,4 +53,4 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-});
+}));

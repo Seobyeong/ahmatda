@@ -1,9 +1,9 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Cloud, CloudDrizzle, CloudRain, Droplets, Flame, Sun } from 'lucide-react-native';
 import { Circle, Path, Svg } from 'react-native-svg';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
+import type { Palette } from '../constants/colors';
 import type { WeatherSlot, WeatherType } from '../types';
 
 interface WeatherTimelineProps {
@@ -19,9 +19,9 @@ const WEATHER_ICONS: Record<WeatherType, typeof Sun> = {
   hot: Flame,
 };
 
-function getSlotColors(slot: WeatherSlot, isCurrent: boolean): { bg: string; text: string } {
+function getSlotColors(Colors: Palette, slot: WeatherSlot, isCurrent: boolean): { bg: string; text: string } {
   // 지금 칸은 표시일 뿐 누르는 게 아니라서 남색이 아니라 진한 회색이다.
-  if (isCurrent) return { bg: Colors.slate800, text: Colors.white };
+  if (isCurrent) return { bg: Colors.inverse, text: Colors.onInverse };
   switch (slot.alert) {
     case 'rain':
       return { bg: Colors.sky50, text: Colors.sky600 };
@@ -34,8 +34,8 @@ function getSlotColors(slot: WeatherSlot, isCurrent: boolean): { bg: string; tex
   }
 }
 
-function getDotColor(slot: WeatherSlot, isCurrent: boolean, isPast: boolean): string {
-  if (isCurrent) return Colors.slate800;
+function getDotColor(Colors: Palette, slot: WeatherSlot, isCurrent: boolean, isPast: boolean): string {
+  if (isCurrent) return Colors.inverse;
   if (isPast) return Colors.slate300;
   switch (slot.alert) {
     case 'rain':
@@ -54,6 +54,8 @@ function buildPath(points: { x: number; y: number }[]): string {
 }
 
 export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   // 강수/기온급강하 힌트 문구는 DashboardScreen이 WeatherService.getTimelineHint()로
   // 이미 상단 카드에 표시하고 있어서, 여기서 같은 판정을 다시 구현해 중복 표시하지 않는다.
   const temps = slots.map((s) => s.temp);
@@ -80,7 +82,7 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
         {slots.map((slot, i) => {
           const isCurrent = i === currentSlot;
           const isPast = i < currentSlot;
-          const colors = getSlotColors(slot, isCurrent);
+          const colors = getSlotColors(Colors, slot, isCurrent);
           const WeatherIcon = WEATHER_ICONS[slot.type];
 
           return (
@@ -111,7 +113,7 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
         <Path d={fullPath} stroke={Colors.slate200} strokeWidth={1.5} fill="none" />
         <Path d={pastPath} stroke={Colors.slate500} strokeWidth={1.5} fill="none" />
         {currentPoint ? (
-          <Circle cx={currentPoint.x} cy={currentPoint.y} r={5} fill={Colors.slate800} opacity={0.2} />
+          <Circle cx={currentPoint.x} cy={currentPoint.y} r={5} fill={Colors.inverse} opacity={0.2} />
         ) : null}
         {points.map((p, i) => (
           <Circle
@@ -119,7 +121,7 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
             cx={p.x}
             cy={p.y}
             r={i === currentSlot ? 2.2 : 1.6}
-            fill={getDotColor(slots[i], i === currentSlot, i < currentSlot)}
+            fill={getDotColor(Colors, slots[i], i === currentSlot, i < currentSlot)}
           />
         ))}
       </Svg>
@@ -127,7 +129,7 @@ export function WeatherTimeline({ slots, currentSlot }: WeatherTimelineProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   // 날씨 영역 안에 들어가는 부분이라 자기 카드를 갖지 않는다.
   container: {},
   header: {
@@ -157,7 +159,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   slotCurrent: {
-    shadowColor: Colors.slate800,
+    shadowColor: Shadow.card.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -183,4 +185,4 @@ const styles = StyleSheet.create({
   slotRainText: {
     fontSize: FontSize.caption,
   },
-});
+}));

@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { X } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { Button } from './ui';
 import { PURPOSES } from '../constants/purposes';
 import { useAppStore } from '../store';
@@ -24,6 +23,8 @@ const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 // 그날 요일·일정·예보로 무엇이 뜰지 보여주고, 그날만 챙길 것을 바로 더할 수 있다.
 // 일정은 화면에만 들고 있다가 닫으면 버린다 (일정은 기기에 저장하지 않는다 — 개인정보처리방침).
 export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const userSettings = useAppStore((s) => s.userSettings);
   const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const forgottenHistory = useAppStore((s) => s.forgottenHistory);
@@ -190,7 +191,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -295,4 +296,4 @@ const styles = StyleSheet.create({
   primaryButton: {
     marginTop: 16,
   },
-});
+}));

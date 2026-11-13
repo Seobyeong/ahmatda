@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { Text, TextInput, View } from 'react-native';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 
 interface TimeInputProps {
   value: string; // "HH:mm"
@@ -17,6 +16,8 @@ function clamp(n: number, min: number, max: number): number {
 // 시/분을 별도 숫자 입력칸으로 나눠서 받는다 — keyboardType="numeric"의 숫자 키패드에는
 // ':' 키가 없어서, 단일 TextInput으로는 사용자가 "HH:mm" 형식을 만들 방법이 없었다.
 export function TimeInput({ value, onChange, autoFocus, compact }: TimeInputProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const [hh, mm] = value.split(':');
   const [hhText, setHhText] = useState(hh ?? '');
   const [mmText, setMmText] = useState(mm ?? '');
@@ -94,7 +95,7 @@ export function TimeInput({ value, onChange, autoFocus, compact }: TimeInputProp
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -132,4 +133,4 @@ const styles = StyleSheet.create({
     color: Colors.slate400,
     marginHorizontal: 4,
   },
-});
+}));

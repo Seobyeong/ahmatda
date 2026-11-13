@@ -1,6 +1,7 @@
 import React from 'react';
 import { Circle, Defs, LinearGradient, Path, Rect, Stop, Svg } from 'react-native-svg';
-import { Colors } from '../constants/colors';
+// 캐릭터는 화면 밝기와 상관없이 같은 색이다.
+import { BrandColors as Colors } from '../constants/colors';
 
 // 앱 아이콘의 느낌표 말풍선. 평소 화면에는 로고(logo)로만 작게 나오고,
 // 상태 화면(다 챙김·빈 목록·실패)에서만 얼굴이 생긴다 — 매일 보는 화면은 조용하게 둔다.

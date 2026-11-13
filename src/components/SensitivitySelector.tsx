@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { Animated, Pressable, Text, View } from 'react-native';
+import { FontSize, Radius, makeStyles } from '../constants/theme';
 import { SENSITIVITY_LABELS } from '../constants/feedback';
 
 interface SensitivityButtonProps {
@@ -11,6 +10,7 @@ interface SensitivityButtonProps {
 }
 
 function SensitivityButton({ value, selected, onPress }: SensitivityButtonProps) {
+  const styles = useStyles();
   const scale = useRef(new Animated.Value(selected ? 1.1 : 1)).current;
 
   useEffect(() => {
@@ -45,6 +45,7 @@ interface SensitivitySelectorProps {
 
 // 온보딩과 설정 화면(재조정)에서 공유하는 체온 민감도 선택 UI.
 export function SensitivitySelector({ value, onChange }: SensitivitySelectorProps) {
+  const styles = useStyles();
   return (
     <View>
       <View style={styles.sensitivityRow}>
@@ -63,7 +64,7 @@ export function SensitivitySelector({ value, onChange }: SensitivitySelectorProp
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   sensitivityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
     color: Colors.slate500,
   },
   sensitivityButtonTextActive: {
-    color: Colors.white,
+    color: Colors.onColor,
   },
   sensitivitySpectrum: {
     flexDirection: 'row',
@@ -107,4 +108,4 @@ const styles = StyleSheet.create({
     color: Colors.slate800,
     textAlign: 'center',
   },
-});
+}));

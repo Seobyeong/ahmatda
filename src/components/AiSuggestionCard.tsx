@@ -1,8 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Sparkles } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { PURPOSES } from '../constants/purposes';
 import { Button } from './ui';
 import type { AiSuggestion } from '../services/ai/hints';
@@ -16,6 +15,8 @@ interface AiSuggestionCardProps {
 // 일정 기반 제안 — 체크리스트 카드 "아래"에 별도 카드로 둔다. 체크하는 도중에 AI 결과가
 // 도착해도 체크리스트 항목의 위치가 움직이지 않게 하기 위해서다(AI 연결 설계 4장 규칙 3).
 export function AiSuggestionCard({ suggestions, onAccept, onReject }: AiSuggestionCardProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   if (suggestions.length === 0) return null;
 
   return (
@@ -46,7 +47,7 @@ export function AiSuggestionCard({ suggestions, onAccept, onReject }: AiSuggesti
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   card: {
     // 체크리스트 카드와 겨루지 않게 옅은 면으로 둔다.
     backgroundColor: Colors.slate100,
@@ -93,4 +94,4 @@ const styles = StyleSheet.create({
   rejectButton: {
     backgroundColor: Colors.white,
   },
-});
+}));

@@ -6,7 +6,6 @@ import {
   Linking,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -14,8 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Check, Plus, X } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { PURPOSES, purposeItemKey } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
 import { getTodayString } from '../utils/time';
@@ -87,7 +85,8 @@ const PANEL_HEIGHT_RATIO = 0.78;
 const PANEL_MIN_HEIGHT = 420;
 
 function SettingSwitch(props: Pick<React.ComponentProps<typeof Switch>, 'value' | 'onValueChange' | 'disabled' | 'accessibilityLabel'>) {
-  return <Switch {...props} trackColor={{ false: Colors.slate200, true: Colors.indigo600 }} thumbColor={Colors.white} />;
+  const { Colors } = useTheme();
+  return <Switch {...props} trackColor={{ false: Colors.slate200, true: Colors.indigo600 }} thumbColor={Colors.onColor} />;
 }
 
 interface TimeRowProps {
@@ -102,6 +101,8 @@ interface TimeRowProps {
 // Wi-Fi 재arm effect가 함께 실행돼 불필요하게 잦다. 임시값에만 반영하다가 "완료"를
 // 눌렀을 때 한 번만 커밋한다.
 function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const [draft, setDraft] = useState<string | null>(null); // null이면 편집 중이 아님
 
   useEffect(() => {
@@ -124,7 +125,7 @@ function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
             accessibilityRole="button"
             accessibilityLabel={`${label} 저장`}
           >
-            <Check size={16} color={Colors.emerald600} />
+            <Check size={16} color={Colors.emeraldText} />
           </Pressable>
         </View>
       ) : (
@@ -142,6 +143,8 @@ function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
 }
 
 export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   // 고정 420이면 큰 화면에서도 두세 항목만 보여 스크롤이 길어진다. 화면 높이에 맞춘다.
   const { height: windowHeight } = useWindowDimensions();
   const maxHeight = Math.max(PANEL_MIN_HEIGHT, Math.round((windowHeight - top) * PANEL_HEIGHT_RATIO));
@@ -463,7 +466,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
             accessibilityRole="button"
             accessibilityLabel="루틴 추가"
           >
-            <Plus size={18} color={Colors.white} />
+            <Plus size={18} color={Colors.onColor} />
           </Pressable>
         </View>
         {routineMessage ? <Text style={styles.wifiStatusError}>{routineMessage}</Text> : null}
@@ -565,7 +568,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                   accessibilityLabel={`키워드 ${kw} 삭제`}
                 >
                   <Text style={styles.keywordChipText}>{kw}</Text>
-                  <X size={10} color={Colors.indigo600} />
+                  <X size={10} color={Colors.indigoText} />
                 </Pressable>
               ))}
             </View>
@@ -580,7 +583,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
                 returnKeyType="done"
               />
               <Pressable style={styles.timeDoneButton} onPress={handleAddKeyword} hitSlop={8} accessibilityRole="button" accessibilityLabel="키워드 추가">
-                <Check size={14} color={Colors.emerald600} />
+                <Check size={14} color={Colors.emeraldText} />
               </Pressable>
             </View>
           </>
@@ -764,7 +767,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
               returnKeyType="done"
             />
             <Pressable style={styles.timeDoneButton} onPress={handleAiKeySave} hitSlop={8} accessibilityRole="button" accessibilityLabel="API 키 저장">
-              <Check size={14} color={Colors.emerald600} />
+              <Check size={14} color={Colors.emeraldText} />
             </Pressable>
           </View>
         )}
@@ -774,7 +777,7 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   backdrop: {
     position: 'absolute',
     left: 0,
@@ -792,7 +795,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: Radius.xl,
     zIndex: 20,
     elevation: 20,
-    shadowColor: Colors.slate800,
+    shadowColor: Shadow.card.shadowColor,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
@@ -853,12 +856,12 @@ const styles = StyleSheet.create({
   },
   // 눌러서 바꿀 수 있는 값이라는 걸 색으로 알린다 (다른 "변경" 링크들과 같은 색)
   rowValueEditable: {
-    color: Colors.indigo600,
+    color: Colors.indigoText,
   },
   calendarSettingsLink: {
     fontSize: FontSize.body,
     fontWeight: '600',
-    color: Colors.indigo600,
+    color: Colors.indigoText,
   },
   sensitivityEditArea: {
     paddingTop: 14,
@@ -868,7 +871,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 8,
     fontSize: FontSize.caption,
-    color: Colors.emerald600,
+    color: Colors.emeraldText,
   },
   wifiStatusError: {
     marginTop: 6,
@@ -941,7 +944,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dayChipTextActive: {
-    color: Colors.white,
+    color: Colors.onColor,
   },
   routineLabel: {
     fontSize: FontSize.body,
@@ -1038,7 +1041,7 @@ const styles = StyleSheet.create({
     color: Colors.slate500,
   },
   segmentTextSelected: {
-    color: Colors.indigo600,
+    color: Colors.indigoText,
   },
   aiReportLink: {
     marginTop: 12,
@@ -1061,4 +1064,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.slate600,
   },
-});
+}));

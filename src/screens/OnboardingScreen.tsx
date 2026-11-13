@@ -4,7 +4,6 @@ import {
   Linking,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -15,8 +14,7 @@ import NetInfo, { NetInfoStateType } from '@react-native-community/netinfo';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AlarmClock, Bell, Calendar, Check, ChevronLeft, Footprints, MapPin } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { Button } from '../components/ui';
 import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -56,6 +54,8 @@ function PermissionRow({
   onRequest,
   deniedActionLabel,
 }: PermissionRowProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={[styles.permissionRow, status === 'denied' && styles.permissionRowDenied]}>
       <View style={styles.permissionIcon}>{icon}</View>
@@ -82,6 +82,8 @@ function PermissionRow({
 }
 
 export function OnboardingScreen(_props: OnboardingScreenProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
   const [permissions, setPermissions] = useState<{
@@ -536,7 +538,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   container: {
     flex: 1,
     backgroundColor: Colors.bgDefault,
@@ -680,7 +682,7 @@ const styles = StyleSheet.create({
   wifiSuccessText: {
     marginTop: 10,
     fontSize: FontSize.caption,
-    color: Colors.emerald600,
+    color: Colors.emeraldText,
     fontWeight: '500',
   },
   wifiErrorText: {
@@ -699,4 +701,4 @@ const styles = StyleSheet.create({
     color: Colors.slate800,
     backgroundColor: Colors.white,
   },
-});
+}));

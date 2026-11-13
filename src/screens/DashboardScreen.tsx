@@ -39,8 +39,8 @@ import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { Colors, PurposeColors } from '../constants/colors';
-import { FontSize, Radius, Role, Shadow, Space } from '../constants/theme';
+import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
+import type { Palette } from '../constants/colors';
 import { PURPOSES, detectPurposeFromEvents, findMatchingEvent } from '../constants/purposes';
 import { FEEDBACK_MESSAGES } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -112,22 +112,29 @@ const WEATHER_ICONS: Record<WeatherType, typeof Sun> = {
   hot: Flame,
 };
 
-const WEATHER_ICON_COLORS: Record<WeatherType, string> = {
-  sunny: Colors.amber500,
-  cloudy: Colors.slate500,
-  rainy: Colors.sky500,
-  drizzle: Colors.sky500,
-  hot: Colors.orange600,
-};
+function getWeatherIconColor(Colors: Palette, type: WeatherType): string {
+  switch (type) {
+    case 'sunny':
+      return Colors.amber500;
+    case 'rainy':
+    case 'drizzle':
+      return Colors.sky500;
+    case 'hot':
+      return Colors.orange600;
+    default:
+      return Colors.slate500;
+  }
+}
 
 // 날씨 영역의 바탕 — 비·폭염일 때만 색을 입혀 평소와 다른 날임을 알린다.
-function getWeatherTint(weather: CurrentWeather | null): string {
+function getWeatherTint(Colors: Palette, weather: CurrentWeather | null): string {
   if (weather?.rainAlert) return Colors.sky50;
   if (weather?.heatAlert) return Colors.orange50;
-  return Role.surfaceSoft;
+  return Colors.slate100;
 }
 
 function PulseDot({ color }: { color: string }) {
+  const styles = useStyles();
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -173,6 +180,8 @@ function createPulse(scale: Animated.Value, opacity: Animated.Value) {
 }
 
 export function DashboardScreen() {
+  const { Colors, Role, PurposeColors } = useTheme();
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const checklistYRef = useRef(0);
@@ -615,6 +624,7 @@ export function DashboardScreen() {
       : null;
 
   const timelineHint = weatherTimeline.length > 0 ? WeatherService.getTimelineHint(weatherTimeline) : null;
+  const hintIsRain = timelineHint?.bg === '#f0f9ff';
 
   const banners: string[] = [];
   if (currentWeather?.rainAlert) banners.push('오늘 비 예보가 있어요 — 우산을 챙기세요.');
@@ -694,7 +704,7 @@ export function DashboardScreen() {
 
         {/* 날씨 — 평소엔 요약 한 덩어리만 보인다. 계산 근거·시간대별 예보·피드백은 눌렀을 때 편다.
             체크리스트가 화면 위쪽에 오도록 하기 위해서다. */}
-        <View style={[styles.weatherBlock, { backgroundColor: getWeatherTint(currentWeather) }]}>
+        <View style={[styles.weatherBlock, { backgroundColor: getWeatherTint(Colors, currentWeather) }]}>
           {currentWeather && shownTemp !== null ? (
             <>
               <Pressable
@@ -708,7 +718,7 @@ export function DashboardScreen() {
                 <WeatherIcon
                   size={44}
                   strokeWidth={1.75}
-                  color={WEATHER_ICON_COLORS[currentWeather.weather]}
+                  color={getWeatherIconColor(Colors, currentWeather.weather)}
                 />
                 <View style={styles.weatherSummaryText}>
                   <Text style={styles.weatherCaption}>나에게 맞춘 체감온도</Text>
@@ -717,9 +727,9 @@ export function DashboardScreen() {
                 </View>
                 <View style={styles.weatherChevron}>
                   {weatherExpanded ? (
-                    <ChevronUp size={20} color={Role.action} />
+                    <ChevronUp size={20} color={Role.actionText} />
                   ) : (
-                    <ChevronDown size={20} color={Role.action} />
+                    <ChevronDown size={20} color={Role.actionText} />
                   )}
                 </View>
               </Pressable>
@@ -736,8 +746,10 @@ export function DashboardScreen() {
               ))}
 
               {timelineHint ? (
-                <View style={[styles.alertBanner, { backgroundColor: timelineHint.bg }]}>
-                  <Text style={[styles.alertBannerText, { color: timelineHint.color }]}>{timelineHint.text}</Text>
+                <View style={[styles.alertBanner, { backgroundColor: hintIsRain ? Colors.sky50 : Colors.blue50 }]}>
+                  <Text style={[styles.alertBannerText, { color: hintIsRain ? Colors.sky600 : Colors.blue600 }]}>
+                    {timelineHint.text}
+                  </Text>
                 </View>
               ) : null}
 
@@ -976,7 +988,7 @@ export function DashboardScreen() {
               label="오늘만이 아니라 매일 루틴으로 추가"
               variant="text"
               size="sm"
-              icon={<Pin size={14} color={Role.action} />}
+              icon={<Pin size={14} color={Role.actionText} />}
               onPress={handleQuickAddPermanent}
               style={styles.quickAddPermanentButton}
               accessibilityLabel={`${quickAddText.trim()} 매일 루틴으로 추가`}
@@ -1001,12 +1013,12 @@ export function DashboardScreen() {
           accessibilityLabel="다음 외출 준비 미리보기"
           accessibilityHint="그날 일정과 예보로 뜰 것을 보고, 그날만 챙길 것을 더해요"
         >
-          <Moon size={18} color={Role.action} />
+          <Moon size={18} color={Role.actionText} />
           <View style={styles.lightRowText}>
             <Text style={styles.lightRowTitle}>다음 외출 준비 미리보기</Text>
             <Text style={styles.lightRowSub}>그날 일정·예보로 뜰 것을 보고, 그날만 챙길 것을 더해요</Text>
           </View>
-          <ChevronRight size={18} color={Role.action} />
+          <ChevronRight size={18} color={Role.actionText} />
         </Pressable>
 
         {/* 안내는 누르는 게 아니라서 면 없이 글로만 둔다. */}
@@ -1067,7 +1079,7 @@ export function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   screen: {
     flex: 1,
     backgroundColor: Role.bg,
@@ -1296,7 +1308,7 @@ const styles = StyleSheet.create({
   feedbackChipText: {
     fontSize: FontSize.body,
     fontWeight: '600',
-    color: Role.action,
+    color: Role.actionText,
   },
   feedbackChipTextActive: {
     color: Role.onAction,
@@ -1378,7 +1390,7 @@ const styles = StyleSheet.create({
     color: Role.textMuted,
   },
   checklistMetaDone: {
-    color: Role.done,
+    color: Role.doneText,
     fontWeight: '700',
   },
   doneBanner: {
@@ -1393,7 +1405,7 @@ const styles = StyleSheet.create({
   doneTitle: {
     fontSize: FontSize.heading,
     fontWeight: '700',
-    color: Role.done,
+    color: Role.doneText,
   },
   doneSub: {
     marginTop: 2,
@@ -1504,4 +1516,4 @@ const styles = StyleSheet.create({
     fontSize: FontSize.label,
     color: Role.onActionSub,
   },
-});
+}));

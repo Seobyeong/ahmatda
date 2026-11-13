@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import { X } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { Button } from './ui';
 import { PURPOSES } from '../constants/purposes';
 import { SENSITIVITY_LABELS } from '../constants/feedback';
@@ -26,6 +25,8 @@ const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 // 사용자가 구독 중인 AI 앱에서 대화하고, 그 답변을 붙여넣어 반영한다. 앱은 아무것도
 // 전송하지 않는다 — 템플릿은 OS 공유 시트로 사용자가 고른 앱에 넘긴다.
 export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const userSettings = useAppStore((s) => s.userSettings);
   const permanentRoutines = useAppStore((s) => s.permanentRoutines);
   const applyPersonalization = useAppStore((s) => s.applyPersonalization);
@@ -174,7 +175,7 @@ export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -271,4 +272,4 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
   },
-});
+}));

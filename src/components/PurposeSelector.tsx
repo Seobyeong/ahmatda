@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
 import { CalendarCheck } from 'lucide-react-native';
-import { Colors, PurposeColors } from '../constants/colors';
-import { FontSize, Radius, Role, Space } from '../constants/theme';
+import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
 import { PURPOSES, PURPOSE_ORDER } from '../constants/purposes';
 import { PurposeIcon } from './PurposeIcon';
 import { Button } from './ui';
@@ -22,9 +21,13 @@ interface ChipProps {
   label: string; // 화면 낭독기용 전체 이름
   text: string;
   icon?: (color: string) => React.ReactNode;
+  /** 고른 칩의 글자·아이콘 색 (기본: 색 있는 면 위의 흰색) */
+  activeTextColor?: string;
 }
 
-function Chip({ active, activeColor, onPress, label, text, icon }: ChipProps) {
+function Chip({ active, activeColor, onPress, label, text, icon, activeTextColor }: ChipProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const scale = useRef(new Animated.Value(active ? 1.05 : 1)).current;
 
   useEffect(() => {
@@ -51,8 +54,10 @@ function Chip({ active, activeColor, onPress, label, text, icon }: ChipProps) {
         ]}
       >
         {/* 고르지 않은 칩도 아이콘은 목적 색으로 둔다 — 색만 보고도 어느 목적인지 익힌다. */}
-        {icon ? icon(active ? Colors.white : activeColor) : null}
-        <Text style={[styles.chipText, active && styles.chipTextActive]}>{text}</Text>
+        {icon ? icon(active ? activeTextColor ?? Colors.onColor : activeColor) : null}
+        <Text style={[styles.chipText, active && styles.chipTextActive, active && activeTextColor ? { color: activeTextColor } : null]}>
+          {text}
+        </Text>
       </Pressable>
     </Animated.View>
   );
@@ -64,6 +69,8 @@ export function PurposeSelector({
   autoDetected,
   autoDetectedEvent,
 }: PurposeSelectorProps) {
+  const { Colors, Role, PurposeColors } = useTheme();
+  const styles = useStyles();
   return (
     <View>
       {autoDetected ? (
@@ -96,7 +103,8 @@ export function PurposeSelector({
       >
         <Chip
           active={purposeId === null}
-          activeColor={Colors.slate800}
+          activeColor={Colors.inverse}
+          activeTextColor={Colors.onInverse}
           onPress={() => onSelect(null)}
           label="목적 없음"
           text="목적 없음"
@@ -125,7 +133,7 @@ export function PurposeSelector({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -179,6 +187,6 @@ const styles = StyleSheet.create({
     color: Role.textSub,
   },
   chipTextActive: {
-    color: Colors.white,
+    color: Colors.onColor,
   },
-});
+}));

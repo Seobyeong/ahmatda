@@ -182,7 +182,8 @@ export default function App() {
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        {/* 밝은 화면에선 어두운 글자, 어두운 화면에선 밝은 글자 */}
+        <StatusBar style="auto" />
         <AppNavigator />
       </SafeAreaProvider>
     </ErrorBoundary>

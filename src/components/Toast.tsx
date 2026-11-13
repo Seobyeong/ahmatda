@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import { Check } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import type { ToastAction } from '../store';
 
 interface ToastProps {
@@ -19,6 +18,8 @@ const DURATION_MS = 2600;
 const DURATION_WITH_ACTION_MS = 6000;
 
 export function Toast({ message, action, onDone, bottomOffset = 80 }: ToastProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   const translateY = useRef(new Animated.Value(10)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -68,7 +69,7 @@ export function Toast({ message, action, onDone, bottomOffset = 80 }: ToastProps
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   container: {
     position: 'absolute',
     left: 20,
@@ -81,7 +82,7 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.slate800,
+    backgroundColor: Colors.inverse,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: Radius.pill,
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
   },
   text: {
     flexShrink: 1,
-    color: Colors.white,
+    color: Colors.onInverse,
     fontSize: FontSize.body,
     fontWeight: '500',
   },
@@ -99,8 +100,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   actionText: {
-    color: Colors.indigo200,
+    color: Colors.inverseAction,
     fontSize: FontSize.body,
     fontWeight: '700',
   },
-});
+}));

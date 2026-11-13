@@ -1,8 +1,7 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Colors } from '../constants/colors';
+import { Text, View } from 'react-native';
 import { Mascot } from './Mascot';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles } from '../constants/theme';
 import { Button } from './ui';
 
 interface ErrorBoundaryProps {
@@ -33,25 +32,31 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   render(): React.ReactNode {
     if (this.state.error) {
-      return (
-        <View style={styles.container}>
-          <View style={styles.mascot}>
-            <Mascot mood="sorry" size={88} />
-          </View>
-          <Text style={styles.title}>문제가 발생했어요</Text>
-          <Text style={styles.description}>
-            화면을 표시하는 중 오류가 났어요. 다시 시도해도 반복되면 앱을 재시작해주세요.
-          </Text>
-          <Button label="다시 시도" onPress={this.handleReset} style={styles.button} />
-        </View>
-      );
+      return <ErrorFallback onReset={this.handleReset} />;
     }
 
     return this.props.children;
   }
 }
 
-const styles = StyleSheet.create({
+// 클래스 컴포넌트는 훅을 못 써서, 테마 색을 읽는 화면 부분만 함수로 뺐다.
+function ErrorFallback({ onReset }: { onReset: () => void }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.container}>
+      <View style={styles.mascot}>
+        <Mascot mood="sorry" size={88} />
+      </View>
+      <Text style={styles.title}>문제가 발생했어요</Text>
+      <Text style={styles.description}>
+        화면을 표시하는 중 오류가 났어요. 다시 시도해도 반복되면 앱을 재시작해주세요.
+      </Text>
+      <Button label="다시 시도" onPress={onReset} style={styles.button} />
+    </View>
+  );
+}
+
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -77,4 +82,4 @@ const styles = StyleSheet.create({
   },
   button: {
   },
-});
+}));

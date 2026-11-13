@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import {
   Briefcase,
   Check,
@@ -19,8 +19,8 @@ import {
   X,
   Zap,
 } from 'lucide-react-native';
-import { Colors } from '../constants/colors';
-import { FontSize, Radius } from '../constants/theme';
+import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
+import type { Palette } from '../constants/colors';
 import type { ChecklistItem as ChecklistItemType } from '../types';
 
 interface ChecklistItemProps {
@@ -57,7 +57,7 @@ function getDeleteHint(item: ChecklistItemType): string {
   return '앞으로 이 항목을 추천하지 않아요';
 }
 
-function getTierColor(tier: ChecklistItemType['tier'], purposeColor?: string): string {
+function getTierColor(Colors: Palette, tier: ChecklistItemType['tier'], purposeColor?: string): string {
   switch (tier) {
     case 1:
       return Colors.sky500;
@@ -73,6 +73,8 @@ function getTierColor(tier: ChecklistItemType['tier'], purposeColor?: string): s
 // memo: 항목 하나를 체크하면 store가 그 항목 객체만 새로 만들고 나머지는 참조를 유지한다.
 // onToggle/onDelete는 store 액션이라 참조가 고정이어서, 바뀐 한 줄만 다시 그려진다.
 export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle, onDelete, purposeColor }: ChecklistItemProps) {
+  const { Colors } = useTheme();
+  const styles = useStyles();
   // 체크 반응성이 이 앱의 핵심 사용성 요건이라, 탭하면 상태를 바로 바꾸고(딜레이 없음)
   // 옅어지는 효과는 그 위에 얹는 순수 시각 효과로만 재생한다. 예전엔 슬라이드+페이드
   // 애니메이션이 끝난 뒤에야 실제 토글이 일어나서 체크할 때마다 220ms 딜레이가 있었다.
@@ -91,7 +93,7 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
   };
 
   const Icon = ICONS[item.icon] ?? Circle;
-  const iconColor = getTierColor(item.tier, purposeColor);
+  const iconColor = getTierColor(Colors, item.tier, purposeColor);
   const showDelete = item.temp || item.permanent || item.tier === 1 || item.tier === 2;
 
   return (
@@ -104,7 +106,7 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
         accessibilityLabel={[item.label, item.tier !== 0 ? item.note : null, item.badge].filter(Boolean).join(', ')}
       >
         <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
-          {item.checked && <Check size={14} color={Colors.white} />}
+          {item.checked && <Check size={14} color={Colors.onColor} />}
         </View>
 
         <Icon size={18} color={iconColor} style={styles.icon} />
@@ -142,7 +144,7 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
   wrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -220,4 +222,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

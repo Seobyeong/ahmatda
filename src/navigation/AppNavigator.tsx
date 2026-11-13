@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useTheme } from '@/constants/theme';
 import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAppStore } from '@/store';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
-import { Colors } from '@/constants/colors';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -32,6 +32,7 @@ function useStoreHydrated(): boolean {
 }
 
 export default function AppNavigator() {
+  const { Colors } = useTheme();
   const hydrated = useStoreHydrated();
   const onboarded = useAppStore(state => state.userSettings.onboarded);
 
