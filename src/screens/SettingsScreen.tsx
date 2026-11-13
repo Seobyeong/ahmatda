@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Animated,
   AppState,
   Linking,
   Pressable,
@@ -10,9 +9,10 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import { Check, Plus, X } from 'lucide-react-native';
+import { Check, ChevronLeft, Plus, X } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { PURPOSES, purposeItemKey } from '../constants/purposes';
 import { getEffectiveDelta } from '../utils/temperature';
@@ -25,21 +25,15 @@ import { HomeGeofence } from '../services/departure/homeGeofence';
 import * as Location from 'expo-location';
 import { AiKeyStore } from '../services/ai/AiKeyStore';
 import { DAILY_CALL_LIMIT } from '../services/ai/hints';
-import { SensitivitySelector } from './SensitivitySelector';
-import { TimeInput } from './TimeInput';
-import { PersonalizeModal } from './PersonalizeModal';
-import { DiagnosticsModal } from './DiagnosticsModal';
-import { ChoiceList } from './ChoiceList';
+import { SensitivitySelector } from '../components/SensitivitySelector';
+import { TimeInput } from '../components/TimeInput';
+import { PersonalizeModal } from '../components/PersonalizeModal';
+import { DiagnosticsModal } from '../components/DiagnosticsModal';
+import { ChoiceList } from '../components/ChoiceList';
+import { Toast } from '../components/Toast';
 import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
 import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
 import type { FeedbackType, MapApp } from '../types';
-
-interface SettingsPanelProps {
-  /** 패널 윗변 위치 — 화면 기준, 보통 헤더 높이 */
-  top: number;
-  visible: boolean;
-  onClose: () => void;
-}
 
 const FEEDBACK_LABELS: Record<FeedbackType, string> = {
   cold: '추웠음',
@@ -80,10 +74,6 @@ const WEATHER_ITEMS: { label: string; description: string }[] = [
   { label: '물병', description: '폭염 주의보일 때 표시' },
 ];
 
-// 패널이 화면에서 차지할 수 있는 비율 (헤더 아래 남은 높이 기준)
-const PANEL_HEIGHT_RATIO = 0.78;
-const PANEL_MIN_HEIGHT = 420;
-
 function SettingSwitch(props: Pick<React.ComponentProps<typeof Switch>, 'value' | 'onValueChange' | 'disabled' | 'accessibilityLabel'>) {
   const { Colors } = useTheme();
   return <Switch {...props} trackColor={{ false: Colors.slate200, true: Colors.indigo600 }} thumbColor={Colors.onColor} />;
@@ -93,21 +83,15 @@ interface TimeRowProps {
   label: string;
   value: string; // "HH:mm"
   onCommit: (value: string) => void;
-  /** 패널이 닫히면 편집 중이던 값을 버린다 */
-  panelVisible: boolean;
 }
 
 // 시각 설정 한 줄. 매 키 입력마다 store에 커밋하면 그때마다 App.tsx의 알림 재예약 +
 // Wi-Fi 재arm effect가 함께 실행돼 불필요하게 잦다. 임시값에만 반영하다가 "완료"를
 // 눌렀을 때 한 번만 커밋한다.
-function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
+function TimeRow({ label, value, onCommit }: TimeRowProps) {
   const { Colors } = useTheme();
   const styles = useStyles();
   const [draft, setDraft] = useState<string | null>(null); // null이면 편집 중이 아님
-
-  useEffect(() => {
-    if (!panelVisible) setDraft(null);
-  }, [panelVisible]);
 
   return (
     <View style={styles.row}>
@@ -142,22 +126,16 @@ function TimeRow({ label, value, onCommit, panelVisible }: TimeRowProps) {
   );
 }
 
-export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
+// 설정 화면. 예전엔 대시보드 위에 얹는 패널이라 높이가 화면의 일부로 묶이고
+// 뒤로 가기가 패널이 아니라 앱을 닫았다. 화면 하나로 두어 뒤로 가기·스크롤이 평범하게 동작한다.
+export function SettingsScreen() {
   const { Colors } = useTheme();
   const styles = useStyles();
-  // 고정 420이면 큰 화면에서도 두세 항목만 보여 스크롤이 길어진다. 화면 높이에 맞춘다.
-  const { height: windowHeight } = useWindowDimensions();
-  const maxHeight = Math.max(PANEL_MIN_HEIGHT, Math.round((windowHeight - top) * PANEL_HEIGHT_RATIO));
-
-  const translateY = useRef(new Animated.Value(visible ? 0 : -300)).current;
-
-  useEffect(() => {
-    Animated.timing(translateY, {
-      toValue: visible ? 0 : -300,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  }, [visible, translateY]);
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const toast = useAppStore((s) => s.toast);
+  const toastAction = useAppStore((s) => s.toastAction);
+  const clearToast = useAppStore((s) => s.clearToast);
 
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
   const nightlyCheckTime = useAppStore((s) => s.userSettings.nightlyCheckTime);
@@ -217,8 +195,6 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
   useEffect(() => {
-    if (!visible) return;
-
     const check = () => {
       CalendarService.checkPermission().then((status) =>
         setCalendarConnected(status === 'authorized')
@@ -231,29 +207,16 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
     };
     check();
 
-    // 이 패널을 연 채로 "설정 열기"를 눌러 OS 설정으로 갔다 돌아온 경우도 반영
+    // 이 화면을 연 채로 "설정 열기"를 눌러 OS 설정으로 갔다 돌아온 경우도 반영
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') check();
     });
     return () => subscription.remove();
-  }, [visible]);
+  }, []);
 
   useEffect(() => {
-    if (!visible) {
-      setEditingSensitivity(false);
-      setWifiRegisterStatus('idle');
-      setHomeRegisterStatus('idle');
-      setKeywordDraft('');
-      setRoutineDraft('');
-      setRoutineMessage(null);
-      setAiKeyDraft('');
-    }
-  }, [visible]);
-
-  useEffect(() => {
-    if (!visible) return;
     AiKeyStore.get(ai.provider).then((key) => setAiHasKey(!!key));
-  }, [visible, ai.provider]);
+  }, [ai.provider]);
 
   // 요일 칩 토글 — days가 없으면(매일) 해당 요일 하나만 끈 6일짜리 배열로 시작한다.
   const handleToggleRoutineDay = (routineId: string, currentDays: number[] | undefined, day: number) => {
@@ -379,50 +342,27 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
   const recentFeedback = feedbackHistory.slice(-3).reverse();
 
   return (
-    <>
-    {/* 패널 밖(어두워진 영역)을 누르면 닫힌다. 없으면 뒤의 체크리스트가 그대로 눌려서
-        설정을 보다가 항목을 실수로 체크·삭제하게 된다. */}
-    {visible ? (
-      <Pressable
-        style={[styles.backdrop, { top }]}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="설정 닫기"
-      />
-    ) : null}
-    <Animated.View
-      // 패널 높이가 -300 이동보다 커서, 닫힌 상태에서도 아래쪽이 비쳐 보이고
-      // 그 영역의 터치를 막았다. 닫히면 투명 + 터치 통과.
-      pointerEvents={visible ? 'auto' : 'none'}
-      style={[
-        styles.container,
-        {
-          top,
-          maxHeight,
-          transform: [{ translateY }],
-          opacity: translateY.interpolate({ inputRange: [-300, -200, 0], outputRange: [0, 1, 1] }),
-        },
-      ]}
-    >
-      {/* 컨테이너 maxHeight만으로는 ScrollView 높이가 내용 높이로 잡혀 스크롤이 안 되고
-          내용이 패널 밖으로 넘쳤다. ScrollView 자체에도 같은 한도를 준다. */}
+    <View style={styles.screen}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="뒤로"
+        >
+          <ChevronLeft size={26} color={Colors.slate700} />
+        </Pressable>
+        {/* 제목을 길게 누르면 실기기 검증용 진단 화면이 열린다 */}
+        <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting accessibilityRole="header">설정</Text>
+      </View>
+
       <ScrollView
-        style={{ maxHeight }}
-        contentContainerStyle={styles.content}
-        nestedScrollEnabled
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting accessibilityRole="header">설정</Text>
-          <Pressable style={styles.closeButton} onPress={onClose} accessibilityRole="button" accessibilityLabel="설정 닫기">
-            <X size={22} color={Colors.slate600} />
-          </Pressable>
-        </View>
-
-
         <Text style={[styles.groupTitle, styles.groupTitleFirst]} accessibilityRole="header">시간 · 알림</Text>
-        <TimeRow label="외출 시간" value={departureTime} onCommit={updateDepartureTime} panelVisible={visible} />
-        <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} panelVisible={visible} />
+        <TimeRow label="외출 시간" value={departureTime} onCommit={updateDepartureTime} />
+        <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} />
 
         <Text style={styles.sectionTitle}>알림 성향</Text>
         <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPreference} onChange={handleAlertPreference} />
@@ -772,49 +712,41 @@ export function SettingsPanel({ top, visible, onClose }: SettingsPanelProps) {
           </View>
         )}
       </ScrollView>
-    </Animated.View>
-    </>
+
+      {toast ? <Toast message={toast} action={toastAction} onDone={clearToast} bottomOffset={insets.bottom + 24} /> : null}
+    </View>
   );
 }
 
 const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
-  backdrop: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
-    zIndex: 19,
-  },
-  container: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.white,
-    borderBottomLeftRadius: Radius.xl,
-    borderBottomRightRadius: Radius.xl,
-    zIndex: 20,
-    elevation: 20,
-    shadowColor: Shadow.card.shadowColor,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-  },
-  content: {
-    padding: 20,
+  screen: {
+    flex: 1,
+    backgroundColor: Role.bg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingBottom: 4,
   },
-  // 아이콘만 있는 버튼의 터치 영역 (44×44). 오른쪽 여백만큼 당겨 아이콘이 가장자리에 맞게.
+  // 아이콘만 있는 버튼의 터치 영역 (44×44)
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // 줄 끝의 ✕ 버튼 (44×44). 오른쪽 여백만큼 당겨 아이콘이 가장자리에 맞게.
   closeButton: {
     width: 44,
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: -12,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
   },
   // 묶음 제목 — 설정이 한 줄로 길게 이어져 원하는 항목을 찾기 어려웠다. 다섯 묶음으로 나눈다.
   groupTitle: {
@@ -831,7 +763,7 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     marginTop: 8,
   },
   headerTitle: {
-    fontSize: FontSize.heading,
+    fontSize: FontSize.title,
     fontWeight: '700',
     color: Colors.slate800,
   },

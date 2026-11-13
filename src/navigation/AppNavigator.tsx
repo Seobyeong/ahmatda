@@ -6,10 +6,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAppStore } from '@/store';
 import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
+import { SettingsScreen } from '@/screens/SettingsScreen';
 
 export type RootStackParamList = {
   Onboarding: undefined;
   Dashboard:  undefined;
+  Settings:   undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -42,11 +44,17 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        // 화면이 넘어가는 동안 비치는 바탕도 테마를 따른다 (어두운 화면에서 흰 번쩍임 방지)
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.bgDefault } }}
+      >
         {!onboarded ? (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         ) : (
-          <Stack.Screen name="Dashboard" component={DashboardScreen} />
+          <>
+            <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="Settings" component={SettingsScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
