@@ -446,11 +446,27 @@ export const useAppStore = create<AppStore>()(
         const index = get().permanentRoutines.findIndex((routine) => routine.id === id);
         if (index < 0) return null;
         const routine = get().permanentRoutines[index];
+        // 루틴을 지우면 재조립이 오늘 목록의 줄도 뺀다. 되돌릴 때 그 줄을 같이 돌려놓지 않으면
+        // 재조립이 새 줄을 만들어서 체크해 둔 게 풀린다 (체크는 이전 목록의 이름으로 이어받는다).
+        const rowIndex = get().checklist.findIndex(
+          (item) => item.permanent && item.label === routine.label && item.onDate === routine.onDate
+        );
+        const row = rowIndex >= 0 ? get().checklist[rowIndex] : null;
         set((state) => ({
           permanentRoutines: state.permanentRoutines.filter((r) => r.id !== id),
         }));
         return () =>
-          set((state) => ({ permanentRoutines: reinsertRoutines(state.permanentRoutines, [{ routine, index }]) }));
+          set((state) => {
+            const next: Partial<AppState> = {
+              permanentRoutines: reinsertRoutines(state.permanentRoutines, [{ routine, index }]),
+            };
+            if (row && !state.checklist.some((item) => item.label === row.label)) {
+              const checklist = [...state.checklist];
+              checklist.splice(Math.min(rowIndex, checklist.length), 0, row);
+              next.checklist = checklist;
+            }
+            return next;
+          });
       },
 
       // 루틴 요일 조건 설정 — 7일 전부 선택은 undefined(매일)로 정규화해서

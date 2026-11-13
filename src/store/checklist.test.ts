@@ -103,6 +103,19 @@ describe('삭제 되돌리기', () => {
     expect(useAppStore.getState().permanentRoutines[0].label).toBe('집 열쇠');
   });
 
+  it('설정에서 지운 루틴을 되돌리면 체크해 둔 것도 돌아온다', () => {
+    useAppStore.getState().toggleCheck(find('집 열쇠').id);
+    const undo = useAppStore.getState().removePermanentRoutine('routine-default-key');
+    useAppStore.getState().buildChecklist(); // 화면이 루틴 변화에 맞춰 다시 조립한다
+    expect(labels()).not.toContain('집 열쇠');
+
+    undo!();
+    useAppStore.getState().buildChecklist();
+
+    expect(labels()).toEqual(['집 열쇠', '지갑', '에어팟']);
+    expect(find('집 열쇠').checked).toBe(true);
+  });
+
   it('없는 항목이면 null', () => {
     expect(useAppStore.getState().deleteItem('nope')).toBeNull();
     expect(useAppStore.getState().removePermanentRoutine('nope')).toBeNull();
