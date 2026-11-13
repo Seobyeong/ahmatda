@@ -3,6 +3,7 @@ import {
   AccessibilityInfo,
   Animated,
   AppState,
+  BackHandler,
   Keyboard,
   Pressable,
   RefreshControl,
@@ -182,6 +183,16 @@ export function DashboardScreen() {
   const [weatherExpanded, setWeatherExpanded] = useState(false);
   const [leaveBarHeight, setLeaveBarHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  // 설정은 화면 위에 얹은 패널이라, 따로 막지 않으면 Android 뒤로 가기가 패널을 두고 앱을 닫는다.
+  useEffect(() => {
+    if (!settingsVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSettingsVisible(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [settingsVisible]);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));

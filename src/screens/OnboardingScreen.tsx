@@ -17,6 +17,7 @@ import { AlarmClock, Bell, Calendar, Check, ChevronLeft, Footprints, MapPin } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { FontSize, Radius } from '../constants/theme';
+import { Button } from '../components/ui';
 import { SENSITIVITY_DELTA } from '../constants/feedback';
 import { useAppStore } from '../store';
 import { CalendarService } from '../services/calendar/CalendarService';
@@ -70,11 +71,11 @@ function PermissionRow({
           <Check size={16} color={Colors.emerald500} />
         </View>
       ) : (
-        <Pressable style={styles.permissionButton} onPress={onRequest} hitSlop={6} accessibilityRole="button">
-          <Text style={styles.permissionButtonText}>
-            {status === 'denied' && deniedActionLabel ? deniedActionLabel : '허용'}
-          </Text>
-        </Pressable>
+        <Button
+          label={status === 'denied' && deniedActionLabel ? deniedActionLabel : '허용'} size="sm" pill
+          onPress={onRequest}
+          style={styles.permissionButton}
+        />
       )}
     </View>
   );
@@ -377,7 +378,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
           </View>
 
           <PermissionRow
-            icon={<Calendar size={20} color={Colors.indigo600} />}
+            icon={<Calendar size={20} color={Colors.slate600} />}
             title="📅 캘린더"
             description="일정에서 목적과 준비물을 자동으로 파악해요"
             status={permissions.calendar}
@@ -385,7 +386,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             deniedActionLabel="설정에서 허용"
           />
           <PermissionRow
-            icon={<Bell size={20} color={Colors.indigo600} />}
+            icon={<Bell size={20} color={Colors.slate600} />}
             title="🔔 알림"
             description="외출 전 체크리스트와 피드백 알림을 받아요"
             status={permissions.notification}
@@ -393,7 +394,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             deniedActionLabel="설정에서 허용"
           />
           <PermissionRow
-            icon={<MapPin size={20} color={Colors.indigo600} />}
+            icon={<MapPin size={20} color={Colors.slate600} />}
             title="📍 위치"
             description="집 Wi-Fi를 등록하고 외출을 감지해요"
             status={permissions.location}
@@ -402,7 +403,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
           />
           {locationGranted ? (
             <PermissionRow
-              icon={<MapPin size={20} color={Colors.indigo600} />}
+              icon={<MapPin size={20} color={Colors.slate600} />}
               title="📍 위치 항상 허용 (선택)"
               description="앱을 닫아 둬도 집을 벗어나는 순간을 알아채요. 권장해요"
               status={permissions.backgroundLocation}
@@ -412,7 +413,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
           ) : null}
           {isMotionSupported() ? (
             <PermissionRow
-              icon={<Footprints size={20} color={Colors.indigo600} />}
+              icon={<Footprints size={20} color={Colors.slate600} />}
               title="🚶 신체 활동"
               description="걷기 시작을 감지해 집을 나서는 순간을 더 정확히 알아채요"
               status={permissions.motion}
@@ -421,16 +422,14 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             />
           ) : null}
           <PermissionRow
-            icon={<AlarmClock size={20} color={Colors.indigo600} />}
+            icon={<AlarmClock size={20} color={Colors.slate600} />}
             title="⏰ 정확한 알람"
             description="출발 알림이 정확한 시각에 오도록 허용해요"
             status={permissions.exactAlarm}
             onRequest={requestExactAlarmPermission}
           />
 
-          <Pressable style={styles.primaryButton} onPress={() => setStep(1)}>
-            <Text style={styles.primaryButtonText}>다음</Text>
-          </Pressable>
+          <Button label="다음" onPress={() => setStep(1)} style={styles.primaryButton} />
         </View>
       ) : null}
 
@@ -447,9 +446,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             <Text style={styles.infoBoxText}>초기 보정치 Δt = {deltaLabel}°C로 설정됩니다</Text>
           </View>
 
-          <Pressable style={styles.primaryButton} onPress={handleSensitivityNext}>
-            <Text style={styles.primaryButtonText}>다음</Text>
-          </Pressable>
+          <Button label="다음" onPress={handleSensitivityNext} style={styles.primaryButton} />
         </View>
       ) : null}
 
@@ -471,13 +468,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
           <TimeInput value={nightly} onChange={setNightly} />
           {!nightlyValid ? <Text style={styles.wifiErrorText}>시간을 00:00~23:59 형식으로 입력해주세요.</Text> : null}
 
-          <Pressable
-            style={[styles.primaryButton, !nightlyValid && styles.primaryButtonDisabled]}
-            onPress={handleSurveyNext}
-            disabled={!nightlyValid}
-          >
-            <Text style={styles.primaryButtonText}>다음</Text>
-          </Pressable>
+          <Button label="다음" onPress={handleSurveyNext} disabled={!nightlyValid} style={styles.primaryButton} />
         </View>
       ) : null}
 
@@ -490,15 +481,12 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
 
           <Text style={styles.title}>집 Wi-Fi를 등록해주세요</Text>
 
-          <Pressable
-            style={[styles.primaryButton, !locationGranted && styles.primaryButtonDisabled]}
+          <Button
+            label={locationGranted ? '지금 연결된 Wi-Fi를 집으로 등록' : '위치 권한 필요'}
             onPress={registerCurrentWifi}
             disabled={!locationGranted}
-          >
-            <Text style={styles.primaryButtonText}>
-              {locationGranted ? '지금 연결된 Wi-Fi를 집으로 등록' : '위치 권한 필요'}
-            </Text>
-          </Pressable>
+            style={styles.primaryButton}
+          />
 
           {wifiStatus === 'success' ? (
             <Text style={styles.wifiSuccessText}>등록됨 · {bssid}</Text>
@@ -525,15 +513,12 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             집에 있을 때 눌러주세요. 집에서 {HOME_RADIUS_M}m쯤 벗어나는 것을 외출 신호로 써요.
             위치는 이 기기에만 저장돼요. 등록하지 않으면 걷기와 Wi-Fi로만 판단해요.
           </Text>
-          <Pressable
-            style={[styles.primaryButton, (!locationGranted || homeStatus === 'busy') && styles.primaryButtonDisabled]}
+          <Button
+            label={!locationGranted ? '위치 권한 필요' : homeStatus === 'busy' ? '위치 확인 중…' : '지금 위치를 집으로 등록'}
             onPress={registerHomeLocation}
             disabled={!locationGranted || homeStatus === 'busy'}
-          >
-            <Text style={styles.primaryButtonText}>
-              {!locationGranted ? '위치 권한 필요' : homeStatus === 'busy' ? '위치 확인 중…' : '지금 위치를 집으로 등록'}
-            </Text>
-          </Pressable>
+            style={styles.primaryButton}
+          />
           {homeStatus === 'active' ? <Text style={styles.wifiSuccessText}>집 위치를 등록했어요.</Text> : null}
           {homeStatus === 'saved' ? (
             <Text style={styles.wifiSuccessText}>
@@ -544,9 +529,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             <Text style={styles.wifiErrorText}>위치를 가져오지 못했어요. 위치 서비스를 켜고 다시 눌러주세요.</Text>
           ) : null}
 
-          <Pressable style={styles.primaryButton} onPress={handleStart}>
-            <Text style={styles.primaryButtonText}>시작하기</Text>
-          </Pressable>
+          <Button label="시작하기" onPress={handleStart} style={styles.primaryButton} />
         </View>
       ) : null}
     </ScrollView>
@@ -584,7 +567,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.slate200,
   },
   progressDotActive: {
-    backgroundColor: Colors.indigo600,
+    backgroundColor: Colors.slate800,
   },
   introArea: {
     alignItems: 'center',
@@ -622,7 +605,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: Radius.md,
-    backgroundColor: Colors.indigo50,
+    backgroundColor: Colors.slate100,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -646,15 +629,6 @@ const styles = StyleSheet.create({
     color: Colors.slate400,
   },
   permissionButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.indigo600,
-  },
-  permissionButtonText: {
-    fontSize: FontSize.caption,
-    fontWeight: '600',
-    color: Colors.white,
   },
   permissionGranted: {
     width: 28,
@@ -666,18 +640,6 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: 16,
-    backgroundColor: Colors.indigo600,
-    borderRadius: Radius.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    backgroundColor: Colors.slate300,
-  },
-  primaryButtonText: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    color: Colors.white,
   },
   title: {
     fontSize: FontSize.title,
@@ -693,13 +655,13 @@ const styles = StyleSheet.create({
   },
   infoBox: {
     marginTop: 20,
-    backgroundColor: Colors.indigo50,
+    backgroundColor: Colors.slate100,
     borderRadius: Radius.md,
     padding: 14,
   },
   infoBoxText: {
     fontSize: FontSize.label,
-    color: Colors.indigo600,
+    color: Colors.slate700,
     fontWeight: '500',
     textAlign: 'center',
   },

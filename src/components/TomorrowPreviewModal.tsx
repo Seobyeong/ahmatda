@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { FontSize, Radius } from '../constants/theme';
+import { Button } from './ui';
 import { PURPOSES } from '../constants/purposes';
 import { useAppStore } from '../store';
 import type { DayOutlook } from '../services/weather/forecastDate';
@@ -172,13 +173,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
                 returnKeyType="done"
                 submitBehavior="submit"
               />
-              <Pressable
-                style={[styles.addButton, !draft.trim() && styles.buttonDisabled]}
-                onPress={handleAdd}
-                disabled={!draft.trim()}
-              >
-                <Text style={styles.addButtonText}>추가</Text>
-              </Pressable>
+              <Button label="추가" onPress={handleAdd} disabled={!draft.trim()} style={styles.addButton} />
             </View>
 
             {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -187,9 +182,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
               아침에는 그때 날씨와 일정으로 다시 맞춰요. 추가한 항목은 그날 체크리스트에 나타나요.
             </Text>
 
-            <Pressable style={styles.primaryButton} onPress={handleClose}>
-              <Text style={styles.primaryText}>확인했어요</Text>
-            </Pressable>
+            <Button label="확인했어요" onPress={handleClose} style={styles.primaryButton} />
           </ScrollView>
         </View>
       </View>
@@ -245,7 +238,7 @@ const styles = StyleSheet.create({
   purposeText: {
     marginTop: 6,
     fontSize: FontSize.caption,
-    color: Colors.indigo600,
+    color: Colors.slate700,
   },
   empty: {
     marginTop: 16,
@@ -287,18 +280,6 @@ const styles = StyleSheet.create({
     color: Colors.slate800,
   },
   addButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.indigo600,
-  },
-  addButtonText: {
-    fontSize: FontSize.label,
-    fontWeight: '600',
-    color: Colors.white,
-  },
-  buttonDisabled: {
-    opacity: 0.4,
   },
   message: {
     marginTop: 8,
@@ -313,14 +294,5 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    backgroundColor: Colors.indigo600,
-  },
-  primaryText: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    color: Colors.white,
   },
 });

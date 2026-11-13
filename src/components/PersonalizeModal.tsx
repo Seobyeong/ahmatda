@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View 
 import { X } from 'lucide-react-native';
 import { Colors } from '../constants/colors';
 import { FontSize, Radius } from '../constants/theme';
+import { Button } from './ui';
 import { PURPOSES } from '../constants/purposes';
 import { SENSITIVITY_LABELS } from '../constants/feedback';
 import { useAppStore } from '../store';
@@ -129,12 +130,12 @@ export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
                 <Text style={styles.note}>기존 루틴과 키워드는 지우지 않고, 추가만 해요.</Text>
 
                 <View style={styles.buttonRow}>
-                  <Pressable style={[styles.secondaryButton, styles.rowButton]} onPress={() => setPlan(null)}>
-                    <Text style={styles.secondaryText}>다시 붙여넣기</Text>
-                  </Pressable>
-                  <Pressable style={[styles.primaryButton, styles.rowButton]} onPress={handleApply}>
-                    <Text style={styles.primaryText}>적용</Text>
-                  </Pressable>
+                  <Button
+                    label="다시 붙여넣기" variant="neutral"
+                    onPress={() => setPlan(null)}
+                    style={[styles.secondaryButton, styles.rowButton]}
+                  />
+                  <Button label="적용" onPress={handleApply} style={[styles.primaryButton, styles.rowButton]} />
                 </View>
               </>
             ) : (
@@ -144,9 +145,7 @@ export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
                   쓰고 계신 AI 앱(ChatGPT, Claude, Gemini 등)으로 템플릿을 보내고, AI의 질문에 답해 주세요.
                   아맞다는 아무것도 전송하지 않고, 추가 비용도 없어요.
                 </Text>
-                <Pressable style={styles.primaryButton} onPress={handleShareTemplate}>
-                  <Text style={styles.primaryText}>템플릿 보내기</Text>
-                </Pressable>
+                <Button label="템플릿 보내기" onPress={handleShareTemplate} style={styles.primaryButton} />
 
                 <Text style={[styles.stepTitle, styles.stepSpacing]}>2. AI 답변 붙여넣기</Text>
                 <Text style={styles.description}>대화가 끝나면 AI가 준 코드블록을 복사해서 붙여넣어 주세요.</Text>
@@ -165,13 +164,7 @@ export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
                   textAlignVertical="top"
                 />
                 {error ? <Text style={styles.error}>{error}</Text> : null}
-                <Pressable
-                  style={[styles.primaryButton, !pasted.trim() && styles.buttonDisabled]}
-                  onPress={handlePreview}
-                  disabled={!pasted.trim()}
-                >
-                  <Text style={styles.primaryText}>미리보기</Text>
-                </Pressable>
+                <Button label="미리보기" onPress={handlePreview} disabled={!pasted.trim()} style={styles.primaryButton} />
               </>
             )}
           </ScrollView>
@@ -275,28 +268,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   primaryButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.indigo600,
-  },
-  primaryText: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    color: Colors.white,
   },
   secondaryButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.slate100,
-  },
-  secondaryText: {
-    fontSize: FontSize.body,
-    fontWeight: '600',
-    color: Colors.slate600,
-  },
-  buttonDisabled: {
-    opacity: 0.4,
   },
 });

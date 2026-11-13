@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: FontSize.heading,
     fontWeight: '700',
-    color: Colors.indigo600,
+    color: Colors.slate800,
     textAlign: 'center',
   },
 });

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../constants/colors';
 import { Mascot } from './Mascot';
 import { FontSize, Radius } from '../constants/theme';
+import { Button } from './ui';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -41,9 +42,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           <Text style={styles.description}>
             화면을 표시하는 중 오류가 났어요. 다시 시도해도 반복되면 앱을 재시작해주세요.
           </Text>
-          <Pressable style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>다시 시도</Text>
-          </Pressable>
+          <Button label="다시 시도" onPress={this.handleReset} style={styles.button} />
         </View>
       );
     }
@@ -77,14 +76,5 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: Colors.indigo600,
-    borderRadius: Radius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  buttonText: {
-    fontSize: FontSize.body,
-    fontWeight: '700',
-    color: Colors.white,
   },
 });
