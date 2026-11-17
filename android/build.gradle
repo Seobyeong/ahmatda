@@ -17,6 +17,10 @@ allprojects {
     google()
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
+    // Notifee는 app.notifee:core를 node_modules 안의 로컬 저장소로만 제공한다.
+    // 원래 Notifee의 build.gradle이 등록하지만, Expo CLI의 --configure-on-demand 빌드에선
+    // :app이 의존성을 풀 때 그 스크립트가 아직 실행되지 않아 여기서 직접 등록한다.
+    maven { url "$rootDir/../node_modules/@notifee/react-native/android/libs" }
   }
 }
 
