@@ -39,7 +39,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const scrollRef = useRef<ScrollView>(null);
   const checklistYRef = useRef(0);
 
-  const { todayEvents, now, refreshing, refresh } = useDashboardData();
+  const { todayEvents, now, refreshing, refresh, usingFallbackLocation } = useDashboardData();
 
   const [leaveBarHeight, setLeaveBarHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -179,7 +179,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
       >
         <StatusRow now={now} />
 
-        <WeatherBlock onRetry={refresh} />
+        <WeatherBlock onRetry={refresh} usingFallbackLocation={usingFallbackLocation} />
 
         {nextPlaceEvent ? (
           <View style={[styles.lightRow, styles.sectionSpacing]}>

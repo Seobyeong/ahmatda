@@ -48,6 +48,8 @@ export function useDashboardData() {
   const loadSeqRef = useRef(0);
   // 남은 시간 표시·길찾기 대상 고르기에 쓰는 "지금". 30초마다 갱신한다.
   const [now, setNow] = useState(() => new Date());
+  // 위치를 못 잡아 서울시청 좌표로 날씨를 받았는지 — 날씨 블록이 "내 위치" 대신 "서울"이라고 쓴다.
+  const [usingFallbackLocation, setUsingFallbackLocation] = useState(false);
 
   // 캘린더 일정 → 목적 감지, 날씨/타임라인 조회. 최초 마운트와 pull-to-refresh
   // 양쪽에서 재사용한다 — 날씨 API가 실패하고 캐시도 없으면 currentWeather가
@@ -113,6 +115,7 @@ export function useDashboardData() {
 
     if (weather) {
       setWeather({ ...weather, calendarEvents: events });
+      setUsingFallbackLocation(!coords);
       // 성공했을 때만 찍는다 — 시작할 때 찍으면 지하철에서 실패한 뒤 30분 동안 다시 받지 않는다.
       lastLoadedAtRef.current = Date.now();
     }
@@ -188,5 +191,5 @@ export function useDashboardData() {
     // commuteMode: 자차면 우산 기준이 달라진다
   }, [currentWeather, weatherTimeline, purposeId, userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, userSettings.commuteMode, permanentRoutines]);
 
-  return { todayEvents, now, refreshing, refresh };
+  return { todayEvents, now, refreshing, refresh, usingFallbackLocation };
 }

@@ -525,7 +525,7 @@ export const useAppStore = create<AppStore>()(
               icon: 'umbrella',
               badge: getUmbrellaBadge(userSettings.commuteMode, currentWeather.rainAlert, weatherTimeline, getCurrentSlotIndex()),
             },
-            { label: '마스크', icon: 'wind', badge: currentWeather.dustLevel === '나쁨' ? '미세먼지 나쁨' : null },
+            { label: '마스크', icon: 'wind', badge: currentWeather.dustLevel === '나쁨' || currentWeather.dustLevel === '매우나쁨' ? `미세먼지 ${currentWeather.dustLevel}` : null },
             { label: '물병', icon: 'droplets', badge: currentWeather.heatAlert ? '폭염 대비' : null },
           ];
           weatherTriggers.forEach(({ label, icon, badge }) => {

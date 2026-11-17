@@ -62,7 +62,14 @@ function getWeatherTint(Colors: Palette, weather: CurrentWeather | null): string
 
 // 날씨 — 평소엔 요약 한 덩어리만 보인다. 계산 근거·시간대별 예보·피드백은 눌렀을 때 편다.
 // 체크리스트가 화면 위쪽에 오도록 하기 위해서다.
-export function WeatherBlock({ onRetry }: { onRetry: () => void }) {
+export function WeatherBlock({
+  onRetry,
+  usingFallbackLocation,
+}: {
+  onRetry: () => void;
+  // 위치를 못 잡아 서울시청 좌표로 받은 날씨면 "내 위치"라고 쓰지 않는다.
+  usingFallbackLocation: boolean;
+}) {
   const { Colors, Role } = useTheme();
   const styles = useStyles();
   const [expanded, setExpanded] = useState(false);
@@ -114,6 +121,7 @@ export function WeatherBlock({ onRetry }: { onRetry: () => void }) {
   if (currentWeather?.heatAlert) banners.push('폭염 주의 — 물을 충분히 마시세요.');
 
   const WeatherIcon = WEATHER_ICONS[currentWeather?.weather ?? 'sunny'];
+  const placeLabel = usingFallbackLocation ? '서울 (위치 확인 안 됨)' : '내 위치';
 
   return (
     <View style={[styles.block, { backgroundColor: getWeatherTint(Colors, currentWeather) }]}>
@@ -124,14 +132,14 @@ export function WeatherBlock({ onRetry }: { onRetry: () => void }) {
             onPress={() => setExpanded((v) => !v)}
             accessibilityRole="button"
             accessibilityState={{ expanded }}
-            accessibilityLabel={`내 위치 날씨 ${currentWeather.label}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
+            accessibilityLabel={`${placeLabel} 날씨 ${currentWeather.label}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
             accessibilityHint={expanded ? '자세한 날씨를 접어요' : '시간대별 예보와 계산 근거를 펴요'}
           >
             <WeatherIcon size={44} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
             <View style={styles.summaryText}>
               <Text style={styles.caption}>나에게 맞춘 체감온도</Text>
               <Text style={styles.temp}>{formatTemp(shownTemp)}</Text>
-              <Text style={styles.label}>내 위치 · {currentWeather.label}</Text>
+              <Text style={styles.label}>{placeLabel} · {currentWeather.label}</Text>
             </View>
             <View style={styles.chevron}>
               {expanded ? (
