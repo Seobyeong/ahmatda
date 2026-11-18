@@ -69,7 +69,7 @@ const AI_CONSENT_MESSAGE = [
 
 // tier1 날씨 트리거 항목 — buildChecklist()에서 생성하는 라벨과 반드시 일치해야 한다.
 const WEATHER_ITEMS: { label: string; description: string }[] = [
-  { label: '우산', description: '비 예보 시 표시' },
+  { label: '우산', description: '비·눈 예보 시 표시' },
   { label: '마스크', description: '미세먼지 나쁨·매우나쁨일 때 표시' },
   { label: '물병', description: '폭염 주의보일 때 표시' },
 ];

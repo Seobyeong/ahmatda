@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, View } from 'react-native';
-import { Cloud, CloudDrizzle, CloudRain, Droplets, Flame, Sun } from 'lucide-react-native';
+import { Cloud, CloudDrizzle, CloudSnow, CloudRain, Droplets, Flame, Sun } from 'lucide-react-native';
 import { Circle, Path, Svg } from 'react-native-svg';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import type { Palette } from '../constants/colors';
@@ -16,6 +16,7 @@ const WEATHER_ICONS: Record<WeatherType, typeof Sun> = {
   cloudy: Cloud,
   rainy: CloudRain,
   drizzle: CloudDrizzle,
+  snowy: CloudSnow,
   hot: Flame,
 };
 

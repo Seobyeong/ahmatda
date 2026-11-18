@@ -42,11 +42,25 @@ export interface DayOutlook {
   maxTemp: number | null;
   minTemp: number | null;
   heat: boolean;         // 최고 33°C 이상 — 오늘 체크리스트의 폭염 기준과 같다
+  snow: boolean;         // 나가 있는 동안 강수 형태에 눈 계열이 있음
+  rainPty: boolean;      // 나가 있는 동안 강수 형태에 눈이 아닌 비가 있음 (문구용)
 }
 
 // 기상청이 "비 올 가능성이 높다"고 안내하는 수준. 30~50%는 매일 우산을 들게 만들어
 // 표시 예산을 깬다.
 export const RAIN_POP_THRESHOLD = 60;
+
+// 기상청 PTY 눈 계열 — 단기예보 2(비/눈)·3(눈), 초단기실황 6(빗방울눈날림)·7(눈날림).
+// 우산 판단은 비와 똑같이 하고, 사용자에게 보이는 말만 '눈'으로 바꾼다.
+export function isSnowPty(pty: number): boolean {
+  return pty === 2 || pty === 3 || pty === 6 || pty === 7;
+}
+
+// 강수 문구 — 눈만 오면 '눈', 비와 섞이면 '비·눈', 그 밖(강수확률만 높은 경우 포함)은 '비'.
+export function precipWord(hasRain: boolean, hasSnow: boolean): '비' | '눈' | '비·눈' {
+  if (hasSnow) return hasRain ? '비·눈' : '눈';
+  return '비';
+}
 
 // 나가 있는 시간은 모른다 — 경로 기억 전에는 출발 시각부터 21시까지로 본다.
 // 21시 이후 출발(야간 근무)이면 그날 마지막 예보(23시)까지 본다.
@@ -85,6 +99,8 @@ export function summarizeDayOutlook(
     maxTemp,
     minTemp,
     heat: maxTemp !== null && maxTemp >= 33,
+    snow: ptys.some(isSnowPty),
+    rainPty: ptys.some((p) => p !== 0 && !isSnowPty(p)),
   };
 }
 
@@ -110,10 +126,16 @@ export function usesRainForecast(commuteMode: string | null): boolean {
 export function getUmbrellaBadge(
   commuteMode: string | null,
   rainingNow: boolean,
-  slots: Array<{ rain: number; alert: string | null }>,
-  currentSlotIndex: number
+  slots: Array<{ rain: number; alert: string | null; snow?: boolean }>,
+  currentSlotIndex: number,
+  snowingNow = false
 ): string | null {
-  if (rainingNow) return '지금 비 와요';
+  if (rainingNow) return snowingNow ? '지금 눈 와요' : '지금 비 와요';
   if (!usesRainForecast(commuteMode)) return null;
-  return isRainExpectedToday(false, slots, currentSlotIndex) ? '오늘 비 예보' : null;
+  if (!isRainExpectedToday(false, slots, currentSlotIndex)) return null;
+  const ahead = slots.slice(currentSlotIndex);
+  const hasSnow = ahead.some((s) => s.snow);
+  // 강수확률만 높고 형태가 없는 칸은 비로 본다.
+  const hasRain = ahead.some((s) => (s.alert === 'rain' && !s.snow) || (s.rain >= RAIN_POP_THRESHOLD && s.alert !== 'rain'));
+  return `오늘 ${precipWord(hasRain, hasSnow)} 예보`;
 }

@@ -517,13 +517,13 @@ export const useAppStore = create<AppStore>()(
 
         if (currentWeather) {
           // 뱃지가 곧 "오늘 띄울 이유"다 — 없으면 그 항목은 오늘 해당 없음.
-          // 우산: 지금 비 또는 남은 시간대 예보 — 자차는 지금 비만 (getUmbrellaBadge)
+          // 우산: 지금 비·눈 또는 남은 시간대 예보 — 자차는 지금 비만 (getUmbrellaBadge)
           // 라벨은 SettingsScreen의 WEATHER_ITEMS와 일치해야 한다.
           const weatherTriggers: Array<{ label: string; icon: string; badge: string | null }> = [
             {
               label: '우산',
               icon: 'umbrella',
-              badge: getUmbrellaBadge(userSettings.commuteMode, currentWeather.rainAlert, weatherTimeline, getCurrentSlotIndex()),
+              badge: getUmbrellaBadge(userSettings.commuteMode, currentWeather.rainAlert, weatherTimeline, getCurrentSlotIndex(), currentWeather.snowNow),
             },
             { label: '마스크', icon: 'wind', badge: currentWeather.dustLevel === '나쁨' || currentWeather.dustLevel === '매우나쁨' ? `미세먼지 ${currentWeather.dustLevel}` : null },
             { label: '물병', icon: 'droplets', badge: currentWeather.heatAlert ? '폭염 대비' : null },

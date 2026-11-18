@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CurrentWeather, WeatherAlert, WeatherSlot, WeatherType, TimelineHint } from '@/types';
 import { getCurrentSlotIndex } from '@/utils/time';
 import { latLonToGrid } from '@/utils/kmaGrid';
-import { formatLocalDate, pickForecastDate, summarizeDayOutlook, type DayOutlook } from './forecastDate';
+import { formatLocalDate, isSnowPty, pickForecastDate, summarizeDayOutlook, type DayOutlook } from './forecastDate';
 import { getSidoFromCoords } from '@/utils/sido';
 import { AirQualityService } from '@/services/airQuality/AirQualityService';
 
@@ -43,11 +43,11 @@ function getVilageFcstBaseTime(now: Date): { base_date: string; base_time: strin
   return { base_date: formatLocalDate(d), base_time: `${String(hour).padStart(2, '0')}00` };
 }
 
-// PTY(강수형태) → 앱의 WeatherType. 눈 계열(2,3,6,7)은 WeatherType에 별도 값이 없어 'drizzle'로 대체.
+// PTY(강수형태) → 앱의 WeatherType. 눈 계열(2,3,6,7)은 'snowy'.
 function ptyToWeatherType(pty: number): WeatherType | null {
   if (pty === 0) return null;
-  if (pty === 1 || pty === 4 || pty === 5) return 'rainy';
-  return 'drizzle';
+  if (isSnowPty(pty)) return 'snowy';
+  return 'rainy';
 }
 
 function skyToWeatherType(sky: number): WeatherType {
@@ -59,7 +59,8 @@ function weatherLabel(type: WeatherType): string {
     case 'sunny': return '맑음';
     case 'cloudy': return '흐림';
     case 'rainy': return '비';
-    case 'drizzle': return '눈/약한 비';
+    case 'drizzle': return '약한 비';
+    case 'snowy': return '눈';
     case 'hot': return '폭염';
     default: return '흐림';
   }
@@ -135,6 +136,7 @@ export const WeatherService = {
         wind,
         dustLevel,
         rainAlert: pty !== 0,
+        snowNow: isSnowPty(pty),
         heatAlert: isHeat,
         recommendation: text,
         recommendEmoji: emoji,
@@ -201,7 +203,7 @@ export const WeatherService = {
         const type: WeatherType = temp >= 33 ? 'hot' : precipType ?? skyToWeatherType(sky);
         const alert: WeatherAlert = pty !== 0 ? 'rain' : temp >= 33 ? 'heat' : null;
 
-        return { label, temp, type, rain, alert };
+        return { label, temp, type, rain, alert, snow: isSnowPty(pty) };
       });
 
       // 아침 대비 5도 이상 하락하는 슬롯에 'cold' 경보 부여 (비/폭염 경보는 유지)
@@ -269,13 +271,14 @@ export const WeatherService = {
     const futureSlots = slots.slice(currentSlot + 1);
 
     const rainLater = futureSlots.some(s => s.alert === 'rain');
+    const snowOnly  = rainLater && futureSlots.filter(s => s.alert === 'rain').every(s => s.snow);
     const coldLater = futureSlots.some(s => s.alert === 'cold');
     const minTemp   = Math.min(...futureSlots.map(s => s.temp));
     const tempDrop  = (slots[currentSlot]?.temp ?? 0) - minTemp;
 
     if (rainLater) {
       return {
-        text:  '저녁에 비 예보 — 우산을 가방에 미리 넣어두세요.',
+        text:  `이따 ${snowOnly ? '눈' : '비'} 예보 — 우산을 가방에 미리 넣어두세요.`,
         color: '#0369a1',
         bg:    '#f0f9ff',
       };

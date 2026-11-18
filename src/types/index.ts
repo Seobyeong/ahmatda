@@ -11,7 +11,7 @@ export type FeedbackType = 'cold' | 'good' | 'hot';
 export type ItemTier = 0 | 1 | 2 | 3;
 
 // 날씨 타입
-export type WeatherType = 'sunny' | 'cloudy' | 'rainy' | 'drizzle' | 'hot';
+export type WeatherType = 'sunny' | 'cloudy' | 'rainy' | 'drizzle' | 'snowy' | 'hot';
 
 // 날씨 경보 타입
 export type WeatherAlert = 'rain' | 'cold' | 'heat' | null;
@@ -61,7 +61,8 @@ export interface WeatherSlot {
   temp: number;
   type: WeatherType;
   rain: number;       // 강수확률 0~100
-  alert: WeatherAlert;
+  alert: WeatherAlert; // 'rain'은 눈을 포함한 강수 전체 — 눈인지는 snow로 구분
+  snow?: boolean;      // 강수 형태가 눈 계열(비/눈·눈·눈날림)
 }
 
 // 현재 날씨 상태
@@ -72,7 +73,8 @@ export interface CurrentWeather {
   humidity: number;
   wind: number;
   dustLevel: '좋음' | '보통' | '나쁨' | '매우나쁨';
-  rainAlert: boolean;
+  rainAlert: boolean;  // 지금 강수(눈 포함) — 우산 판단 기준
+  snowNow?: boolean;   // 지금 강수가 눈 계열 — 문구만 '눈'으로 바꾼다
   heatAlert: boolean;
   recommendation: string;
   recommendEmoji: string;

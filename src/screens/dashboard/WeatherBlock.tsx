@@ -4,7 +4,7 @@ import {
   ChevronDown,
   ChevronUp,
   Cloud,
-  CloudDrizzle,
+  CloudDrizzle, CloudSnow,
   CloudFog,
   CloudRain,
   Droplets,
@@ -36,6 +36,7 @@ const WEATHER_ICONS: Record<WeatherType, typeof Sun> = {
   cloudy: Cloud,
   rainy: CloudRain,
   drizzle: CloudDrizzle,
+  snowy: CloudSnow,
   hot: Flame,
 };
 
@@ -45,6 +46,7 @@ function getWeatherIconColor(Colors: Palette, type: WeatherType): string {
       return Colors.amber500;
     case 'rainy':
     case 'drizzle':
+    case 'snowy':
       return Colors.sky500;
     case 'hot':
       return Colors.orange600;
@@ -117,7 +119,7 @@ export function WeatherBlock({
   const hintIsRain = timelineHint?.bg === '#f0f9ff';
 
   const banners: string[] = [];
-  if (currentWeather?.rainAlert) banners.push('오늘 비 예보가 있어요 — 우산을 챙기세요.');
+  if (currentWeather?.rainAlert) banners.push(`지금 ${currentWeather.snowNow ? '눈이' : '비가'} 와요 — 우산을 챙기세요.`);
   if (currentWeather?.heatAlert) banners.push('폭염 주의 — 물을 충분히 마시세요.');
 
   const WeatherIcon = WEATHER_ICONS[currentWeather?.weather ?? 'sunny'];

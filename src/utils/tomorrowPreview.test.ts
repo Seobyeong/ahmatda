@@ -22,10 +22,18 @@ const labels = (input: Partial<TomorrowPreviewInput>) =>
   buildTomorrowPreview({ ...base, ...input }).items.map((i) => i.label);
 
 describe('buildTomorrowPreview', () => {
+  it('눈 예보면 우산 이유가 눈', () => {
+    const preview = buildTomorrowPreview({
+      ...base,
+      outlook: { rain: true, popMax: 80, maxTemp: 1, minTemp: -3, heat: false, snow: true, rainPty: false },
+    });
+    expect(preview.items[0]).toMatchObject({ label: '우산', reason: '눈 예보 80%' });
+  });
+
   it('비 예보면 우산을 맨 앞에, 이유와 함께', () => {
     const preview = buildTomorrowPreview({
       ...base,
-      outlook: { rain: true, popMax: 70, maxTemp: 15, minTemp: 9, heat: false },
+      outlook: { rain: true, popMax: 70, maxTemp: 15, minTemp: 9, heat: false, snow: false, rainPty: true },
       routines: [routine('r1', '지갑')],
     });
     expect(preview.items[0]).toEqual({ label: '우산', kind: 'weather', reason: '비 예보 70%' });
@@ -34,7 +42,7 @@ describe('buildTomorrowPreview', () => {
 
   it('사용자가 끈 날씨 항목은 넣지 않는다', () => {
     expect(labels({
-      outlook: { rain: true, popMax: 80, maxTemp: 35, minTemp: 25, heat: true },
+      outlook: { rain: true, popMax: 80, maxTemp: 35, minTemp: 25, heat: true, snow: false, rainPty: true },
       disabledWeatherItems: ['우산'],
     })).toEqual(['물병']);
   });
@@ -64,7 +72,7 @@ describe('buildTomorrowPreview', () => {
   it('겹치는 라벨은 이유가 있는 쪽 하나만', () => {
     const preview = buildTomorrowPreview({
       ...base,
-      outlook: { rain: true, popMax: 60, maxTemp: 12, minTemp: 8, heat: false },
+      outlook: { rain: true, popMax: 60, maxTemp: 12, minTemp: 8, heat: false, snow: false, rainPty: true },
       routines: [routine('a', '우산')],
     });
     expect(preview.items).toHaveLength(1);
@@ -85,7 +93,7 @@ describe('buildTomorrowPreview — 1회 항목이 다른 항목에 가려질 때
   it('남은 줄에 1회 항목의 삭제 버튼을 붙인다', () => {
     const preview = buildTomorrowPreview({
       ...base,
-      outlook: { rain: true, popMax: 70, maxTemp: 15, minTemp: 9, heat: false },
+      outlook: { rain: true, popMax: 70, maxTemp: 15, minTemp: 9, heat: false, snow: false, rainPty: true },
       routines: [routine('once', '우산', { onDate: '2026-11-04' })],
     });
     expect(preview.items).toHaveLength(1);
@@ -97,7 +105,7 @@ describe('buildTomorrowPreview — 자차', () => {
   it('비 예보만으로는 우산을 넣지 않는다', () => {
     expect(labels({
       commuteMode: 'car',
-      outlook: { rain: true, popMax: 90, maxTemp: 15, minTemp: 9, heat: false },
+      outlook: { rain: true, popMax: 90, maxTemp: 15, minTemp: 9, heat: false, snow: false, rainPty: true },
     })).toEqual([]);
   });
 });

@@ -46,7 +46,7 @@ describe('summarizeDayOutlook — 다음 외출 날 예보 요약', () => {
       item('20261105', '1200', 'PTY', '1'),   // 다른 날 — 무시
     ];
     expect(summarizeDayOutlook(items, '20261104', '08:15')).toEqual({
-      rain: false, popMax: 30, maxTemp: 17, minTemp: 9, heat: false,
+      rain: false, popMax: 30, maxTemp: 17, minTemp: 9, heat: false, snow: false, rainPty: false,
     });
   });
 
@@ -102,5 +102,29 @@ describe('getUmbrellaBadge — 이동수단별 우산', () => {
     expect(getUmbrellaBadge('car', false, later, 0)).toBeNull();
     expect(getUmbrellaBadge('walk', false, later, 0)).toBe('오늘 비 예보');
     expect(getUmbrellaBadge(null, false, later, 0)).toBe('오늘 비 예보');
+  });
+});
+
+describe('getUmbrellaBadge — 눈', () => {
+  it('지금 눈이면 눈 문구, 자차도 넣는다', () => {
+    expect(getUmbrellaBadge('car', true, [], 0, true)).toBe('지금 눈 와요');
+  });
+  it('남은 예보가 눈뿐이면 눈, 비와 섞이면 비·눈', () => {
+    const snow = [{ rain: 70, alert: 'rain', snow: true }];
+    const mixed = [{ rain: 70, alert: 'rain', snow: true }, { rain: 60, alert: 'rain', snow: false }];
+    expect(getUmbrellaBadge('walk', false, snow, 0)).toBe('오늘 눈 예보');
+    expect(getUmbrellaBadge('walk', false, mixed, 0)).toBe('오늘 비·눈 예보');
+  });
+  it('지난 시간대의 눈은 보지 않는다', () => {
+    const slots = [{ rain: 80, alert: 'rain', snow: true }, { rain: 70, alert: 'rain', snow: false }];
+    expect(getUmbrellaBadge('walk', false, slots, 1)).toBe('오늘 비 예보');
+  });
+});
+
+describe('summarizeDayOutlook — 눈', () => {
+  it('눈 계열 강수 형태를 구분한다', () => {
+    const o = summarizeDayOutlook([{ category: 'PTY', fcstDate: '20261104', fcstTime: '1200', fcstValue: '3' }], '20261104', '08:00');
+    expect(o?.snow).toBe(true);
+    expect(o?.rainPty).toBe(false);
   });
 });

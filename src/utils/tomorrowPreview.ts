@@ -8,7 +8,7 @@
 // 미세먼지는 내일 예보 API가 따로라 넣지 않는다 (아침 조립 때 실황으로 반영된다).
 
 import { PURPOSES, detectPurposeFromEvents, findMatchingEvent, purposeItemKey, type CustomKeywords } from '@/constants/purposes';
-import { usesRainForecast, type DayOutlook } from '@/services/weather/forecastDate';
+import { precipWord, usesRainForecast, type DayOutlook } from '@/services/weather/forecastDate';
 import { getForgottenBadge } from './forgotten';
 import { isOneOff, isRoutineActiveOn } from './routines';
 import type { ChecklistItem, CommuteMode, PurposeId } from '@/types';
@@ -62,7 +62,7 @@ export function buildTomorrowPreview(input: TomorrowPreviewInput): TomorrowPrevi
   const weatherOn = (label: string) => !input.disabledWeatherItems.includes(label);
   // 자차는 아침 조립에서도 "지금 비 올 때만" 우산을 넣는다 — 전날 밤 예보로는 약속하지 않는다.
   if (outlook?.rain && usesRainForecast(input.commuteMode) && weatherOn('우산')) {
-    push({ label: '우산', kind: 'weather', reason: `비 예보 ${outlook.popMax}%` });
+    push({ label: '우산', kind: 'weather', reason: `${precipWord(outlook.rainPty || !outlook.snow, outlook.snow)} 예보 ${outlook.popMax}%` });
   }
   if (outlook?.heat && weatherOn('물병')) {
     push({ label: '물병', kind: 'weather', reason: `최고 ${outlook.maxTemp}°C 폭염` });
