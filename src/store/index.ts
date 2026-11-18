@@ -80,6 +80,11 @@ interface AppState {
   // 기기 로컬 — 동기화하는 설정(userSettings)이 아니라 그날 하루짜리 상태다.
   departureToday: { date: string; plan: DayPlan } | null;
 
+  // 삭제 기록 (tombstone) — 나중에 기기 간 동기화를 붙일 때, 한 기기에서 지운 루틴·메모·알람이
+  // 다른 기기에서 되살아나지 않게 "지웠음"을 남긴다 ("없음"만으로는 "아직 못 받음"과 구분이 안 된다).
+  // 지금은 기록만 하고 쓰는 곳은 없다. 오래된 기록은 DELETION_KEEP_MS 뒤 정리된다 (docs/계정-기능-구상.md 7장).
+  deletions: Deletion[];
+
   // 기상·부가 알람 (utils/alarms.ts). 예약은 App.tsx가 이 목록이 바뀔 때 AlarmService.sync로 맞춘다.
   alarms: Alarm[];
   // 지금 울리는 알람 — 알람 창(AlarmOverlay)을 띄운다. 화면 상태라 복원하지 않는다(merge에서 비움).
@@ -107,6 +112,25 @@ export function scheduleOf(state: Pick<AppState, 'userSettings' | 'departureToda
     weekdays: state.userSettings.departureWeekdays ?? {},
     today: activeToday(state.departureToday, now),
   };
+}
+
+export interface Deletion {
+  kind: 'routine' | 'memo' | 'alarm';
+  id: string;
+  at: number; // ms
+}
+
+// 이보다 오래 오프라인이던 기기는 동기화 때 지운 것이 되살아날 수 있다 — 그때는 전체 복원으로 맞춘다.
+export const DELETION_KEEP_MS = 90 * 24 * 60 * 60 * 1000;
+
+function recordDeletions(list: Deletion[], kind: Deletion['kind'], ids: string[], now = Date.now()): Deletion[] {
+  const fresh = list.filter((d) => !ids.includes(d.id) && now - d.at < DELETION_KEEP_MS);
+  return [...fresh, ...ids.map((id) => ({ kind, id, at: now }))];
+}
+
+// 되돌리기 — 지웠다는 기록도 거둔다.
+function forgetDeletions(list: Deletion[], ids: string[]): Deletion[] {
+  return list.filter((d) => !ids.includes(d.id));
 }
 
 export interface RingingAlarm {
@@ -137,8 +161,8 @@ interface AppActions {
   addMemo: (text: string) => boolean;
   deleteMemo: (id: string) => Undo;
   // 알람
-  addAlarm: (alarm: Omit<Alarm, 'id'>) => void;
-  updateAlarm: (id: string, patch: Partial<Omit<Alarm, 'id'>>) => void;
+  addAlarm: (alarm: Omit<Alarm, 'id' | 'updatedAt'>) => void;
+  updateAlarm: (id: string, patch: Partial<Omit<Alarm, 'id' | 'updatedAt'>>) => void;
   removeAlarm: (id: string) => Undo;
   setRingingAlarm: (ringing: RingingAlarm | null) => void;
   addPermanentRoutine: (label: string) => boolean;
@@ -386,6 +410,8 @@ const defaultState: AppState = {
 
   departureToday: null,
 
+  deletions: [],
+
   alarms: [],
   ringingAlarm: null,
 
@@ -420,22 +446,27 @@ export const useAppStore = create<AppStore>()(
         })),
 
       addAlarm: (alarm) =>
-        set((state) => ({ alarms: [...state.alarms, { ...alarm, id: generateItemId() }] })),
+        set((state) => ({ alarms: [...state.alarms, { ...alarm, id: generateItemId(), updatedAt: Date.now() }] })),
 
       updateAlarm: (id, patch) =>
-        set((state) => ({ alarms: state.alarms.map((a) => (a.id === id ? { ...a, ...patch } : a)) })),
+        set((state) => ({
+          alarms: state.alarms.map((a) => (a.id === id ? { ...a, ...patch, updatedAt: Date.now() } : a)),
+        })),
 
       removeAlarm: (id) => {
         const index = get().alarms.findIndex((a) => a.id === id);
         if (index < 0) return null;
         const removed = get().alarms[index];
-        set((state) => ({ alarms: state.alarms.filter((a) => a.id !== id) }));
+        set((state) => ({
+          alarms: state.alarms.filter((a) => a.id !== id),
+          deletions: recordDeletions(state.deletions, 'alarm', [id]),
+        }));
         return () =>
           set((state) => {
             if (state.alarms.some((a) => a.id === removed.id)) return state;
             const alarms = [...state.alarms];
             alarms.splice(Math.min(index, alarms.length), 0, removed);
-            return { alarms };
+            return { alarms, deletions: forgetDeletions(state.deletions, [removed.id]) };
           });
       },
 
@@ -453,13 +484,16 @@ export const useAppStore = create<AppStore>()(
         const index = get().memos.findIndex((m) => m.id === id);
         if (index < 0) return null;
         const removed = get().memos[index];
-        set((state) => ({ memos: state.memos.filter((m) => m.id !== id) }));
+        set((state) => ({
+          memos: state.memos.filter((m) => m.id !== id),
+          deletions: recordDeletions(state.deletions, 'memo', [id]),
+        }));
         return () =>
           set((state) => {
             if (state.memos.some((m) => m.id === removed.id)) return state;
             const memos = [...state.memos];
             memos.splice(Math.min(index, memos.length), 0, removed);
-            return { memos };
+            return { memos, deletions: forgetDeletions(state.deletions, [removed.id]) };
           });
       },
 
@@ -520,6 +554,7 @@ export const useAppStore = create<AppStore>()(
           if (removedRoutines.length > 0) {
             const removedIds = new Set(removedRoutines.map(({ routine }) => routine.id));
             next.permanentRoutines = state.permanentRoutines.filter((routine) => !removedIds.has(routine.id));
+            next.deletions = recordDeletions(state.deletions, 'routine', [...removedIds]);
           }
           if (item.tier === 1) {
             Object.assign(next, patchSettings(state, { disabledWeatherItems: appendUnique(state.userSettings.disabledWeatherItems, item.label) }));
@@ -540,6 +575,7 @@ export const useAppStore = create<AppStore>()(
             }
             if (removedRoutines.length > 0) {
               next.permanentRoutines = reinsertRoutines(state.permanentRoutines, removedRoutines);
+              next.deletions = forgetDeletions(state.deletions, removedRoutines.map(({ routine }) => routine.id));
             }
             if (newlyDisabledWeather) {
               Object.assign(next, patchSettings(state, { disabledWeatherItems: state.userSettings.disabledWeatherItems.filter((l) => l !== item.label) }));
@@ -562,11 +598,13 @@ export const useAppStore = create<AppStore>()(
         const row = rowIndex >= 0 ? get().checklist[rowIndex] : null;
         set((state) => ({
           permanentRoutines: state.permanentRoutines.filter((r) => r.id !== id),
+          deletions: recordDeletions(state.deletions, 'routine', [id]),
         }));
         return () =>
           set((state) => {
             const next: Partial<AppState> = {
               permanentRoutines: reinsertRoutines(state.permanentRoutines, [{ routine, index }]),
+              deletions: forgetDeletions(state.deletions, [routine.id]),
             };
             if (row && !state.checklist.some((item) => item.label === row.label)) {
               const checklist = [...state.checklist];
@@ -1086,6 +1124,8 @@ export const useAppStore = create<AppStore>()(
         alarms: state.alarms,
         // 오늘만 바꾼 외출 — 앱이 꺼졌다가 백그라운드로 깨어나도(외출 감지) 오늘 건너뛴 걸 알아야 한다.
         departureToday: state.departureToday,
+        // 삭제 기록 — 나중에 동기화할 때 지운 것이 되살아나지 않게.
+        deletions: state.deletions,
       }),
     }
   )

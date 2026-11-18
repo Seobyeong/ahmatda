@@ -11,6 +11,7 @@ export interface Alarm {
   days: number[];  // 울릴 요일 0(일)~6(토). 비어 있으면 한 번만 울리고 꺼진다.
   enabled: boolean;
   label: string;   // 비어 있으면 '알람'
+  updatedAt?: number; // 동기화 충돌 해결용 (최근 것이 이긴다)
 }
 
 export const ALARM_ID_PREFIX = 'alarm-';
