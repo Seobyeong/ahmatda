@@ -108,7 +108,9 @@ export type CommuteMode = 'transit' | 'walk' | 'car';
 export type AlertVoiceId = 'basic' | 'secretary' | 'friend' | 'mom' | 'custom';
 
 export interface UserSettings {
-  departureTime: string;    // "HH:mm" 형식
+  departureTime: string;    // "HH:mm" 형식 — 기본 외출 시간 (요일 예외가 없는 날)
+  // 요일 예외 — 키 '0'(일)~'6'(토), 값 "HH:mm" 또는 'off'(쉬는 날). 없는 요일은 기본 시간 (utils/schedule.ts)
+  departureWeekdays: Partial<Record<string, string>>;
   // 자기 전 정리 시각 "HH:mm" — 착장 피드백 + 내일 준비 알림 하나가 여기서 울린다
   // (예전 20:00 피드백 + 22:00 전날 알림을 대체, docs/외출-감지-재설계.md 5장)
   nightlyCheckTime: string;

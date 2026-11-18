@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { detectPurposeFromEvents, findMatchingEvent } from '../../constants/purposes';
-import { useAppStore } from '../../store';
+import { scheduleOf, useAppStore } from '../../store';
+import { referenceTimeOn } from '../../utils/schedule';
 import { AiHintService } from '../../services/ai/AiHintService';
 import { CalendarService } from '../../services/calendar/CalendarService';
 import { WeatherService } from '../../services/weather/WeatherService';
@@ -74,13 +75,11 @@ export function useDashboardData() {
     if (superseded()) return;
     setTodayEvents(events);
 
-    const detectedId = detectPurposeFromEvents(
-      events,
-      userSettings.departureTime,
-      userSettings.customKeywords
-    );
+    // 오늘 외출 시간 기준으로 일정을 맞춘다 (쉬는 날이면 기본 시간).
+    const refTime = referenceTimeOn(new Date(), scheduleOf(useAppStore.getState()));
+    const detectedId = detectPurposeFromEvents(events, refTime, userSettings.customKeywords);
     const matchedEvent = detectedId
-      ? findMatchingEvent(detectedId, events, userSettings.departureTime, userSettings.customKeywords)
+      ? findMatchingEvent(detectedId, events, refTime, userSettings.customKeywords)
       : null;
     setAutoDetected(detectedId, matchedEvent);
 

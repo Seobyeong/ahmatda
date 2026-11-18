@@ -16,10 +16,11 @@ import {
 import type { Palette } from '../../constants/colors';
 import { FEEDBACK_MESSAGES } from '../../constants/feedback';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../../constants/theme';
-import { useAppStore } from '../../store';
+import { scheduleOf, useAppStore } from '../../store';
 import { WeatherService } from '../../services/weather/WeatherService';
 import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta, getExposureAdjust } from '../../utils/temperature';
-import { getCurrentSlotIndex, getFeedbackOutingDate } from '../../utils/time';
+import { getCurrentSlotIndex } from '../../utils/time';
+import { feedbackOutingDate } from '../../utils/schedule';
 import { Mascot } from '../../components/Mascot';
 import { WeatherTimeline } from '../../components/WeatherTimeline';
 import { Button } from '../../components/ui';
@@ -81,11 +82,13 @@ export function WeatherBlock({
   const weatherOutOfArea = useAppStore((s) => s.weatherOutOfArea);
   const weatherTimeline = useAppStore((s) => s.weatherTimeline);
   const userSettings = useAppStore((s) => s.userSettings);
+  // 피드백이 가리키는 외출 날 — 일정(오늘만 바꾼 것 포함)이 바뀌면 다시 그린다.
+  const scheduleJson = useAppStore((s) => JSON.stringify(scheduleOf(s)));
   // 선택 표시는 store가 피드백을 붙이는 "가장 최근 외출" 기준 — 자기 전 정리 알림으로
   // 이미 답했으면 앱에서도 켜져 보여야 같은 외출에 두 번 답하지 않는다.
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
   const currentFeedback =
-    feedbackHistory.find((r) => r.date === getFeedbackOutingDate(userSettings.departureTime))?.val ?? null;
+    feedbackHistory.find((r) => r.date === feedbackOutingDate(JSON.parse(scheduleJson), new Date()))?.val ?? null;
   const applyFeedback = useAppStore((s) => s.applyFeedback);
   const showToast = useAppStore((s) => s.showToast);
 

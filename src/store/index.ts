@@ -6,7 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PURPOSES, findMatchingEvent, purposeItemKey } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
-import { getCurrentSlotIndex, getFeedbackOutingDate, getTodayString } from '../utils/time';
+import { getCurrentSlotIndex, getTodayString } from '../utils/time';
+import { activeToday, feedbackOutingDate, referenceTimeOn, type DayPlan, type DepartureSchedule } from '../utils/schedule';
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
 import { CUSTOM_TEXT_MAX } from '../constants/alertVoices';
 import type { Alarm } from '../utils/alarms';
@@ -75,6 +76,10 @@ interface AppState {
   // 빠른 메모 — 체크리스트와 따로 노는 메모장. 날이 바뀌어도 지울 때까지 남는다. 최신이 앞.
   memos: Memo[];
 
+  // 오늘만 바꾼 외출 — 건너뛰기('off') 또는 그날만 다른 시간. 날짜가 지나면 무시된다 (utils/schedule.ts).
+  // 기기 로컬 — 동기화하는 설정(userSettings)이 아니라 그날 하루짜리 상태다.
+  departureToday: { date: string; plan: DayPlan } | null;
+
   // 기상·부가 알람 (utils/alarms.ts). 예약은 App.tsx가 이 목록이 바뀔 때 AlarmService.sync로 맞춘다.
   alarms: Alarm[];
   // 지금 울리는 알람 — 알람 창(AlarmOverlay)을 띄운다. 화면 상태라 복원하지 않는다(merge에서 비움).
@@ -92,6 +97,16 @@ interface AppState {
 export interface ToastAction {
   label: string;
   onPress: () => void;
+}
+
+// 지금 외출 일정 — 요일별 시간·쉬는 날·오늘만 바꾼 것 (utils/schedule.ts).
+// 외출 시간이 필요한 곳은 userSettings.departureTime(기본 시간)을 바로 쓰지 말고 이걸 쓴다.
+export function scheduleOf(state: Pick<AppState, 'userSettings' | 'departureToday'>, now: Date = new Date()): DepartureSchedule {
+  return {
+    base: state.userSettings.departureTime,
+    weekdays: state.userSettings.departureWeekdays ?? {},
+    today: activeToday(state.departureToday, now),
+  };
 }
 
 export interface RingingAlarm {
@@ -147,6 +162,10 @@ interface AppActions {
 
   // 유저 설정
   updateDepartureTime: (time: string) => void;
+  // 요일 예외 — null이면 기본 시간으로 되돌린다
+  setWeekdayPlan: (day: number, plan: DayPlan | null) => void;
+  // 오늘만 — null이면 원래 일정으로
+  setTodayPlan: (plan: DayPlan | null) => void;
   setNightlyCheckTime: (time: string) => void;
   setAlertPreference: (pref: AlertPreference) => void;
   setAwayPlaceAlert: (on: boolean) => void;
@@ -328,6 +347,7 @@ const defaultState: AppState = {
 
   userSettings: {
     departureTime: '08:15',
+    departureWeekdays: {},
     nightlyCheckTime: '22:00',
     alertPreference: 'normal',
     awayPlaceAlert: null,
@@ -363,6 +383,8 @@ const defaultState: AppState = {
   leaveIntent: null,
 
   memos: [],
+
+  departureToday: null,
 
   alarms: [],
   ringingAlarm: null,
@@ -636,7 +658,7 @@ export const useAppStore = create<AppStore>()(
             ? findMatchingEvent(
                 purposeId,
                 currentWeather.calendarEvents,
-                userSettings.departureTime,
+                referenceTimeOn(new Date(), scheduleOf(get())),
                 userSettings.customKeywords
               )
             : null;
@@ -736,6 +758,16 @@ export const useAppStore = create<AppStore>()(
 
       // 유저 설정
       updateDepartureTime: (time) => set((state) => patchSettings(state, { departureTime: time })),
+      setWeekdayPlan: (day, plan) =>
+        set((state) => {
+          const weekdays = { ...state.userSettings.departureWeekdays };
+          // 기본 시간과 같으면 예외로 둘 이유가 없다
+          if (plan === null || plan === state.userSettings.departureTime) delete weekdays[String(day)];
+          else weekdays[String(day)] = plan;
+          return patchSettings(state, { departureWeekdays: weekdays });
+        }),
+      setTodayPlan: (plan) =>
+        set({ departureToday: plan === null ? null : { date: getTodayString(), plan } }),
       setNightlyCheckTime: (time) => set((state) => patchSettings(state, { nightlyCheckTime: time })),
       // 성향을 다시 고르면 집 밖 머묾 알림도 성향을 따르게 되돌린다 (스위치로 따로 정한 값은 풀림).
       // 같은 성향을 다시 누른 건 바꾼 게 아니다 — 스위치로 끈 값을 지우지 않는다.
@@ -814,14 +846,14 @@ export const useAppStore = create<AppStore>()(
       // learnedDelta가 중복 조정되지 않는다.
       // 조정 대상은 learnedDelta(학습값)뿐이다. 사용자가 고른 기준값(sensitivityLevel)은
       // 건드리지 않으므로, 나중에 민감도를 다시 골라도 여기 쌓인 학습이 사라지지 않는다.
-      // 피드백은 달력 날짜가 아니라 "가장 최근 외출"에 붙는다 (getFeedbackOutingDate).
+      // 피드백은 달력 날짜가 아니라 "가장 최근 외출"에 붙는다 (utils/schedule.ts feedbackOutingDate — 쉬는 날은 건너뜀).
       // 앱 화면과 자기 전 정리 알림이 같은 규칙을 써야 한다 — 다르면 00:30에 알림으로
       // 답하고 앱에서 또 누를 때 같은 외출이 두 날짜로 갈라져 보정치가 두 번 쌓인다.
       // outingDate는 테스트·특수 경로용으로만 넘긴다.
       applyFeedback: (val, outingDate) =>
         set((state) => {
           const today = getTodayString();
-          const date = outingDate ?? getFeedbackOutingDate(state.userSettings.departureTime);
+          const date = outingDate ?? feedbackOutingDate(scheduleOf(state), new Date());
           // 같은 날 답을 바꾸면 이전 답의 보정치를 되돌리고 새 답을 더한다. 이전 답은
           // 그 날짜의 기록에서 찾는다 — todayFeedback은 오늘 것만 들고 있어 전날 외출엔 못 쓴다.
           const previous = state.feedbackHistory.find((r) => r.date === date)?.val ?? null;
@@ -1048,6 +1080,12 @@ export const useAppStore = create<AppStore>()(
         // 앱이 꺼졌다 켜져도(잠금화면 액션은 앱 프로세스 밖에서 돌 수 있다) 오늘 누른
         // 기록이 남아야 외출 판정에 쓸 수 있다. 기기 로컬 전용.
         leaveIntent: state.leaveIntent,
+        // 빠른 메모 — 지울 때까지 남는다.
+        memos: state.memos,
+        // 알람 목록 — 예약은 앱이 켜질 때 이 목록으로 다시 맞춘다 (울리는 중 상태 ringingAlarm은 저장 안 함).
+        alarms: state.alarms,
+        // 오늘만 바꾼 외출 — 앱이 꺼졌다가 백그라운드로 깨어나도(외출 감지) 오늘 건너뛴 걸 알아야 한다.
+        departureToday: state.departureToday,
       }),
     }
   )

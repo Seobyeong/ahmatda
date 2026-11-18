@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import notifee, { EventType } from '@notifee/react-native';
@@ -10,7 +10,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { NotificationService, handleNotificationEvent } from '@/services/notification/NotificationService';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import { BackgroundTaskService } from '@/services/backgroundTask/BackgroundTaskService';
-import { useAppStore, whenHydrated } from '@/store';
+import { scheduleOf, useAppStore, whenHydrated } from '@/store';
+import { currentDepartureLabel } from '@/utils/schedule';
 import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { consumeLeaveNonce, setWidgetSnapshot } from './modules/ahmatda-widget';
 import { parseLeaveLink } from '@/services/departure/leaveLink';
@@ -32,20 +33,61 @@ notifee.onBackgroundEvent(async ({ type, detail }) => {
   await handleNotificationEvent(type, detail);
 });
 
-export default function App() {
-  const userSettings   = useAppStore(state => state.userSettings);
-  // 자기 전 정리 알림의 "다음 외출: …" 한 줄이 이것들로 정해진다 — 바뀌면 다시 계획한다.
-  const permanentRoutines = useAppStore(state => state.permanentRoutines);
-  const alarms = useAppStore(state => state.alarms);
+// 출발 알림·잠금화면 상태·홈 위젯을 체크리스트 요약과 일정에 맞춘다. 아무것도 그리지 않는다.
+// 1분마다 시계가 도는데(제목의 "오늘/내일"), App 전체가 다시 그려지지 않게 따로 둔다.
+function DepartureStatusSync() {
+  const userSettings = useAppStore(state => state.userSettings);
+  const scheduleJson = useAppStore(state => JSON.stringify(scheduleOf(state)));
   // 앱 밖 표시(출발 알림·잠금화면·홈 위젯)에 쓰이는 요약만 문자열로 구독한다 —
   // checklist 배열 전체를 구독하면 보이는 내용이 그대로여도(재빌드로 배열 identity만
   // 바뀌는 경우, 체크된 항목 삭제 등) 네이티브 알림 취소+재예약이 매번 일어난다.
   // 객체를 그대로 반환하면 매 호출마다 새 참조라 렌더 루프가 생기므로 직렬화한다.
   // 날짜는 오늘이 아니라 checklistDate — 아직 하루 전환 전이면 위젯이 "앱을 열어
   // 확인하세요"로 표시하게 한다.
+  // 제목의 출발("08:15 출발" / "내일 08:15 출발")은 시계에 따라 바뀌므로 1분마다 다시 계산한다 —
+  // 스토어가 밤새 안 바뀌어도 아침엔 "내일"이 "오늘"이 되어야 한다. 문자열이 같으면 아무 일도 없다.
+  const [clockMinute, setClockMinute] = useState(() => Math.floor(Date.now() / 60000));
+  useEffect(() => {
+    const timer = setInterval(() => setClockMinute(Math.floor(Date.now() / 60000)), 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
   const snapshotJson = useAppStore(state => JSON.stringify(
-    buildDepartureSnapshot(state.checklist, state.userSettings.departureTime, state.checklistDate ?? '')
+    buildDepartureSnapshot(
+      state.checklist,
+      currentDepartureLabel(scheduleOf(state), new Date(clockMinute * 60000)),
+      state.checklistDate ?? ''
+    )
   ));
+
+  useEffect(() => {
+    // 출발 알림은 아직 안 챙긴 것을 본문에 담으므로, 요약이 바뀔 때마다 다시 예약해
+    // 문구를 갱신한다. 위 effect에만 맡기면 온보딩/출발시각이 바뀔 때만 갱신돼서
+    // 그 사이의 체크리스트 변경이 반영되지 않는다. 이미 떠 있는 잠금화면 상태와
+    // 홈 위젯도 같은 요약으로 함께 갱신한다.
+    if (!userSettings.onboarded) return;
+
+    const snapshot = JSON.parse(snapshotJson) as DepartureSnapshot;
+    // 홈 위젯은 사용자가 직접 올려둔 것이라 알림 성향과 무관하게 갱신한다.
+    setWidgetSnapshot(snapshot);
+
+    // 알림 성향 "필요할 때만"은 출발 전 알림을 쓰지 않는다 (취소는 아래 effect가 한 번만)
+    if (userSettings.alertPreference === 'minimal') return;
+    const schedule = JSON.parse(scheduleJson);
+    NotificationService.scheduleDepartureAlert(schedule, snapshot);
+    NotificationService.updateDepartureStatus(schedule, snapshot);
+  }, [userSettings.onboarded, scheduleJson, userSettings.alertPreference, snapshotJson,
+      userSettings.alertVoice, userSettings.customAlertText]);
+
+  return null;
+}
+
+export default function App() {
+  const userSettings   = useAppStore(state => state.userSettings);
+  // 자기 전 정리 알림의 "다음 외출: …" 한 줄이 이것들로 정해진다 — 바뀌면 다시 계획한다.
+  const permanentRoutines = useAppStore(state => state.permanentRoutines);
+  const alarms = useAppStore(state => state.alarms);
+  // 외출 일정(요일별 시간·쉬는 날·오늘만 바꾼 것) — 바뀌면 출발 알림·백그라운드 확인을 다시 맞춘다.
+  const scheduleJson = useAppStore(state => JSON.stringify(scheduleOf(state)));
 
   useEffect(() => {
     // iOS에서 SSID/BSSID 조회를 시도하려면 이 설정이 반드시 필요함
@@ -130,7 +172,7 @@ export default function App() {
     useAppStore.getState().ensureOnboardedDate();
     OutingLog.observeWifi().then(() => NightlyService.plan({ fresh: true }));
   }, [
-    userSettings.onboarded, userSettings.departureTime, userSettings.nightlyCheckTime, userSettings.alertPreference,
+    userSettings.onboarded, scheduleJson, userSettings.nightlyCheckTime, userSettings.alertPreference,
     userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, userSettings.customKeywords,
     userSettings.commuteMode, permanentRoutines,
     // 알림 말투가 바뀌면 예약된 정리 알림 문구도 바꾼다.
@@ -145,26 +187,9 @@ export default function App() {
   useEffect(() => {
     // 출발 알림 시각에 맞춰 백그라운드 확인 태스크 예약 — 정리 시각과는 무관해서 따로 둔다.
     if (!userSettings.onboarded) return;
-    BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
-  }, [userSettings.onboarded, userSettings.departureTime]);
+    BackgroundTaskService.scheduleDepartureTask(JSON.parse(scheduleJson));
+  }, [userSettings.onboarded, scheduleJson]);
 
-  useEffect(() => {
-    // 출발 알림은 아직 안 챙긴 것을 본문에 담으므로, 요약이 바뀔 때마다 다시 예약해
-    // 문구를 갱신한다. 위 effect에만 맡기면 온보딩/출발시각이 바뀔 때만 갱신돼서
-    // 그 사이의 체크리스트 변경이 반영되지 않는다. 이미 떠 있는 잠금화면 상태와
-    // 홈 위젯도 같은 요약으로 함께 갱신한다.
-    if (!userSettings.onboarded) return;
-
-    const snapshot = JSON.parse(snapshotJson) as DepartureSnapshot;
-    // 홈 위젯은 사용자가 직접 올려둔 것이라 알림 성향과 무관하게 갱신한다.
-    setWidgetSnapshot(snapshot);
-
-    // 알림 성향 "필요할 때만"은 출발 전 알림을 쓰지 않는다 (취소는 아래 effect가 한 번만)
-    if (userSettings.alertPreference === 'minimal') return;
-    NotificationService.scheduleDepartureAlert(userSettings.departureTime, snapshot);
-    NotificationService.updateDepartureStatus(userSettings.departureTime, snapshot);
-  }, [userSettings.onboarded, userSettings.departureTime, userSettings.alertPreference, snapshotJson,
-      userSettings.alertVoice, userSettings.customAlertText]);
 
   useEffect(() => {
     // "필요할 때만"으로 바꾸면 이미 잡힌 출발 알림 예약과 떠 있는 것을 내린다.
@@ -178,7 +203,8 @@ export default function App() {
     // (집 BSSID가 없으면 서비스 내부에서 자동 스킵)
     if (!userSettings.onboarded) return;
 
-    const arm = () => WifiMonitorService.armForDeparture(userSettings.departureTime);
+    // 감시 창은 매번 그때의 일정으로 판단한다 (오늘 건너뛰기·시간 변경이 바로 반영되게).
+    const arm = () => WifiMonitorService.armForDeparture();
     arm();
 
     // 앱이 오래 백그라운드에 있으면 재확인 인터벌 자체가 실행을 보장받지 못할 수
@@ -191,7 +217,7 @@ export default function App() {
       appStateSub.remove();
       WifiMonitorService.disarm();
     };
-  }, [userSettings.onboarded, userSettings.departureTime]);
+  }, [userSettings.onboarded, scheduleJson]);
 
   return (
     <ErrorBoundary>
@@ -200,6 +226,7 @@ export default function App() {
         <StatusBar style="auto" />
         <AppNavigator />
         <AlarmOverlay />
+        <DepartureStatusSync />
       </SafeAreaProvider>
     </ErrorBoundary>
   );

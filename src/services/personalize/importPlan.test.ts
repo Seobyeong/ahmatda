@@ -3,7 +3,7 @@ import { buildPersonalizeTemplate } from './template';
 import type { ChecklistItem, UserSettings } from '@/types';
 
 const settings: UserSettings = {
-  departureTime: '08:15',
+  departureTime: '08:15', departureWeekdays: {},
   nightlyCheckTime: '22:00',
   alertPreference: 'normal',
   awayPlaceAlert: null,

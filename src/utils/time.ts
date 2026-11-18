@@ -1,3 +1,9 @@
+// 시간 계산 공용 함수.
+// 주의: 아래 "출발" 계산들(getNextAlertDate, getNextDepartureDate, isWithinDepartureWindow,
+// getFeedbackOutingDate, getDepartureCountdown 등)은 "매일 같은 시각"을 전제로 한 예전 계산이다.
+// 요일별 외출 시간·쉬는 날·오늘만 바꾸기가 생긴 뒤로 외출 일정은 utils/schedule.ts가 맡는다 —
+// 새 코드는 store의 scheduleOf()와 schedule.ts 함수를 쓴다.
+
 // 출발 30분 전 알림 시각 계산
 // "08:15" → "07:45"
 export function getAlertTime(departureTime: string): string {

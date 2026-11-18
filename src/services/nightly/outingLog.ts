@@ -8,7 +8,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { classifyPresence } from '@/services/wifi/presence';
-import { getFeedbackOutingDate } from '@/utils/time';
+import { feedbackOutingDate } from '@/utils/schedule';
 
 const KEY = 'outing_log';
 const KEEP_DAYS = 7;
@@ -93,10 +93,10 @@ export const OutingLog = {
 };
 
 // 외출 흔적은 달력 날짜가 아니라 "그 시각이 속한 외출 날"에 단다 — 자기 전 정리가 보는 날과 같은 규칙
-// (getFeedbackOutingDate: 지금 이전 가장 최근 출발 시각의 날). 정리 시각이 00:30이면 00:05의 외출은 전날 것이다.
+// (feedbackOutingDate: 지금 이전 가장 최근 출발의 날 — 쉬는 날은 건너뜀). 정리 시각이 00:30이면 00:05의 외출은 전날 것이다.
 async function outingDateNow(): Promise<string> {
-  const { useAppStore } = await import('@/store');
-  return getFeedbackOutingDate(useAppStore.getState().userSettings.departureTime);
+  const { useAppStore, scheduleOf } = await import('@/store');
+  return feedbackOutingDate(scheduleOf(useAppStore.getState()), new Date());
 }
 
 // 외출 흔적 기록 — 신호 쪽(지오펜스·외출 확정·머묾)에서 쓴다. 흔적이 새로 생기면 오늘 밤 알림을 다시

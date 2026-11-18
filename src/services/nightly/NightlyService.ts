@@ -11,9 +11,9 @@ import { NotificationService, type NightlyEntry } from '@/services/notification/
 import { buildTomorrowPreview, type PreviewItem } from '@/utils/tomorrowPreview';
 import { countRecentForgotten } from '@/utils/forgotten';
 import {
-  DEPARTURE_ALERT_LEAD_MS, getFeedbackOutingDate, getNextDailyDate, getNextDepartureDate, getTodayString,
-  isValidHHmm, toDateString,
+  DEPARTURE_ALERT_LEAD_MS, getNextDailyDate, getTodayString, isValidHHmm, toDateString,
 } from '@/utils/time';
+import { feedbackOutingDate, formatHm, nextDeparture, nextDepartureLabel, referenceTimeOn } from '@/utils/schedule';
 import { fetchPreviewInputs } from './previewInputs';
 import { classifyOuting, decideNightly, nextOutingDiffers, previewHighlight } from './nightlyRules';
 import { OutingLog } from './outingLog';
@@ -37,6 +37,11 @@ function dayStart(d: Date): number {
   return s.getTime();
 }
 
+function localDate(date: string): Date {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function localMidnight(date: string): number {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(y, m - 1, d).getTime();
@@ -51,17 +56,20 @@ function windowStartOf(date: string, departureTime: string): number {
 }
 
 async function nextOutingPreview(fireAt: Date, fresh: boolean): Promise<PreviewItem[] | null> {
-  const { useAppStore } = await import('@/store');
+  const { useAppStore, scheduleOf } = await import('@/store');
   const state = useAppStore.getState();
   const s = state.userSettings;
-  const next = getNextDepartureDate(s.departureTime, fireAt);
-  const key = `${toDateString(next)}|${s.departureTime}`;
+  // 다음 외출 — 쉬는 날은 건너뛴다. 일주일 안에 외출이 없으면 미리볼 것도 없다.
+  const next = nextDeparture(scheduleOf(state, fireAt), fireAt);
+  if (!next) return null;
+  const time = formatHm(next);
+  const key = `${toDateString(next)}|${time}`;
   if (!fresh && previewCache && previewCache.key === key && Date.now() - previewCache.at < PREVIEW_TTL_MS) {
     return previewCache.items;
   }
 
   const inputs = await Promise.race([
-    fetchPreviewInputs(next, s.departureTime),
+    fetchPreviewInputs(next, time),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), PREVIEW_TIMEOUT_MS)),
   ]);
   if (!inputs) return null;
@@ -69,7 +77,7 @@ async function nextOutingPreview(fireAt: Date, fresh: boolean): Promise<PreviewI
 
   const preview = buildTomorrowPreview({
     date: next,
-    departureTime: s.departureTime,
+    departureTime: time,
     routines: state.permanentRoutines,
     events,
     customKeywords: s.customKeywords,
@@ -87,11 +95,12 @@ async function nextOutingPreview(fireAt: Date, fresh: boolean): Promise<PreviewI
 }
 
 async function planOnce(fresh: boolean): Promise<void> {
-  const { useAppStore, whenHydrated } = await import('@/store');
+  const { useAppStore, whenHydrated, scheduleOf } = await import('@/store');
   await whenHydrated();
   const state = useAppStore.getState();
   const s = state.userSettings;
   if (!s.onboarded) return;
+  const schedule = scheduleOf(state);
 
   const time = isValidHHmm(s.nightlyCheckTime) ? s.nightlyCheckTime : DEFAULT_TIME;
   const [hh, mm] = time.split(':').map(Number);
@@ -104,18 +113,23 @@ async function planOnce(fresh: boolean): Promise<void> {
   });
 
   // 마지막 날부터는 매일 반복 — 앱이 다시 안 돌아도 기본 알림이 끊기지 않게 (다시 돌면 한 칸씩 밀린다).
-  const entries: NightlyEntry[] = fires.map((at, i) => ({
-    at, variant: 'full', highlight: null, repeat: i === fires.length - 1,
-  }));
+  // 칸마다 그 밤 다음 외출 ("내일 08:30" / "월요일 08:30"). 매일 반복 칸은 날마다 달라서 시각을 말하지 않는다.
+  const entries: NightlyEntry[] = fires.map((at, i) => {
+    const repeat = i === fires.length - 1;
+    return {
+      at, variant: 'full', highlight: null, repeat,
+      departure: repeat ? null : nextDepartureLabel(scheduleOf(state, at), at),
+    };
+  });
 
   if (first.getTime() - now.getTime() <= DECIDE_BEFORE_MS) {
-    const reviewed = getFeedbackOutingDate(s.departureTime, first);
+    const reviewed = feedbackOutingDate(schedule, first);
     const log = await OutingLog.get();
     const outing = classifyOuting({
       date: reviewed,
       outDates: log.outDates,
       homeObservations: log.homeObservations,
-      from: windowStartOf(reviewed, s.departureTime),
+      from: windowStartOf(reviewed, referenceTimeOn(localDate(reviewed), schedule)),
       until: now.getTime(),
     });
     const items = await nextOutingPreview(first, fresh).catch(() => null);
@@ -132,10 +146,11 @@ async function planOnce(fresh: boolean): Promise<void> {
       }),
       highlight: previewHighlight(items),
       repeat: false,
+      departure: entries[0].departure,
     };
   }
 
-  await NotificationService.scheduleNightlyChecks(entries, s.departureTime);
+  await NotificationService.scheduleNightlyChecks(entries);
 }
 
 export const NightlyService = {

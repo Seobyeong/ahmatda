@@ -6,11 +6,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { detectPurposeFromEvents, findMatchingEvent } from '../constants/purposes';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
-import { useAppStore } from '../store';
+import { scheduleOf, useAppStore } from '../store';
 import { DirectionsService } from '../services/directions/DirectionsService';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import { pickNextPlaceEvent } from '../utils/directions';
-import { getAlertTime, parseEventTime } from '../utils/time';
+import { parseEventTime } from '../utils/time';
+import { formatHm, nextAlert, referenceTimeOn } from '../utils/schedule';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
 import { Mascot } from '../components/Mascot';
 import { PurposeSelector } from '../components/PurposeSelector';
@@ -61,6 +62,8 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const autoDetected = useAppStore((s) => s.autoDetected);
   const autoDetectedEvent = useAppStore((s) => s.autoDetectedEvent);
   const userSettings = useAppStore((s) => s.userSettings);
+  // 다음 출발 알림 시각 표시 — 오늘만 바꾸기·요일별 시간이 바뀌면 다시 그린다.
+  const scheduleJson = useAppStore((s) => JSON.stringify(scheduleOf(s)));
   const toast = useAppStore((s) => s.toast);
   const toastAction = useAppStore((s) => s.toastAction);
   const scrollToChecklistRequested = useAppStore((s) => s.scrollToChecklistRequested);
@@ -128,14 +131,17 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
     showToast(`다음부터 '${suggestion.title}' 일정은 자동으로 인식해요.`);
     if (purposeId !== null && !autoDetected) return;
     const keywords = useAppStore.getState().userSettings.customKeywords;
-    const detectedId = detectPurposeFromEvents(todayEvents, userSettings.departureTime, keywords);
+    const refTime = referenceTimeOn(new Date(), scheduleOf(useAppStore.getState()));
+    const detectedId = detectPurposeFromEvents(todayEvents, refTime, keywords);
     const matchedEvent = detectedId
-      ? findMatchingEvent(detectedId, todayEvents, userSettings.departureTime, keywords)
+      ? findMatchingEvent(detectedId, todayEvents, refTime, keywords)
       : null;
     setAutoDetected(detectedId, matchedEvent);
   };
 
-  const alertTime = getAlertTime(userSettings.departureTime);
+  // 다음 출발 알림 시각 — 쉬는 날이 이어지면 다음 외출 날 것.
+  const upcomingAlert = nextAlert(JSON.parse(scheduleJson), now);
+  const alertTime = upcomingAlert ? formatHm(upcomingAlert.alertAt) : '외출 일정 없음';
   const todayLabel = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
 
   // 현재 시각으로 다시 고른다 — 이미 시작한 일정은 길찾기 대상에서 빠진다.

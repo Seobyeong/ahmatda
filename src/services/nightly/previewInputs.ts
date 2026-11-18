@@ -24,7 +24,7 @@ export interface PreviewInputs {
   outlook: DayOutlook | null; // null = 예보를 못 받음
 }
 
-// target: 다음 외출 날(getNextDepartureDate). 각 서비스가 실패를 빈 값으로 돌려준다.
+// target: 다음 외출 날(utils/schedule.ts nextDeparture). 각 서비스가 실패를 빈 값으로 돌려준다.
 export async function fetchPreviewInputs(target: Date, departureTime: string): Promise<PreviewInputs> {
   const dayOffset = Math.round((dayStart(target) - dayStart(new Date())) / DAY_MS);
   const [events, coords] = await Promise.all([

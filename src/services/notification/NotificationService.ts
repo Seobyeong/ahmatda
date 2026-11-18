@@ -6,11 +6,12 @@ import notifee, {
   TimestampTrigger,
   RepeatFrequency,
 } from '@notifee/react-native';
-import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, toDateString } from '@/utils/time';
+import { DEPARTURE_WINDOW_MS, toDateString } from '@/utils/time';
 import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { ChecklistItem } from '@/types';
 import { renderAlert, type AlertKind, type AlertVars } from '@/constants/alertVoices';
-import { useAppStore } from '@/store';
+import { scheduleOf, useAppStore } from '@/store';
+import { DEPARTURE_ALERT_PREFIX, currentWindow, formatHm, nextDeparture, planDepartureAlerts, type DepartureSchedule } from '@/utils/schedule';
 import { AlarmService } from '@/services/alarm/AlarmService';
 import { isAlarmNotificationId } from '@/utils/alarms';
 
@@ -20,7 +21,7 @@ const LEGACY_CHANNEL_FEEDBACK = 'ahmatda-feedback';
 
 // 출발 알림은 울린 뒤 그대로 "잠금화면 출발 상태"로 남는다 (Android ongoing).
 // 앱이 같은 id로 내용을 갱신하고, 집을 나서거나 감시 창이 끝나면 사라진다.
-const DEPARTURE_ALERT_ID = 'departure-alert';
+// id는 departure-alert-d{요일} (매주 반복) / departure-alert-today (오늘만 바꾼 시간).
 
 // 자기 전 정리 알림. 예전 22:00 전날 알림 / 20:00 착장 피드백을 대체한다.
 const NIGHTLY_CHECK_ID = 'nightly-check';
@@ -42,10 +43,22 @@ function departureBody(detail: string): string {
 
 // 지금 고른 알림 말투로 제목·첫 줄을 만든다 (constants/alertVoices.ts).
 // 백그라운드에서 불려도 호출하는 쪽이 이미 store를 읽고 있어 복원된 뒤다.
-function voiceText(kind: AlertKind, vars: Omit<AlertVars, 'departureTime'>) {
-  const s = useAppStore.getState().userSettings;
-  return renderAlert(kind, s.alertVoice, s.customAlertText, { ...vars, departureTime: s.departureTime });
+// departureTime: 이 알림이 말하는 출발 시각 ({출발}) — 없으면 지금 감시 중인 출발(출발 시각이 막
+// 지나 아직 집에 있어도 그 외출이다), 그것도 없으면 다음 외출.
+function voiceText(kind: AlertKind, vars: Omit<AlertVars, 'departureTime'>, departureTime?: string) {
+  const state = useAppStore.getState();
+  const s = state.userSettings;
+  const schedule = scheduleOf(state);
+  const now = new Date();
+  const ref = currentWindow(schedule, now)?.departure ?? nextDeparture(schedule, now);
+  const time = departureTime ?? (ref ? formatHm(ref) : s.departureTime);
+  return renderAlert(kind, s.alertVoice, s.customAlertText, { ...vars, departureTime: time });
 }
+
+// 출발 알림 예약 — 체크할 때마다 불리므로 내용·시각이 그대로인 예약은 다시 걸지 않는다.
+// 여러 번 연달아 불려도 겹쳐 돌지 않게 한 줄로 세운다.
+const alertSignatures = new Map<string, string>();
+let alertQueue: Promise<void> = Promise.resolve();
 
 // 말투 서명 — 예약 알림은 예약할 때 문구가 고정되므로, 말투가 바뀌면 다시 예약해야 한다.
 function voiceSignature(): string {
@@ -69,6 +82,9 @@ export interface NightlyEntry {
   variant: 'full' | 'preview' | 'skip';
   highlight: string | null; // 다음 외출에 달라지는 것 — "우산(비 예보 70%), 운동화(10:00 '헬스' 일정)"
   repeat: boolean;          // 이 날부터 매일 반복 (계획의 마지막 칸 — 앱이 다시 안 돌아도 끊기지 않게)
+  // 이 알림 다음 외출 — "내일 08:30" / "월요일 08:30". 날마다 다르므로 칸마다 따로 정한다.
+  // null이면 시각을 말하지 않는다 (매일 반복 칸, 일주일 안에 외출 없음).
+  departure: string | null;
 }
 
 const NIGHTLY_ID_PREFIX = 'nightly-check-';
@@ -83,7 +99,7 @@ export function isNightlyCheckId(id: string | undefined): boolean {
   return id === NIGHTLY_CHECK_ID || (id?.startsWith(NIGHTLY_ID_PREFIX) ?? false);
 }
 
-function nightlyContent(entry: NightlyEntry, departureTime: string) {
+function nightlyContent(entry: NightlyEntry) {
   const noItems = { items: [], count: 0 };
   const android = {
     channelId:   CHANNEL_REMINDER,
@@ -94,7 +110,7 @@ function nightlyContent(entry: NightlyEntry, departureTime: string) {
     return {
       id:    nightlyId(entry),
       title: voiceText('nightlyPreview', noItems).title,
-      body:  `${departureTime} 출발 · ${entry.highlight ?? '눌러서 미리 확인해 보세요'}`,
+      body:  `${entry.departure ? `${entry.departure} 출발 · ` : ''}${entry.highlight ?? '눌러서 미리 확인해 보세요'}`,
       android,
     };
   }
@@ -102,7 +118,7 @@ function nightlyContent(entry: NightlyEntry, departureTime: string) {
   return {
     id:    nightlyId(entry),
     title: voiceText('nightly', noItems).title,
-    body:  `착장 피드백을 남기고, ${departureTime} 출발 전에 챙길 것도 미리 봐두세요.${extra}`,
+    body:  `착장 피드백을 남기고, ${entry.departure ? `${entry.departure} 출발` : '다음 외출'} 전에 챙길 것도 미리 봐두세요.${extra}`,
     android: {
       ...android,
       actions: [
@@ -153,58 +169,78 @@ export const NotificationService = {
     await notifee.openAlarmPermissionSettings();
   },
 
-  // 당일 외출 30분 전 — 체크리스트 알림 + 모니터링 시작 신호
+  // 외출 30분 전 — 체크리스트 알림 + 모니터링 시작 신호
   //
-  // 일일 반복이라 본문(아직 안 챙긴 것)은 예약 시점에 고정된다. 체크리스트가
-  // 바뀔 때마다 App.tsx가 다시 예약해서 갱신하지만, 앱을 하루 종일 안 연 날에는
-  // 마지막으로 알던 내용이 그대로 표시된다. 그래도 알림이 아예 안 오는 것보다는
-  // 낫다는 판단 — 반복을 안 걸면 앱을 안 연 다음 날부터 알림이 영영 멈춘다.
+  // 요일마다 "매주 반복" 예약을 하나씩 건다 (쉬는 요일은 없음, utils/schedule.ts planDepartureAlerts).
+  // 반복이라 본문(아직 안 챙긴 것)은 예약 시점에 고정된다. 체크리스트가 바뀔 때마다 App.tsx가
+  // 다시 예약해서 갱신하지만, 앱을 안 연 날에는 일반 문구로 나간다 — 그래도 알림이 끊기는 것보다 낫다.
+  // 오늘 울릴 예약에만 오늘 목록을 싣는다 (departureAlertContent 참고).
   //
   // 아직 안 챙긴 게 있으면 울린 뒤 지우지 못하는 상태 알림(ongoing)으로 남아 잠금화면에서
-  // 계속 보인다. 다 챙겼다면 고정할 이유가 없어 일반 알림으로 둔다. 내일 울릴 예약에는
-  // 오늘 내용을 싣지 않는다 (departureAlertContent 참고).
+  // 계속 보인다. 다 챙겼다면 고정할 이유가 없어 일반 알림으로 둔다.
   // 앱이 한 번도 안 열려 갱신·정리가 안 돼도 감시 창이 끝나면(timeoutAfter) 사라진다.
   // autoCancel을 끄는 이유: 기본값(true)이면 탭해서 앱을 여는 순간 지워지고,
   // updateDepartureStatus는 떠 있는 알림만 갱신하므로 그날 아침엔 다시 안 나타난다.
-  async scheduleDepartureAlert(
-    departureTime: string,
-    snapshot: DepartureSnapshot
-  ): Promise<void> {
-    // 자정을 넘어가는 출발 시각("00:15" → 알림 "23:45")도 어긋나지 않게
-    // 출발 시각에서 역산한다. getNextAlertDate 주석 참고.
-    const target = getNextAlertDate(departureTime);
-    const content = departureAlertContent(snapshot, toDateString(target));
-    // 울릴 날의 목록을 아직 모르면(내일 예약) 물건을 말하지 않는다.
-    const fresh = snapshot.date === toDateString(target);
-    const title = voiceText('departure', fresh
-      ? { items: snapshot.labels ?? [], count: snapshot.remaining }
-      : { items: [], count: 0 }).title;
+  scheduleDepartureAlert(schedule: DepartureSchedule, snapshot: DepartureSnapshot): Promise<void> {
+    const run = () => NotificationService._scheduleDepartureAlert(schedule, snapshot);
+    alertQueue = alertQueue.then(run, run);
+    return alertQueue;
+  },
 
-    const trigger: TimestampTrigger = {
-      type:            TriggerType.TIMESTAMP,
-      timestamp:       target.getTime(),
-      repeatFrequency: RepeatFrequency.DAILY,
-      alarmManager: { allowWhileIdle: true },
-    };
+  async _scheduleDepartureAlert(schedule: DepartureSchedule, snapshot: DepartureSnapshot): Promise<void> {
+    const plan = planDepartureAlerts(schedule, new Date());
+    const wanted = new Set(plan.map((p) => p.id));
 
-    await notifee.cancelTriggerNotification(DEPARTURE_ALERT_ID);
-    await notifee.createTriggerNotification(
-      {
-        id:      DEPARTURE_ALERT_ID,
-        title,
-        body:    departureBody(content.detail),
-        android: {
-          channelId:     CHANNEL_CHECKLIST,
-          pressAction:   { id: 'open-checklist', launchActivity: 'default' },
-          ongoing:       content.ongoing,
-          autoCancel:    false,
-          onlyAlertOnce: true,
-          timeoutAfter:  DEPARTURE_WINDOW_MS,
-          actions:       [LEAVE_ACTION],
-        },
-      },
-      trigger
+    // 계획에서 빠진 예약(쉬는 날로 바꾼 요일, 지난 '오늘만', 예전의 매일 반복 하나짜리)을 지운다.
+    const existing = await notifee.getTriggerNotificationIds();
+    await Promise.all(
+      existing
+        .filter((id) => id.startsWith(DEPARTURE_ALERT_PREFIX) && !wanted.has(id))
+        .map((id) => {
+          alertSignatures.delete(id);
+          return notifee.cancelTriggerNotification(id);
+        })
     );
+
+    for (const p of plan) {
+      const alertDay = toDateString(p.departure);
+      const content = departureAlertContent(snapshot, alertDay);
+      // 울릴 날의 목록을 아직 모르면(다른 날 예약) 물건을 말하지 않는다.
+      const fresh = snapshot.date === alertDay;
+      const title = voiceText('departure', fresh
+        ? { items: snapshot.labels ?? [], count: snapshot.remaining }
+        : { items: [], count: 0 }, formatHm(p.departure)).title;
+
+      const trigger: TimestampTrigger = {
+        type:         TriggerType.TIMESTAMP,
+        timestamp:    p.alertAt.getTime(),
+        alarmManager: { allowWhileIdle: true },
+        ...(p.weekly ? { repeatFrequency: RepeatFrequency.WEEKLY } : {}),
+      };
+      // 다른 날 예약은 일반 문구라 체크해도 그대로다 — 같으면 건너뛴다 (보통 오늘 것 하나만 다시 건다).
+      const signature = JSON.stringify([p.alertAt.getTime(), p.weekly, title, content]);
+      if (alertSignatures.get(p.id) === signature && existing.includes(p.id)) continue;
+
+      await notifee.createTriggerNotification(
+        {
+          id:      p.id,
+          title,
+          body:    departureBody(content.detail),
+          android: {
+            channelId:     CHANNEL_CHECKLIST,
+            pressAction:   { id: 'open-checklist', launchActivity: 'default' },
+            ongoing:       content.ongoing,
+            autoCancel:    false,
+            onlyAlertOnce: true,
+            timeoutAfter:  DEPARTURE_WINDOW_MS,
+            actions:       [LEAVE_ACTION],
+          },
+        },
+        trigger
+      );
+      // 예약이 된 뒤에만 기억한다 — 실패했으면 다음에 다시 건다.
+      alertSignatures.set(p.id, signature);
+    }
   },
 
   // 잠금화면 출발 상태 갱신 — 이미 떠 있을 때만 내용을 바꾼다.
@@ -213,21 +249,22 @@ export const NotificationService = {
   // 아직 출발 알림 시각 전이라는 뜻이고, 어느 쪽이든 지하철에서 체크를 하나 했다고
   // 다시 띄울 이유가 없다. 다 챙겼으면 고정을 풀어 사용자가 밀어서 지울 수 있게 한다.
   //
-  // 떠 있는데 감시 창 밖이면 지난 상태다 — 출발 시각을 바꿔서 창이 옮겨갔거나 창이
-  // 이미 끝났다. 앱 말고는 고정 알림을 내릴 수단이 없으니 여기서 지운다.
-  async updateDepartureStatus(departureTime: string, snapshot: DepartureSnapshot): Promise<void> {
-    const displayed = await notifee.getDisplayedNotifications();
-    if (!displayed.some((n) => n.id === DEPARTURE_ALERT_ID)) return;
+  // 떠 있는데 감시 창 밖이면 지난 상태다 — 외출 시간을 바꾸거나 오늘을 건너뛰어서 창이
+  // 옮겨갔거나 이미 끝났다. 앱 말고는 고정 알림을 내릴 수단이 없으니 여기서 지운다.
+  async updateDepartureStatus(schedule: DepartureSchedule, snapshot: DepartureSnapshot): Promise<void> {
+    const displayed = (await notifee.getDisplayedNotifications())
+      .find((n) => (n.id ?? '').startsWith(DEPARTURE_ALERT_PREFIX));
+    if (!displayed?.id) return;
 
-    const remainingMs = getDepartureWindowRemainingMs(departureTime);
-    if (remainingMs === null) {
+    const window = currentWindow(schedule, new Date());
+    if (window === null) {
       await NotificationService.clearDepartureStatus();
       return;
     }
 
     await notifee.displayNotification({
-      id:    DEPARTURE_ALERT_ID,
-      title: voiceText('departure', { items: snapshot.labels ?? [], count: snapshot.remaining }).title,
+      id:    displayed.id,
+      title: voiceText('departure', { items: snapshot.labels ?? [], count: snapshot.remaining }, formatHm(window.departure)).title,
       body:  departureBody(snapshot.detail),
       android: {
         channelId:     CHANNEL_CHECKLIST,
@@ -235,7 +272,7 @@ export const NotificationService = {
         ongoing:       snapshot.remaining > 0,
         autoCancel:    false,
         onlyAlertOnce: true,
-        timeoutAfter:  remainingMs,
+        timeoutAfter:  window.remainingMs,
         actions:       [LEAVE_ACTION],
       },
     });
@@ -244,12 +281,24 @@ export const NotificationService = {
   // 알림 성향 "필요할 때만" — 출발 전 알림을 아예 쓰지 않는다. 예약과 떠 있는 것 모두 내린다.
   // (Wi-Fi 이탈 긴급 알림은 별개라 그대로 나간다.)
   async cancelDepartureAlert(): Promise<void> {
-    await notifee.cancelNotification(DEPARTURE_ALERT_ID);
+    const ids = new Set([
+      ...(await notifee.getTriggerNotificationIds()),
+      ...(await notifee.getDisplayedNotifications()).map((n) => n.id ?? ''),
+    ]);
+    await Promise.all(
+      [...ids].filter((id) => id.startsWith(DEPARTURE_ALERT_PREFIX)).map((id) => notifee.cancelNotification(id))
+    );
   },
 
-  // 집을 나섰을 때 — 출발 상태는 더 이상 의미가 없다. 예약(내일 것)은 그대로 둔다.
+  // 집을 나섰을 때 — 출발 상태는 더 이상 의미가 없다. 예약(다음 것)은 그대로 둔다.
   async clearDepartureStatus(): Promise<void> {
-    await notifee.cancelDisplayedNotification(DEPARTURE_ALERT_ID);
+    const displayed = await notifee.getDisplayedNotifications();
+    await Promise.all(
+      displayed
+        .map((n) => n.id ?? '')
+        .filter((id) => id.startsWith(DEPARTURE_ALERT_PREFIX))
+        .map((id) => notifee.cancelDisplayedNotification(id))
+    );
   },
 
   // [떠나기]를 눌렀는데 남은 게 있을 때 — 헤드업으로 한 번 보여주고 10분 뒤 사라진다.
@@ -289,9 +338,9 @@ export const NotificationService = {
   //   full    — 착장 피드백 버튼 + 챙길 것 미리보기 (기본)
   //   preview — 외출 안 한 날: 피드백 없이 다음 외출에 달라지는 것만
   //   skip    — 예약하지 않음
-  async scheduleNightlyChecks(entries: NightlyEntry[], departureTime: string): Promise<void> {
+  async scheduleNightlyChecks(entries: NightlyEntry[]): Promise<void> {
     const wanted = entries.filter((e) => e.variant !== 'skip');
-    const signature = JSON.stringify([departureTime, voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat])]);
+    const signature = JSON.stringify([voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat, e.departure])]);
 
     const existing = await notifee.getTriggerNotificationIds();
     const wantedIds = new Set(wanted.map((e) => nightlyId(e)));
@@ -313,7 +362,7 @@ export const NotificationService = {
         alarmManager: { allowWhileIdle: true },  // Doze Mode 대응
         ...(entry.repeat ? { repeatFrequency: RepeatFrequency.DAILY } : {}),
       };
-      await notifee.createTriggerNotification(nightlyContent(entry, departureTime), trigger);
+      await notifee.createTriggerNotification(nightlyContent(entry), trigger);
     }
     lastNightlySignature = signature;
   },

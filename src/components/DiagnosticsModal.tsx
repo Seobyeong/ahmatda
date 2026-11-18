@@ -165,7 +165,7 @@ export function DiagnosticsModal({ visible, onClose }: Props) {
     ]);
     clearMotionRecords();
     useAppStore.getState().clearLeaveIntent();
-    WifiMonitorService.armForDeparture(useAppStore.getState().userSettings.departureTime);
+    WifiMonitorService.armForDeparture();
     await NightlyService.plan({ fresh: true });
   };
 

@@ -32,6 +32,7 @@ import { DiagnosticsModal } from '../components/DiagnosticsModal';
 import { ChoiceList } from '../components/ChoiceList';
 import { AlertVoiceSettings } from '../components/AlertVoiceSettings';
 import { AlarmSettings } from '../components/AlarmSettings';
+import { WeekdaySchedule } from '../components/WeekdaySchedule';
 import { Toast } from '../components/Toast';
 import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
 import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
@@ -363,7 +364,8 @@ export function SettingsScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.groupTitle, styles.groupTitleFirst]} accessibilityRole="header">시간 · 알림</Text>
-        <TimeRow label="외출 시간" value={departureTime} onCommit={updateDepartureTime} />
+        <TimeRow label="기본 외출 시간" value={departureTime} onCommit={updateDepartureTime} />
+        <WeekdaySchedule />
         <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} />
 
         <Text style={styles.sectionTitle}>알림 성향</Text>

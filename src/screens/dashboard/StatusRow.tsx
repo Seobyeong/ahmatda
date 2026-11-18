@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Pressable, Text, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../../constants/theme';
-import { useAppStore } from '../../store';
-import { getDepartureCountdown } from '../../utils/time';
+import { scheduleOf, useAppStore } from '../../store';
+import { getScheduleCountdown, type DepartureSchedule } from '../../utils/schedule';
+import { TodayPlanSheet } from '../../components/TodayPlanSheet';
 
 function createPulse(scale: Animated.Value, opacity: Animated.Value) {
   return Animated.loop(
@@ -51,29 +52,35 @@ function PulseDot({ color }: { color: string }) {
   );
 }
 
-// 외출까지 남은 시간 — 한 줄. 닫으면 그날은 다시 나오지 않는다.
+// 외출까지 남은 시간 — 한 줄. 누르면 오늘만 바꾸기(건너뛰기·다른 시간). 닫으면 그날은 다시 나오지 않는다.
 export function StatusRow({ now }: { now: Date }) {
   const { Colors, Role } = useTheme();
   const styles = useStyles();
-  const departureTime = useAppStore((s) => s.userSettings.departureTime);
+  // 요일별 시간·쉬는 날·오늘만 바꾼 것 — 문자열로 구독해 매 렌더 새 객체로 다시 그리지 않게.
+  const scheduleJson = useAppStore((s) => JSON.stringify(scheduleOf(s)));
   const statusDismissed = useAppStore((s) => s.statusDismissed);
   const dismissStatus = useAppStore((s) => s.dismissStatus);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   if (statusDismissed) return null;
-  const countdown = getDepartureCountdown(departureTime, now);
+  const countdown = getScheduleCountdown(JSON.parse(scheduleJson) as DepartureSchedule, now);
 
   return (
     <View style={[styles.statusRow, countdown.soon && styles.statusRowSoon]}>
-      <View
+      <Pressable
         style={styles.statusLeft}
-        accessible
+        onPress={() => setSheetVisible(true)}
+        accessibilityRole="button"
         accessibilityLabel={[countdown.label, countdown.value, countdown.detail].filter(Boolean).join(', ')}
+        accessibilityHint="오늘만 건너뛰거나 다른 시간으로 바꿔요"
       >
         <PulseDot color={countdown.soon ? Colors.amber500 : Colors.emerald500} />
         <Text style={[styles.statusLabel, countdown.soon && styles.statusLabelSoon]}>{countdown.label}</Text>
         <Text style={styles.statusTime}>{countdown.value}</Text>
         {countdown.detail ? <Text style={styles.statusDetail}>{countdown.detail}</Text> : null}
-      </View>
+        <Text style={styles.changeLink}>오늘만 바꾸기</Text>
+      </Pressable>
+      <TodayPlanSheet visible={sheetVisible} onClose={() => setSheetVisible(false)} />
       <Pressable
         style={styles.iconButton}
         onPress={dismissStatus}
@@ -122,6 +129,11 @@ const useStyles = makeStyles(({ Role }) => ({
   statusDetail: {
     fontSize: FontSize.label,
     color: Role.textMuted,
+  },
+  changeLink: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Role.actionText,
   },
   // 아이콘만 있는 버튼의 공통 터치 영역 (44×44)
   iconButton: {

@@ -8,7 +8,7 @@ import type { ChecklistItem, ItemTier } from '@/types';
 
 export interface DepartureSnapshot {
   date: string;   // "YYYY-MM-DD" — 위젯이 날짜가 지난 요약을 걸러내는 데 쓴다
-  title: string;  // "08:15 출발"
+  title: string;  // "08:15 출발" / "내일 08:30 출발" / "외출 일정 없음"
   detail: string; // "우산 · 노트북 외 2개" | "준비 완료"
   remaining: number;
   labels?: string[]; // detail에 이름이 나온 안 챙긴 물건 (급한 순) — 알림 말투의 {물건}
@@ -27,7 +27,7 @@ export function sortByUrgency(items: ChecklistItem[]): ChecklistItem[] {
 
 export function buildDepartureSnapshot(
   checklist: ChecklistItem[],
-  departureTime: string,
+  departureTime: string | null, // 다음 출발 표시 (nextDepartureLabel) — null이면 일주일 안에 외출 없음
   today: string
 ): DepartureSnapshot {
   const unchecked = sortByUrgency(checklist.filter((item) => !item.checked));
@@ -40,7 +40,8 @@ export function buildDepartureSnapshot(
   else if (unchecked.length === 0) detail = '준비 완료';
   else detail = shown.join(' · ') + (rest > 0 ? ` 외 ${rest}개` : '');
 
-  return { date: today, title: `${departureTime} 출발`, detail, remaining: unchecked.length, labels: shown };
+  const title = departureTime ? `${departureTime} 출발` : '외출 일정 없음';
+  return { date: today, title, detail, remaining: unchecked.length, labels: shown };
 }
 
 export const STALE_DEPARTURE_DETAIL = '오늘 챙길 것을 확인하세요';

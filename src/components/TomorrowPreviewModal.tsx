@@ -4,7 +4,8 @@ import { X } from 'lucide-react-native';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { Button } from './ui';
 import { PURPOSES } from '../constants/purposes';
-import { useAppStore } from '../store';
+import { scheduleOf, useAppStore } from '../store';
+import { dayLabel, formatHm, nextDeparture } from '../utils/schedule';
 import type { DayOutlook } from '../services/weather/forecastDate';
 import { fetchPreviewInputs } from '../services/nightly/previewInputs';
 import { countRecentForgotten } from '../utils/forgotten';
@@ -31,10 +32,14 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
   const addOneOffItem = useAppStore((s) => s.addOneOffItem);
   const removePermanentRoutine = useAppStore((s) => s.removePermanentRoutine);
 
-  const [target, setTarget] = useState(() => getNextDepartureDate(userSettings.departureTime));
+  const departureToday = useAppStore((s) => s.departureToday);
+  // 다음 외출 — 요일별 시간·쉬는 날·오늘만 바꾼 것을 따른다. 일주일 내내 쉬면 null.
+  const pickNext = () => nextDeparture(scheduleOf(useAppStore.getState()), new Date());
+  const [noOuting, setNoOuting] = useState(false);
+  const [target, setTarget] = useState(() => pickNext() ?? new Date());
   // "오늘/내일"은 연 순간 기준으로 고정한다 — 열어둔 채 자정을 넘기면 제목만 바뀌고
   // 일정·예보는 연 시점 것이라 서로 어긋난다.
-  const [isToday, setIsToday] = useState(false);
+  const [targetDay, setTargetDay] = useState('내일');
   const [message, setMessage] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [outlook, setOutlook] = useState<DayOutlook | null>(null);
@@ -46,15 +51,18 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
     if (!visible) return;
     let cancelled = false;
 
-    const next = getNextDepartureDate(userSettings.departureTime);
+    const found = pickNext();
+    setNoOuting(found === null);
+    // 일주일 내내 쉬는 날이면 내일을 기본 시간 기준으로 보여 준다 (1회 항목은 여전히 더할 수 있다).
+    const next = found ?? getNextDepartureDate(userSettings.departureTime);
     setTarget(next);
-    setIsToday(toDateString(next) === getTodayString());
+    setTargetDay(dayLabel(next, new Date()));
     setLoading(true);
 
     // 자기 전 정리 알림의 "다음 외출: …"과 같은 데이터 (services/nightly/previewInputs)
     (async () => {
       try {
-        const inputs = await fetchPreviewInputs(next, userSettings.departureTime);
+        const inputs = await fetchPreviewInputs(next, formatHm(next));
         if (cancelled) return;
         setEvents(inputs.events);
         setOutlook(inputs.outlook);
@@ -68,14 +76,14 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
     return () => {
       cancelled = true;
     };
-  }, [visible, userSettings.departureTime]);
+  }, [visible, userSettings.departureTime, userSettings.departureWeekdays, departureToday]);
 
   const targetDate = toDateString(target);
   const preview = useMemo(
     () =>
       buildTomorrowPreview({
         date: target,
-        departureTime: userSettings.departureTime,
+        departureTime: formatHm(target),
         routines: permanentRoutines,
         events,
         customKeywords: userSettings.customKeywords,
@@ -108,7 +116,9 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
     setDraft('');
     setMessage(null);
   };
-  const heading = `${isToday ? '오늘' : '내일'} ${target.getMonth() + 1}/${target.getDate()}(${DAY_LABELS[target.getDay()]}) ${userSettings.departureTime} 출발`;
+  const heading = noOuting
+    ? `앞으로 일주일은 외출 일정이 없어요 · ${targetDay} ${target.getMonth() + 1}/${target.getDate()}(${DAY_LABELS[target.getDay()]}) 기준`
+    : `${targetDay} ${target.getMonth() + 1}/${target.getDate()}(${DAY_LABELS[target.getDay()]}) ${formatHm(target)} 출발`;
 
   let weatherLine: string;
   if (loading) weatherLine = '예보를 불러오는 중...';

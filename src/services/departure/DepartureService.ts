@@ -10,7 +10,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NotificationService } from '@/services/notification/NotificationService';
-import { getTodayString, isWithinDepartureWindow } from '@/utils/time';
+import { getTodayString } from '@/utils/time';
+import { currentWindow } from '@/utils/schedule';
 import type { ChecklistItem } from '@/types';
 import { decideDeparture, WIFI_FALLBACK_MS, type DepartureSignal, type SignalAvailability } from './decide';
 import { SignalLog } from './signalLog';
@@ -68,13 +69,14 @@ function scheduleRecheck(): void {
 async function evaluateOnce(): Promise<ChecklistItem[] | null> {
   // 지오펜스·걷기는 앱이 화면 없이 깨어난 상태에서도 들어온다. 복원 전 기본값을 읽으면
   // 출발 시각·체크리스트가 전부 틀린다 (leave.ts와 같은 이유).
-  const { useAppStore, whenHydrated } = await import('@/store');
+  const { useAppStore, whenHydrated, scheduleOf } = await import('@/store');
   await whenHydrated();
 
   const { userSettings, leaveIntent } = useAppStore.getState();
   if (!userSettings.onboarded) return null;
   // 출발 감시 창(출발 30분 전 ~ +2시간) 밖의 이탈은 오늘 출발이 아니다 — 저녁 산책 등.
-  if (!isWithinDepartureWindow(userSettings.departureTime)) return null;
+  // 쉬는 날·오늘 건너뛴 날은 창이 없다 (알림만 쉰다, 2026-11-18 결정).
+  if (currentWindow(scheduleOf(useAppStore.getState()), new Date()) === null) return null;
 
   const today = getTodayString();
   if ((await AsyncStorage.getItem(ALERT_DATE_KEY)) === today) return null;
@@ -142,9 +144,9 @@ export const DepartureService = {
     alertedDate: string | null;
     departedDate: string | null;
   }> {
-    const { useAppStore, whenHydrated } = await import('@/store');
+    const { useAppStore, whenHydrated, scheduleOf } = await import('@/store');
     await whenHydrated();
-    const { userSettings, leaveIntent } = useAppStore.getState();
+    const { leaveIntent } = useAppStore.getState();
     const [{ signals, availability }, alertedDate, departedDate] = await Promise.all([
       gatherInputs(leaveIntent),
       AsyncStorage.getItem(ALERT_DATE_KEY),
@@ -152,7 +154,7 @@ export const DepartureService = {
     ]);
     return {
       signals, availability, decision: decideDeparture(signals, availability, Date.now()),
-      inWindow: isWithinDepartureWindow(userSettings.departureTime), alertedDate, departedDate,
+      inWindow: currentWindow(scheduleOf(useAppStore.getState()), new Date()) !== null, alertedDate, departedDate,
     };
   },
 

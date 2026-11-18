@@ -1,7 +1,7 @@
 import BackgroundFetch from 'react-native-background-fetch';
-import { getNextAlertDate, isWithinDepartureWindow } from '@/utils/time';
+import { currentWindow, nextAlert, type DepartureSchedule } from '@/utils/schedule';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
-import { useAppStore } from '@/store';
+import { scheduleOf, useAppStore } from '@/store';
 import { CalendarService } from '@/services/calendar/CalendarService';
 import { AiHintService } from '@/services/ai/AiHintService';
 import { AwayPlaceService } from '@/services/departure/AwayPlaceService';
@@ -52,10 +52,12 @@ export const BackgroundTaskService = {
 
   // 출발 알림 시각(출발 30분 전)에 맞춰 1회성 태스크를 예약한다.
   // OS 스케줄러 재량에 따라 실제 실행 시각은 다소 어긋날 수 있다 — 정밀 스케줄러가 아니다.
-  async scheduleDepartureTask(departureTime: string): Promise<void> {
-    // NotificationService의 출발 알림과 같은 계산을 쓴다 — 자정을 넘어가는
-    // 출발 시각에서 둘이 따로 어긋나면 알림과 백그라운드 확인이 다른 날을 본다.
-    const target = getNextAlertDate(departureTime);
+  async scheduleDepartureTask(schedule: DepartureSchedule): Promise<void> {
+    // NotificationService의 출발 알림과 같은 계산을 쓴다 (utils/schedule.ts) — 둘이 따로
+    // 어긋나면 알림과 백그라운드 확인이 다른 날을 본다. 쉬는 날은 건너뛴다.
+    const next = nextAlert(schedule, new Date());
+    if (!next) return;
+    const target = next.alertAt;
 
     await BackgroundFetch.scheduleTask({
       taskId: DEPARTURE_TASK_ID,
@@ -68,7 +70,7 @@ export const BackgroundTaskService = {
   async _runCheck(): Promise<void> {
     const { userSettings } = useAppStore.getState();
     if (!userSettings.onboarded) return;
-    if (!isWithinDepartureWindow(userSettings.departureTime)) return;
+    if (currentWindow(scheduleOf(useAppStore.getState()), new Date()) === null) return;
 
     await WifiMonitorService.checkOnce();
   },

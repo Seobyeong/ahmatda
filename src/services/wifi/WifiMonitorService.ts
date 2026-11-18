@@ -2,7 +2,8 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DepartureService } from '@/services/departure/DepartureService';
 import { SignalLog } from '@/services/departure/signalLog';
-import { isWithinDepartureWindow } from '@/utils/time';
+import { currentWindow } from '@/utils/schedule';
+import { scheduleOf, useAppStore } from '@/store';
 import { classifyPresence } from './presence';
 import type { ChecklistItem } from '@/types';
 
@@ -168,11 +169,11 @@ export const WifiMonitorService = {
   // RN은 앱이 오래 백그라운드에 있으면 긴 타이머가 실행을 보장받지 못해서, 다음날
   // 같은 시각에 정확히 맞춰 실행돼야 하는 긴 타이머는 조용히 죽을 수 있다. 짧은
   // 주기로 반복 재확인하면 앱이 다시 활성화됐을 때 곧 따라잡는다.
-  armForDeparture(departureTime: string): void {
+  armForDeparture(): void {
     if (armInterval) { clearInterval(armInterval); armInterval = null; }
 
     const tick = () => {
-      if (isWithinDepartureWindow(departureTime)) {
+      if (currentWindow(scheduleOf(useAppStore.getState()), new Date()) !== null) {
         if (!unsubscribe) WifiMonitorService.startMonitoring();
       } else {
         WifiMonitorService.stopMonitoring();
