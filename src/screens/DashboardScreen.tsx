@@ -16,6 +16,7 @@ import { Mascot } from '../components/Mascot';
 import { PurposeSelector } from '../components/PurposeSelector';
 import { Toast } from '../components/Toast';
 import { TomorrowPreviewModal } from '../components/TomorrowPreviewModal';
+import { MemoModal } from '../components/MemoModal';
 import { Button } from '../components/ui';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { PurposeId } from '../types';
@@ -42,6 +43,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const { todayEvents, now, refreshing, refresh, usingFallbackLocation } = useDashboardData();
 
   const [leaveBarHeight, setLeaveBarHeight] = useState(0);
+  const [memoVisible, setMemoVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [tomorrowVisible, setTomorrowVisible] = useState(false);
 
@@ -264,9 +266,10 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
       </ScrollView>
 
       {/* 글자를 치는 동안에는 키보드 위로 올라와 입력창을 가리므로 숨긴다. */}
-      {!keyboardVisible ? <LeaveBar onHeight={setLeaveBarHeight} /> : null}
+      {!keyboardVisible ? <LeaveBar onHeight={setLeaveBarHeight} onMemo={() => setMemoVisible(true)} /> : null}
 
       <TomorrowPreviewModal visible={tomorrowVisible} onClose={() => setTomorrowVisible(false)} />
+      <MemoModal visible={memoVisible} onClose={() => setMemoVisible(false)} />
 
       {/* 설정 화면이 위에 떠 있을 땐 그쪽이 토스트를 보여 준다. */}
       {toast && focused ? (

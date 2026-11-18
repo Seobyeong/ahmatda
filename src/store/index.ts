@@ -69,6 +69,9 @@ interface AppState {
   // (docs/외출-감지-재설계.md 2·3장). date가 오늘이 아니면 지난 기록이다.
   leaveIntent: LeaveIntent | null;
 
+  // 빠른 메모 — 체크리스트와 따로 노는 메모장. 날이 바뀌어도 지울 때까지 남는다. 최신이 앞.
+  memos: Memo[];
+
   // UI 상태
   statusDismissed: boolean;
   toast: string | null;
@@ -83,6 +86,15 @@ export interface ToastAction {
   onPress: () => void;
 }
 
+export interface Memo {
+  id: string;
+  text: string;
+  createdAt: number; // ms
+}
+
+// 메모는 계속 쌓이는 저장 데이터라 상한을 둔다 — 넘치면 오래된 것부터 빠진다.
+export const MEMO_LIMIT = 200;
+
 // 삭제를 되돌리는 함수 — 지울 게 없었으면 null
 type Undo = (() => void) | null;
 
@@ -93,6 +105,9 @@ interface AppActions {
   uncheckAll: () => void;
   // 추가했으면 true, 같은 이름이 이미 있어 넘어갔으면 false
   addTempItem: (label: string) => boolean;
+  // 메모 — 빈 글이면 false
+  addMemo: (text: string) => boolean;
+  deleteMemo: (id: string) => Undo;
   addPermanentRoutine: (label: string) => boolean;
   addOneOffItem: (label: string, date: string) => void;
   // 삭제는 되돌리는 함수를 돌려준다 — ✕ 한 번에 루틴이 영구 삭제되므로 화면이 "되돌리기"를 건다.
@@ -325,6 +340,8 @@ const defaultState: AppState = {
 
   leaveIntent: null,
 
+  memos: [],
+
   statusDismissed: false,
   toast: null,
   toastAction: null,
@@ -354,6 +371,28 @@ export const useAppStore = create<AppStore>()(
         set((state) => ({
           checklist: state.checklist.map((item) => ({ ...item, checked: false })),
         })),
+
+      addMemo: (text) => {
+        const trimmed = text.trim();
+        if (!trimmed) return false;
+        const memo: Memo = { id: generateItemId(), text: trimmed, createdAt: Date.now() };
+        set((state) => ({ memos: [memo, ...state.memos].slice(0, MEMO_LIMIT) }));
+        return true;
+      },
+
+      deleteMemo: (id) => {
+        const index = get().memos.findIndex((m) => m.id === id);
+        if (index < 0) return null;
+        const removed = get().memos[index];
+        set((state) => ({ memos: state.memos.filter((m) => m.id !== id) }));
+        return () =>
+          set((state) => {
+            if (state.memos.some((m) => m.id === removed.id)) return state;
+            const memos = [...state.memos];
+            memos.splice(Math.min(index, memos.length), 0, removed);
+            return { memos };
+          });
+      },
 
       // 체크 상태를 이름으로 기억하므로(buildChecklist의 wasChecked) 같은 이름이 두 줄이면
       // 하나만 눌러도 재조립 때 둘 다 체크된다. 이미 있으면 더하지 않는다.

@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FontSize, Radius, Space, makeStyles } from '../../constants/theme';
+import { NotebookPen } from 'lucide-react-native';
+import { FontSize, Radius, Space, makeStyles, useTheme } from '../../constants/theme';
 import { useAppStore } from '../../store';
 import { leaveResultMessage, pressLeave } from '../../services/departure/leave';
 
 // [떠나기]는 나가는 순간에 누르는 버튼이라 스크롤 위치와 상관없이 항상 엄지 아래에 둔다.
 // 남은 게 있으면 마지막 확인 알림을 띄워 주머니 속에서도 보이게 한다.
-export function LeaveBar({ onHeight }: { onHeight: (height: number) => void }) {
+// 왼쪽의 [메모]는 급하게 적을 일을 어디서든 한 번에 열도록 같은 줄에 둔다.
+export function LeaveBar({ onHeight, onMemo }: { onHeight: (height: number) => void; onMemo: () => void }) {
   const styles = useStyles();
+  const { Role } = useTheme();
+  const memoCount = useAppStore((s) => s.memos.length);
   const insets = useSafeAreaInsets();
   const checklist = useAppStore((s) => s.checklist);
   const showToast = useAppStore((s) => s.showToast);
@@ -35,6 +39,15 @@ export function LeaveBar({ onHeight }: { onHeight: (height: number) => void }) {
       onLayout={(e) => onHeight(e.nativeEvent.layout.height)}
     >
       <Pressable
+        style={({ pressed }) => [styles.memoButton, pressed && styles.pressed]}
+        onPress={onMemo}
+        accessibilityRole="button"
+        accessibilityLabel={memoCount > 0 ? `메모 ${memoCount}개 — 열어서 보거나 새로 적기` : '메모 적기'}
+      >
+        <NotebookPen size={20} color={Role.actionText} />
+        <Text style={styles.memoLabel}>{memoCount > 0 ? `메모 ${memoCount}` : '메모'}</Text>
+      </Pressable>
+      <Pressable
         style={({ pressed }) => [styles.button, pressed && styles.pressed]}
         onPress={handleLeave}
         disabled={leaving}
@@ -56,10 +69,27 @@ const useStyles = makeStyles(({ Role, Shadow }) => ({
     bottom: 0,
     paddingTop: Space.md,
     paddingHorizontal: Space.xl,
+    flexDirection: 'row',
+    gap: Space.sm,
     backgroundColor: Role.bg,
     ...Shadow.floating,
   },
+  memoButton: {
+    width: 64,
+    minHeight: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    borderRadius: Radius.lg,
+    backgroundColor: Role.actionSoft,
+  },
+  memoLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+    color: Role.actionText,
+  },
   button: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
