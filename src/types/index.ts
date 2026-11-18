@@ -104,6 +104,9 @@ export type AlertPreference = 'minimal' | 'normal' | 'frequent';
 // 주 이동수단 — 자차는 우산 기준 완화, 도보·자전거는 체감온도를 더 극단으로 본다.
 export type CommuteMode = 'transit' | 'walk' | 'car';
 
+// 알림 말투 — 캐릭터 문구 세트 또는 직접 쓴 문장 (constants/alertVoices.ts)
+export type AlertVoiceId = 'basic' | 'secretary' | 'friend' | 'mom' | 'custom';
+
 export interface UserSettings {
   departureTime: string;    // "HH:mm" 형식
   // 자기 전 정리 시각 "HH:mm" — 착장 피드백 + 내일 준비 알림 하나가 여기서 울린다
@@ -131,6 +134,8 @@ export interface UserSettings {
                                    // (같은 라벨이 여러 목적에 중복 등장해서 목적별로 구분 필요)
   customKeywords: Partial<Record<PurposeId, string[]>>; // 목적 자동감지에 추가할 사용자 키워드
   mapApp: MapApp; // [길찾기]를 넘길 지도 앱
+  alertVoice: AlertVoiceId;   // 알림 말투
+  customAlertText: string;    // 직접 쓴 알림 문장 — 빈칸 {물건} {개수} {출발}
   updatedAt?: number; // 동기화 충돌 해결용 — userSettings를 바꾸는 모든 경로가 갱신한다
 }
 

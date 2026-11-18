@@ -30,6 +30,7 @@ import { TimeInput } from '../components/TimeInput';
 import { PersonalizeModal } from '../components/PersonalizeModal';
 import { DiagnosticsModal } from '../components/DiagnosticsModal';
 import { ChoiceList } from '../components/ChoiceList';
+import { AlertVoiceSettings } from '../components/AlertVoiceSettings';
 import { Toast } from '../components/Toast';
 import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
 import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
@@ -379,6 +380,8 @@ export function SettingsScreen() {
           </View>
           <SettingSwitch value={awayPlaceOn} onValueChange={handleAwayPlaceToggle} disabled={!isMotionSupported()} accessibilityLabel="집 밖에서 떠날 때 알림" />
         </View>
+
+        <AlertVoiceSettings titleStyle={styles.sectionTitle} onMessage={(text) => showToast(text)} />
 
         <Text style={styles.groupTitle} accessibilityRole="header">내 체크리스트</Text>
         <Text style={styles.sectionTitle}>내 루틴</Text>

@@ -8,6 +8,7 @@ import { PURPOSES, findMatchingEvent, purposeItemKey } from '../constants/purpos
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getFeedbackOutingDate, getTodayString } from '../utils/time';
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
+import { CUSTOM_TEXT_MAX } from '../constants/alertVoices';
 import { isOneOff, isRoutineActiveOn, pruneExpiredOneOffs } from '../utils/routines';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { ManualPurpose, isManualPurposeToday, restoredPurposeState } from './manualPurpose';
@@ -23,6 +24,7 @@ import type {
   CurrentWeather,
   FeedbackRecord,
   AlertPreference,
+  AlertVoiceId,
   CommuteMode,
   FeedbackType,
   ForgottenRecord,
@@ -136,6 +138,8 @@ interface AppActions {
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   setMapApp: (app: MapApp) => void;
+  setAlertVoice: (voice: AlertVoiceId) => void;
+  setCustomAlertText: (text: string) => void;
   completeOnboarding: () => void;
   ensureOnboardedDate: () => void;
   setWeatherItemEnabled: (label: string, enabled: boolean) => void;
@@ -321,6 +325,8 @@ const defaultState: AppState = {
     disabledPurposeItems: [],
     customKeywords: {},
     mapApp: 'kakao',
+    alertVoice: 'basic',
+    customAlertText: '',
   },
 
   feedbackHistory: [],
@@ -704,6 +710,9 @@ export const useAppStore = create<AppStore>()(
 
       setSensitivity: (level) => set((state) => patchSettings(state, { sensitivityLevel: level })),
       setMapApp: (app) => set((state) => patchSettings(state, { mapApp: app })),
+      setAlertVoice: (voice) => set((state) => patchSettings(state, { alertVoice: voice })),
+      setCustomAlertText: (text) =>
+        set((state) => patchSettings(state, { customAlertText: text.slice(0, CUSTOM_TEXT_MAX) })),
 
       completeOnboarding: () => set((state) => patchSettings(state, { onboarded: true, onboardedDate: getTodayString() })),
       ensureOnboardedDate: () => set((state) =>

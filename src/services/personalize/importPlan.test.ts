@@ -16,7 +16,7 @@ const settings: UserSettings = {
   disabledWeatherItems: [],
   disabledPurposeItems: [],
   customKeywords: { workout: ['PT'] },
-  mapApp: 'kakao',
+  mapApp: 'kakao', alertVoice: 'basic', customAlertText: '',
 };
 
 const routine = (label: string): ChecklistItem => ({

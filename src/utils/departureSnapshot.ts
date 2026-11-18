@@ -11,6 +11,7 @@ export interface DepartureSnapshot {
   title: string;  // "08:15 출발"
   detail: string; // "우산 · 노트북 외 2개" | "준비 완료"
   remaining: number;
+  labels?: string[]; // detail에 이름이 나온 안 챙긴 물건 (급한 순) — 알림 말투의 {물건}
 }
 
 // 날씨 항목이 가장 급하다 — 오늘만 필요하고, 평소 루틴과 달라서 잊기 쉽다.
@@ -39,7 +40,7 @@ export function buildDepartureSnapshot(
   else if (unchecked.length === 0) detail = '준비 완료';
   else detail = shown.join(' · ') + (rest > 0 ? ` 외 ${rest}개` : '');
 
-  return { date: today, title: `${departureTime} 출발`, detail, remaining: unchecked.length };
+  return { date: today, title: `${departureTime} 출발`, detail, remaining: unchecked.length, labels: shown };
 }
 
 export const STALE_DEPARTURE_DETAIL = '오늘 챙길 것을 확인하세요';

@@ -9,6 +9,8 @@ import notifee, {
 import { DEPARTURE_WINDOW_MS, getDepartureWindowRemainingMs, getNextAlertDate, toDateString } from '@/utils/time';
 import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { ChecklistItem } from '@/types';
+import { renderAlert, type AlertKind, type AlertVars } from '@/constants/alertVoices';
+import { useAppStore } from '@/store';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
 const CHANNEL_CHECKLIST = 'ahmatda-checklist';
@@ -36,6 +38,29 @@ function departureBody(detail: string): string {
   return `출발 30분 전 · ${detail}`;
 }
 
+// 지금 고른 알림 말투로 제목·첫 줄을 만든다 (constants/alertVoices.ts).
+// 백그라운드에서 불려도 호출하는 쪽이 이미 store를 읽고 있어 복원된 뒤다.
+function voiceText(kind: AlertKind, vars: Omit<AlertVars, 'departureTime'>) {
+  const s = useAppStore.getState().userSettings;
+  return renderAlert(kind, s.alertVoice, s.customAlertText, { ...vars, departureTime: s.departureTime });
+}
+
+// 말투 서명 — 예약 알림은 예약할 때 문구가 고정되므로, 말투가 바뀌면 다시 예약해야 한다.
+function voiceSignature(): string {
+  const s = useAppStore.getState().userSettings;
+  return `${s.alertVoice}|${s.customAlertText}`;
+}
+
+function itemList(items: ChecklistItem[], max = 3): string {
+  const labels = items.slice(0, max).map((i) => `· ${i.label}`).join('\n');
+  const extra  = items.length > max ? `\n외 ${items.length - max}개` : '';
+  return `${labels}${extra}`;
+}
+
+function withLead(lead: string | null, body: string): string {
+  return lead ? `${lead}\n${body}` : body;
+}
+
 // 자기 전 정리 — 날짜별 한 번짜리 알림 (scheduleNightlyChecks)
 export interface NightlyEntry {
   at: Date;
@@ -57,6 +82,7 @@ export function isNightlyCheckId(id: string | undefined): boolean {
 }
 
 function nightlyContent(entry: NightlyEntry, departureTime: string) {
+  const noItems = { items: [], count: 0 };
   const android = {
     channelId:   CHANNEL_REMINDER,
     // 본문을 누르면 다음 외출 준비 미리보기가 열린다 (TomorrowPreviewModal)
@@ -65,7 +91,7 @@ function nightlyContent(entry: NightlyEntry, departureTime: string) {
   if (entry.variant === 'preview') {
     return {
       id:    nightlyId(entry),
-      title: '다음 외출에 챙길 게 있어요',
+      title: voiceText('nightlyPreview', noItems).title,
       body:  `${departureTime} 출발 · ${entry.highlight ?? '눌러서 미리 확인해 보세요'}`,
       android,
     };
@@ -73,7 +99,7 @@ function nightlyContent(entry: NightlyEntry, departureTime: string) {
   const extra = entry.highlight ? `\n다음 외출: ${entry.highlight}` : '';
   return {
     id:    nightlyId(entry),
-    title: '아맞다 — 오늘 하루 어땠나요?',
+    title: voiceText('nightly', noItems).title,
     body:  `착장 피드백을 남기고, ${departureTime} 출발 전에 챙길 것도 미리 봐두세요.${extra}`,
     android: {
       ...android,
@@ -145,6 +171,11 @@ export const NotificationService = {
     // 출발 시각에서 역산한다. getNextAlertDate 주석 참고.
     const target = getNextAlertDate(departureTime);
     const content = departureAlertContent(snapshot, toDateString(target));
+    // 울릴 날의 목록을 아직 모르면(내일 예약) 물건을 말하지 않는다.
+    const fresh = snapshot.date === toDateString(target);
+    const title = voiceText('departure', fresh
+      ? { items: snapshot.labels ?? [], count: snapshot.remaining }
+      : { items: [], count: 0 }).title;
 
     const trigger: TimestampTrigger = {
       type:            TriggerType.TIMESTAMP,
@@ -157,7 +188,7 @@ export const NotificationService = {
     await notifee.createTriggerNotification(
       {
         id:      DEPARTURE_ALERT_ID,
-        title:   '아맞다 🎒',
+        title,
         body:    departureBody(content.detail),
         android: {
           channelId:     CHANNEL_CHECKLIST,
@@ -193,7 +224,7 @@ export const NotificationService = {
 
     await notifee.displayNotification({
       id:    DEPARTURE_ALERT_ID,
-      title: '아맞다 🎒',
+      title: voiceText('departure', { items: snapshot.labels ?? [], count: snapshot.remaining }).title,
       body:  departureBody(snapshot.detail),
       android: {
         channelId:     CHANNEL_CHECKLIST,
@@ -221,15 +252,12 @@ export const NotificationService = {
   // [떠나기]를 눌렀는데 남은 게 있을 때 — 헤드업으로 한 번 보여주고 10분 뒤 사라진다.
   // [다 챙겼어요]를 누르면 전부 체크되고, 그러면 외출 감지 긴급 알림도 자연히 안 나간다.
   async showLastCheck(unchecked: ChecklistItem[]): Promise<void> {
-    const labels = unchecked.slice(0, LAST_CHECK_MAX_LABELS).map((i) => `· ${i.label}`).join('\n');
-    const extra  = unchecked.length > LAST_CHECK_MAX_LABELS
-      ? `\n외 ${unchecked.length - LAST_CHECK_MAX_LABELS}개`
-      : '';
+    const text = voiceText('lastCheck', { items: unchecked.map((i) => i.label), count: unchecked.length });
 
     await notifee.displayNotification({
       id:    LAST_CHECK_ID,
-      title: `나가기 전에 ${unchecked.length}개 남았어요`,
-      body:  `${labels}${extra}`,
+      title: text.title,
+      body:  withLead(text.lead, itemList(unchecked, LAST_CHECK_MAX_LABELS)),
       android: {
         channelId:    CHANNEL_CHECKLIST,
         importance:   AndroidImportance.HIGH,
@@ -260,7 +288,7 @@ export const NotificationService = {
   //   skip    — 예약하지 않음
   async scheduleNightlyChecks(entries: NightlyEntry[], departureTime: string): Promise<void> {
     const wanted = entries.filter((e) => e.variant !== 'skip');
-    const signature = JSON.stringify([departureTime, entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat])]);
+    const signature = JSON.stringify([departureTime, voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat])]);
 
     const existing = await notifee.getTriggerNotificationIds();
     const wantedIds = new Set(wanted.map((e) => nightlyId(e)));
@@ -289,12 +317,11 @@ export const NotificationService = {
 
   // 긴급 알림 — Wi-Fi 이탈 시 미체크 항목 경고
   async triggerUrgentAlert(uncheckedItems: ChecklistItem[]): Promise<void> {
-    const itemLabels  = uncheckedItems.slice(0, 3).map(i => `· ${i.label}`).join('\n');
-    const extraCount  = uncheckedItems.length > 3 ? `\n외 ${uncheckedItems.length - 3}개` : '';
+    const text = voiceText('urgent', { items: uncheckedItems.map((i) => i.label), count: uncheckedItems.length });
 
     await notifee.displayNotification({
-      title:   '아 맞다! 🚨',
-      body:    `아직 안 챙긴 것이 있어요:\n${itemLabels}${extraCount}`,
+      title:   text.title,
+      body:    withLead(text.lead, itemList(uncheckedItems)),
       android: {
         channelId:   CHANNEL_CHECKLIST,
         importance:  AndroidImportance.HIGH,
@@ -305,16 +332,31 @@ export const NotificationService = {
     });
   },
 
+  // 설정의 [미리 받아 보기] — 고른 말투로 "아 맞다" 알림이 어떻게 오는지 실제 알림으로 보여준다.
+  async previewVoice(): Promise<void> {
+    const sample = ['우산', '노트북', '충전기'];
+    const text = voiceText('urgent', { items: sample, count: sample.length });
+    await notifee.displayNotification({
+      id:    'voice-preview',
+      title: text.title,
+      body:  withLead(text.lead, itemList(sample.map((label) => ({ label }) as ChecklistItem))),
+      android: {
+        channelId:    CHANNEL_CHECKLIST,
+        pressAction:  { id: 'default' },
+        timeoutAfter: 60 * 1000,
+      },
+    });
+  },
+
   // 집 밖 장소에서 머물다 떠날 때 — 아침에 챙긴 것 중 꺼내 쓰는 물건 (docs/외출-감지-재설계.md 4장).
   // 긴급 알림보다 한 단계 부드럽게: 진동 짧게, 같은 id라 새로 오면 앞의 것을 대신한다.
   async triggerPlaceLeaveAlert(items: ChecklistItem[]): Promise<void> {
-    const labels = items.slice(0, 3).map(i => `· ${i.label}`).join('\n');
-    const extra  = items.length > 3 ? `\n외 ${items.length - 3}개` : '';
+    const text = voiceText('placeLeave', { items: items.map((i) => i.label), count: items.length });
 
     await notifee.displayNotification({
       id:    'place-leave',
-      title: '두고 가는 거 없나요? 👀',
-      body:  `여기서 꺼내 쓴 물건 챙기셨나요?\n${labels}${extra}`,
+      title: text.title,
+      body:  withLead(text.lead, itemList(items)),
       android: {
         channelId:   CHANNEL_CHECKLIST,
         importance:  AndroidImportance.HIGH,

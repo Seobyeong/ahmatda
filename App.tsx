@@ -127,6 +127,8 @@ export default function App() {
     userSettings.onboarded, userSettings.departureTime, userSettings.nightlyCheckTime, userSettings.alertPreference,
     userSettings.disabledWeatherItems, userSettings.disabledPurposeItems, userSettings.customKeywords,
     userSettings.commuteMode, permanentRoutines,
+    // 알림 말투가 바뀌면 예약된 정리 알림 문구도 바꾼다.
+    userSettings.alertVoice, userSettings.customAlertText,
   ]);
 
   useEffect(() => {
@@ -150,7 +152,8 @@ export default function App() {
     if (userSettings.alertPreference === 'minimal') return;
     NotificationService.scheduleDepartureAlert(userSettings.departureTime, snapshot);
     NotificationService.updateDepartureStatus(userSettings.departureTime, snapshot);
-  }, [userSettings.onboarded, userSettings.departureTime, userSettings.alertPreference, snapshotJson]);
+  }, [userSettings.onboarded, userSettings.departureTime, userSettings.alertPreference, snapshotJson,
+      userSettings.alertVoice, userSettings.customAlertText]);
 
   useEffect(() => {
     // "필요할 때만"으로 바꾸면 이미 잡힌 출발 알림 예약과 떠 있는 것을 내린다.
