@@ -62,3 +62,13 @@ modules/*/android/build/
 
 # 문서·과제 자료는 로컬에만 둔다 (GitHub에 올리지 않음)
 docs/
+# 앱 실행에 필요 없는 파일은 로컬에만 둔다
+.claude/
+AGENTS.md
+CLAUDE.md
+R.I.D Process.png
+legal/
+scripts/
+LICENSE
+*.jpg
+*.zip
