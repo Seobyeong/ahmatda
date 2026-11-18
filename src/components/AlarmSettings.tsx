@@ -6,6 +6,7 @@ import { TimeInput } from './TimeInput';
 import { Button } from './ui';
 import { useAppStore } from '../store';
 import { NotificationService } from '../services/notification/NotificationService';
+import { AlarmService } from '../services/alarm/AlarmService';
 import { describeDays, describeWhen, nextRing, type Alarm } from '../utils/alarms';
 import { canUseFullScreenIntent, openFullScreenIntentSettings } from '../../modules/ahmatda-alarm';
 
@@ -118,6 +119,7 @@ function AlarmRow({ alarm, onRemove }: { alarm: Alarm; onRemove: () => void }) {
             <TimeInput value={timeDraft} onChange={setTimeDraft} compact autoFocus />
             <Pressable
               onPress={() => {
+                if (timeDraft !== alarm.time) AlarmService.cancelSnooze(alarm.id).catch(() => {});
                 updateAlarm(alarm.id, { time: timeDraft, enabled: true });
                 setTimeDraft(null);
               }}
@@ -136,7 +138,11 @@ function AlarmRow({ alarm, onRemove }: { alarm: Alarm; onRemove: () => void }) {
         <View style={styles.cardTopRight}>
           <Switch
             value={alarm.enabled}
-            onValueChange={(enabled) => updateAlarm(alarm.id, { enabled })}
+            onValueChange={(enabled) => {
+              // 끈 알람의 다시 울림이 5분 뒤 울리면 안 된다
+              if (!enabled) AlarmService.cancelSnooze(alarm.id).catch(() => {});
+              updateAlarm(alarm.id, { enabled });
+            }}
             trackColor={{ false: Colors.slate200, true: Colors.indigo600 }}
             thumbColor={Colors.onColor}
             accessibilityLabel={`${alarm.time} 알람 켜기`}

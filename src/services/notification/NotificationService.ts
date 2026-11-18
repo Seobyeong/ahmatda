@@ -188,7 +188,16 @@ export const NotificationService = {
   },
 
   async _scheduleDepartureAlert(schedule: DepartureSchedule, snapshot: DepartureSnapshot): Promise<void> {
-    const plan = planDepartureAlerts(schedule, new Date());
+    // 오늘 목록이 실리는 예약은 한 번짜리로 따로 건다 — 매주 반복 예약에 오늘 물건 이름을 실으면
+    // 다음 주 그 요일(앱을 안 열었다면)에 지난주 물건을 말한다. 그 요일의 반복은 다음 주부터 일반 문구로.
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const plan = planDepartureAlerts(schedule, new Date()).flatMap((p) => {
+      if (!p.weekly || snapshot.date !== toDateString(p.departure)) return [p];
+      return [
+        { ...p, id: `${DEPARTURE_ALERT_PREFIX}-today`, weekly: false },
+        { ...p, alertAt: new Date(p.alertAt.getTime() + WEEK_MS), departure: new Date(p.departure.getTime() + WEEK_MS) },
+      ];
+    });
     const wanted = new Set(plan.map((p) => p.id));
 
     // 계획에서 빠진 예약(쉬는 날로 바꾼 요일, 지난 '오늘만', 예전의 매일 반복 하나짜리)을 지운다.
@@ -438,7 +447,7 @@ export async function handleNotificationEvent(
     if (type === EventType.ACTION_PRESS && actionId === 'alarm-snooze') {
       await AlarmService.snooze(notificationId!, detail.notification?.data);
     } else if (type === EventType.ACTION_PRESS && actionId === 'alarm-dismiss') {
-      await AlarmService.dismiss(notificationId!);
+      await AlarmService.dismiss(notificationId!, detail.notification?.data);
     } else if (type === EventType.DELIVERED || type === EventType.PRESS) {
       AlarmService.onRing(detail.notification);
     }

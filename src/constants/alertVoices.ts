@@ -121,9 +121,10 @@ const ITEM_NAMES_MAX = 2;
 function fill(template: string, vars: AlertVars): string {
   const names = vars.items.slice(0, ITEM_NAMES_MAX).join(', ');
   return template
-    .replace(/\{물건\}/g, names)
-    .replace(/\{개수\}/g, String(vars.count))
-    .replace(/\{출발\}/g, vars.departureTime)
+    // 바꿀 값을 함수로 넘긴다 — 문자열로 넘기면 물건 이름의 "$$"·"$&" 같은 글자가 특수 기호로 풀린다.
+    .replace(/\{물건\}/g, () => names)
+    .replace(/\{개수\}/g, () => String(vars.count))
+    .replace(/\{출발\}/g, () => vars.departureTime)
     .trim();
 }
 

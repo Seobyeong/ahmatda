@@ -42,3 +42,10 @@ describe('renderAlert — 직접 쓰기', () => {
     expect(renderAlert('urgent', 'custom', '  ', vars).title).toBe('아 맞다! 🚨');
   });
 });
+
+describe('renderAlert — 특수 문자', () => {
+  it('물건 이름의 $ 기호를 그대로 둔다', () => {
+    const v = { items: ['$$ 현금', "a$&b"], count: 2, departureTime: '08:30' };
+    expect(renderAlert('urgent', 'custom', '{물건} 챙겼어?', v).title).toBe("$$ 현금, a$&b 챙겼어?");
+  });
+});

@@ -109,7 +109,7 @@ export default function App() {
     whenHydrated().then(() => AlarmService.checkRinging()).catch(() => {});
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        AlarmService.checkRinging().catch(() => {});
+        whenHydrated().then(() => AlarmService.checkRinging()).catch(() => {});
         syncWalkingDetection();
         HomeGeofence.sync();
         AwayPlaceService.tick();
@@ -181,7 +181,9 @@ export default function App() {
 
   useEffect(() => {
     // 알람 목록이 바뀌면(추가·수정·끄기·삭제) 예약을 맞춘다. 온보딩과 무관하다.
-    whenHydrated().then(() => AlarmService.sync(alarms)).catch(() => {});
+    // 복원이 끝난 뒤의 목록으로 맞춘다 — 첫 렌더의 alarms는 복원 전 기본값(빈 목록)이라, 그대로 쓰면
+    // 앱을 켤 때마다 모든 알람·다시 울림 예약을 지워 버린다.
+    whenHydrated().then(() => AlarmService.sync(useAppStore.getState().alarms)).catch(() => {});
   }, [alarms]);
 
   useEffect(() => {

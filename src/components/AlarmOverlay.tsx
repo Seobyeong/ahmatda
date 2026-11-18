@@ -20,13 +20,20 @@ export function AlarmOverlay() {
   const weather = useAppStore((s) => s.currentWeather);
   const checklist = useAppStore((s) => s.checklist);
   const [now, setNow] = useState(() => new Date());
+  const [snoozeFailed, setSnoozeFailed] = useState(false);
 
   const visible = ringing !== null;
 
   useEffect(() => {
     if (!visible) return;
     setShowOverLock(true);
-    const timer = setInterval(() => setNow(new Date()), 10_000);
+    setSnoozeFailed(false);
+    // 10초마다 시계를 넘기고, 알림이 이미 사라졌는지(10분 시간 초과·알림 쪽에서 끔) 본다 —
+    // 사라졌으면 창을 닫아 잠금화면 위 표시와 화면 켜짐을 푼다.
+    const timer = setInterval(() => {
+      setNow(new Date());
+      AlarmService.checkRinging().catch(() => {});
+    }, 10_000);
     setNow(new Date());
     return () => {
       clearInterval(timer);
@@ -61,9 +68,12 @@ export function AlarmOverlay() {
         </View>
 
         <View style={styles.buttons}>
+          {snoozeFailed ? (
+            <Text style={styles.failText}>다시 울림을 예약하지 못했어요. 알람이 계속 울려요 — 끄려면 [끄기]를 눌러 주세요.</Text>
+          ) : null}
           <Pressable
             style={({ pressed }) => [styles.snooze, pressed && styles.pressed]}
-            onPress={() => AlarmService.snooze(ringing.notificationId, alarm ? { alarmId: alarm.id, time: alarm.time, label: alarm.label } : { alarmId: ringing.alarmId })}
+            onPress={async () => setSnoozeFailed(!(await AlarmService.snoozeAll()))}
             accessibilityRole="button"
             accessibilityLabel="5분 뒤 다시 울리기"
           >
@@ -71,7 +81,7 @@ export function AlarmOverlay() {
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.dismiss, pressed && styles.pressed]}
-            onPress={() => AlarmService.dismiss(ringing.notificationId)}
+            onPress={() => AlarmService.dismissAll()}
             accessibilityRole="button"
             accessibilityLabel="알람 끄기"
           >
@@ -135,6 +145,11 @@ const useStyles = makeStyles(({ Role }) => ({
   },
   buttons: {
     gap: Space.md,
+  },
+  failText: {
+    fontSize: FontSize.label,
+    color: Role.danger,
+    textAlign: 'center',
   },
   snooze: {
     minHeight: 56,
