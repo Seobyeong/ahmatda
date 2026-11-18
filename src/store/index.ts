@@ -9,6 +9,7 @@ import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getFeedbackOutingDate, getTodayString } from '../utils/time';
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
 import { CUSTOM_TEXT_MAX } from '../constants/alertVoices';
+import type { Alarm } from '../utils/alarms';
 import { isOneOff, isRoutineActiveOn, pruneExpiredOneOffs } from '../utils/routines';
 import { migrateV0toV1, migrateV1toV2, seedUpdatedAt } from './migrations';
 import { ManualPurpose, isManualPurposeToday, restoredPurposeState } from './manualPurpose';
@@ -74,6 +75,11 @@ interface AppState {
   // 빠른 메모 — 체크리스트와 따로 노는 메모장. 날이 바뀌어도 지울 때까지 남는다. 최신이 앞.
   memos: Memo[];
 
+  // 기상·부가 알람 (utils/alarms.ts). 예약은 App.tsx가 이 목록이 바뀔 때 AlarmService.sync로 맞춘다.
+  alarms: Alarm[];
+  // 지금 울리는 알람 — 알람 창(AlarmOverlay)을 띄운다. 화면 상태라 복원하지 않는다(merge에서 비움).
+  ringingAlarm: RingingAlarm | null;
+
   // UI 상태
   statusDismissed: boolean;
   toast: string | null;
@@ -86,6 +92,11 @@ interface AppState {
 export interface ToastAction {
   label: string;
   onPress: () => void;
+}
+
+export interface RingingAlarm {
+  notificationId: string;
+  alarmId: string;
 }
 
 export interface Memo {
@@ -110,6 +121,11 @@ interface AppActions {
   // 메모 — 빈 글이면 false
   addMemo: (text: string) => boolean;
   deleteMemo: (id: string) => Undo;
+  // 알람
+  addAlarm: (alarm: Omit<Alarm, 'id'>) => void;
+  updateAlarm: (id: string, patch: Partial<Omit<Alarm, 'id'>>) => void;
+  removeAlarm: (id: string) => Undo;
+  setRingingAlarm: (ringing: RingingAlarm | null) => void;
   addPermanentRoutine: (label: string) => boolean;
   addOneOffItem: (label: string, date: string) => void;
   // 삭제는 되돌리는 함수를 돌려준다 — ✕ 한 번에 루틴이 영구 삭제되므로 화면이 "되돌리기"를 건다.
@@ -348,6 +364,9 @@ const defaultState: AppState = {
 
   memos: [],
 
+  alarms: [],
+  ringingAlarm: null,
+
   statusDismissed: false,
   toast: null,
   toastAction: null,
@@ -377,6 +396,28 @@ export const useAppStore = create<AppStore>()(
         set((state) => ({
           checklist: state.checklist.map((item) => ({ ...item, checked: false })),
         })),
+
+      addAlarm: (alarm) =>
+        set((state) => ({ alarms: [...state.alarms, { ...alarm, id: generateItemId() }] })),
+
+      updateAlarm: (id, patch) =>
+        set((state) => ({ alarms: state.alarms.map((a) => (a.id === id ? { ...a, ...patch } : a)) })),
+
+      removeAlarm: (id) => {
+        const index = get().alarms.findIndex((a) => a.id === id);
+        if (index < 0) return null;
+        const removed = get().alarms[index];
+        set((state) => ({ alarms: state.alarms.filter((a) => a.id !== id) }));
+        return () =>
+          set((state) => {
+            if (state.alarms.some((a) => a.id === removed.id)) return state;
+            const alarms = [...state.alarms];
+            alarms.splice(Math.min(index, alarms.length), 0, removed);
+            return { alarms };
+          });
+      },
+
+      setRingingAlarm: (ringing) => set({ ringingAlarm: ringing }),
 
       addMemo: (text) => {
         const trimmed = text.trim();
@@ -968,6 +1009,8 @@ export const useAppStore = create<AppStore>()(
           ...currentState,
           ...persisted,
           userSettings: { ...currentState.userSettings, ...persisted?.userSettings },
+          // 울리던 알람 창은 다시 띄우지 않는다 — 아직 울리고 있으면 App.tsx가 알림을 보고 다시 띄운다.
+          ringingAlarm: null,
           // 오늘 직접 고른 목적이면 되살린다. 복원 직후 체크리스트 재빌드가 목적 준비물을
           // 빼버리지 않게 merge 단계에서 바로 넣는다.
           ...restoredPurposeState(persisted?.manualPurpose, getTodayString()),

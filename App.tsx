@@ -19,6 +19,8 @@ import { addWalkingListener, syncWalkingDetection } from './modules/ahmatda-moti
 import { DepartureService } from '@/services/departure/DepartureService';
 import { NightlyService } from '@/services/nightly/NightlyService';
 import { OutingLog } from '@/services/nightly/outingLog';
+import { AlarmService } from '@/services/alarm/AlarmService';
+import { AlarmOverlay } from '@/components/AlarmOverlay';
 // 집 지오펜스 태스크 정의 — TaskManager.defineTask는 번들 최상위에서 돌아야 한다
 // (앱이 화면 없이 백그라운드로 깨어나도 태스크가 정의돼 있게). import만으로 정의된다.
 import { HomeGeofence } from '@/services/departure/homeGeofence';
@@ -34,6 +36,7 @@ export default function App() {
   const userSettings   = useAppStore(state => state.userSettings);
   // 자기 전 정리 알림의 "다음 외출: …" 한 줄이 이것들로 정해진다 — 바뀌면 다시 계획한다.
   const permanentRoutines = useAppStore(state => state.permanentRoutines);
+  const alarms = useAppStore(state => state.alarms);
   // 앱 밖 표시(출발 알림·잠금화면·홈 위젯)에 쓰이는 요약만 문자열로 구독한다 —
   // checklist 배열 전체를 구독하면 보이는 내용이 그대로여도(재빌드로 배열 identity만
   // 바뀌는 경우, 체크된 항목 삭제 등) 네이티브 알림 취소+재예약이 매번 일어난다.
@@ -60,8 +63,11 @@ export default function App() {
     // 집 지오펜스도 같은 이유로 맞춘다 (위치 '항상 허용'을 설정에서 켜고 돌아오는 경우).
     syncWalkingDetection();
     HomeGeofence.sync();
+    // 알람이 울리는 중에 앱이 열렸으면(잠금화면 전체 화면 · 알림 탭) 알람 창을 띄운다.
+    whenHydrated().then(() => AlarmService.checkRinging()).catch(() => {});
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        AlarmService.checkRinging().catch(() => {});
         syncWalkingDetection();
         HomeGeofence.sync();
         AwayPlaceService.tick();
@@ -132,6 +138,11 @@ export default function App() {
   ]);
 
   useEffect(() => {
+    // 알람 목록이 바뀌면(추가·수정·끄기·삭제) 예약을 맞춘다. 온보딩과 무관하다.
+    whenHydrated().then(() => AlarmService.sync(alarms)).catch(() => {});
+  }, [alarms]);
+
+  useEffect(() => {
     // 출발 알림 시각에 맞춰 백그라운드 확인 태스크 예약 — 정리 시각과는 무관해서 따로 둔다.
     if (!userSettings.onboarded) return;
     BackgroundTaskService.scheduleDepartureTask(userSettings.departureTime);
@@ -188,6 +199,7 @@ export default function App() {
         {/* 밝은 화면에선 어두운 글자, 어두운 화면에선 밝은 글자 */}
         <StatusBar style="auto" />
         <AppNavigator />
+        <AlarmOverlay />
       </SafeAreaProvider>
     </ErrorBoundary>
   );

@@ -11,6 +11,8 @@ import { departureAlertContent, type DepartureSnapshot } from '@/utils/departure
 import { ChecklistItem } from '@/types';
 import { renderAlert, type AlertKind, type AlertVars } from '@/constants/alertVoices';
 import { useAppStore } from '@/store';
+import { AlarmService } from '@/services/alarm/AlarmService';
+import { isAlarmNotificationId } from '@/utils/alarms';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
 const CHANNEL_CHECKLIST = 'ahmatda-checklist';
@@ -134,6 +136,7 @@ export const NotificationService = {
     // 착장 피드백은 자기 전 정리 알림(외출 확인 채널)으로 합쳐졌다. 옛 채널이 시스템
     // 알림 설정에 빈 항목으로 남지 않게 지운다 (없으면 아무 일도 안 한다).
     await notifee.deleteChannel(LEGACY_CHANNEL_FEEDBACK);
+    await AlarmService.setupChannel();
   },
 
   // 정확한 알람(SCHEDULE_EXACT_ALARM) 권한 상태 확인.
@@ -373,9 +376,25 @@ export const NotificationService = {
 // notifee.onBackgroundEvent(백그라운드) 양쪽에서 공유해서 쓴다.
 export async function handleNotificationEvent(
   type: number,
-  detail: { notification?: { id?: string }; pressAction?: { id?: string } }
+  detail: { notification?: { id?: string; data?: Record<string, unknown> }; pressAction?: { id?: string } }
 ): Promise<void> {
   const { EventType } = await import('@notifee/react-native');
+
+  // 알람 — 울리기 시작함 / 알람 알림 탭 / [5분 뒤]·[끄기]. 앱이 꺼진 채 눌러도 처리되게 복원을 기다린다.
+  const notificationId = detail.notification?.id;
+  if (isAlarmNotificationId(notificationId)) {
+    const { whenHydrated } = await import('@/store');
+    await whenHydrated();
+    const actionId = detail.pressAction?.id;
+    if (type === EventType.ACTION_PRESS && actionId === 'alarm-snooze') {
+      await AlarmService.snooze(notificationId!, detail.notification?.data);
+    } else if (type === EventType.ACTION_PRESS && actionId === 'alarm-dismiss') {
+      await AlarmService.dismiss(notificationId!);
+    } else if (type === EventType.DELIVERED || type === EventType.PRESS) {
+      AlarmService.onRing(detail.notification);
+    }
+    return;
+  }
 
   if (type === EventType.ACTION_PRESS) {
     const actionId = detail.pressAction?.id;

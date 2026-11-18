@@ -31,6 +31,7 @@ import { PersonalizeModal } from '../components/PersonalizeModal';
 import { DiagnosticsModal } from '../components/DiagnosticsModal';
 import { ChoiceList } from '../components/ChoiceList';
 import { AlertVoiceSettings } from '../components/AlertVoiceSettings';
+import { AlarmSettings } from '../components/AlarmSettings';
 import { Toast } from '../components/Toast';
 import { ALERT_PREFERENCE_CHOICES, COMMUTE_CHOICES, isAwayPlaceAlertOn } from '../constants/preferences';
 import { hasMotionPermission, isMotionSupported, requestMotionPermission, syncWalkingDetection } from '../../modules/ahmatda-motion';
@@ -382,6 +383,11 @@ export function SettingsScreen() {
         </View>
 
         <AlertVoiceSettings titleStyle={styles.sectionTitle} onMessage={(text) => showToast(text)} />
+
+        <AlarmSettings
+          titleStyle={styles.sectionTitle}
+          onMessage={(text, undo) => showToast(text, undo ? { label: '되돌리기', onPress: undo } : undefined)}
+        />
 
         <Text style={styles.groupTitle} accessibilityRole="header">내 체크리스트</Text>
         <Text style={styles.sectionTitle}>내 루틴</Text>

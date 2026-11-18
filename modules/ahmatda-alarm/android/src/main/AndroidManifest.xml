@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- 알람이 울릴 때 잠금화면 위로 알람 화면을 띄운다 (알림의 fullScreenAction).
+       Android 14+에서는 알람·통화 앱이 아니면 사용자가 설정에서 직접 허용해야 한다. -->
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+</manifest>
