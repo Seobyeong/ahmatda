@@ -31,6 +31,7 @@ import { PersonalizeModal } from '../components/PersonalizeModal';
 import { DiagnosticsModal } from '../components/DiagnosticsModal';
 import { ChoiceList } from '../components/ChoiceList';
 import { AlertVoiceSettings } from '../components/AlertVoiceSettings';
+import { AccentColorSettings } from '../components/AccentColorSettings';
 import { AlarmSettings } from '../components/AlarmSettings';
 import { WeekdaySchedule } from '../components/WeekdaySchedule';
 import { Toast } from '../components/Toast';
@@ -628,6 +629,9 @@ export function SettingsScreen() {
             </Pressable>
           )}
         </View>
+
+        <Text style={styles.groupTitle} accessibilityRole="header">화면</Text>
+        <AccentColorSettings titleStyle={styles.sectionTitle} descriptionStyle={styles.weatherDescription} />
 
         <Text style={styles.groupTitle} accessibilityRole="header">연결</Text>
         <View style={styles.row}>

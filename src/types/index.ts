@@ -107,6 +107,9 @@ export type CommuteMode = 'transit' | 'walk' | 'car';
 // 알림 말투 — 캐릭터 문구 세트 또는 직접 쓴 문장 (constants/alertVoices.ts)
 export type AlertVoiceId = 'basic' | 'secretary' | 'friend' | 'mom' | 'custom';
 
+// 앱 메인 색 — 버튼·링크처럼 누를 수 있는 것의 색 (constants/colors.ts ACCENTS)
+export type AccentId = 'indigo' | 'violet' | 'pink' | 'blue' | 'cyan' | 'slate';
+
 export interface UserSettings {
   departureTime: string;    // "HH:mm" 형식 — 기본 외출 시간 (요일 예외가 없는 날)
   // 요일 예외 — 키 '0'(일)~'6'(토), 값 "HH:mm" 또는 'off'(쉬는 날). 없는 요일은 기본 시간 (utils/schedule.ts)
@@ -138,6 +141,7 @@ export interface UserSettings {
   mapApp: MapApp; // [길찾기]를 넘길 지도 앱
   alertVoice: AlertVoiceId;   // 알림 말투
   customAlertText: string;    // 직접 쓴 알림 문장 — 빈칸 {물건} {개수} {출발}
+  accentColor: AccentId;      // 앱 메인 색
   updatedAt?: number; // 동기화 충돌 해결용 — userSettings를 바꾸는 모든 경로가 갱신한다
 }
 

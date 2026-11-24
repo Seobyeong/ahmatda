@@ -27,6 +27,7 @@ import type {
   FeedbackRecord,
   AlertPreference,
   AlertVoiceId,
+  AccentId,
   CommuteMode,
   FeedbackType,
   ForgottenRecord,
@@ -198,6 +199,7 @@ interface AppActions {
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
   setMapApp: (app: MapApp) => void;
   setAlertVoice: (voice: AlertVoiceId) => void;
+  setAccentColor: (accent: AccentId) => void;
   setCustomAlertText: (text: string) => void;
   completeOnboarding: () => void;
   ensureOnboardedDate: () => void;
@@ -387,6 +389,7 @@ const defaultState: AppState = {
     mapApp: 'kakao',
     alertVoice: 'basic',
     customAlertText: '',
+    accentColor: 'indigo',
   },
 
   feedbackHistory: [],
@@ -822,6 +825,7 @@ export const useAppStore = create<AppStore>()(
       setSensitivity: (level) => set((state) => patchSettings(state, { sensitivityLevel: level })),
       setMapApp: (app) => set((state) => patchSettings(state, { mapApp: app })),
       setAlertVoice: (voice) => set((state) => patchSettings(state, { alertVoice: voice })),
+      setAccentColor: (accent) => set((state) => patchSettings(state, { accentColor: accent })),
       setCustomAlertText: (text) =>
         set((state) => patchSettings(state, { customAlertText: text.slice(0, CUSTOM_TEXT_MAX) })),
 

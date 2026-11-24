@@ -1,13 +1,15 @@
 // 디자인 기준 — 글자 크기·간격·둥글기·그림자·색 역할을 한 곳에서 정한다.
 // 화면마다 숫자를 직접 쓰지 않고 여기 이름을 쓴다.
 //
-// 색은 기기의 밝은/어두운 화면 설정을 따른다. 화면에서는
+// 색은 기기의 밝은/어두운 화면 설정과 사용자가 고른 메인 색(설정 > 앱 색상)을 따른다. 화면에서는
 //   const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({ ... }));   // 파일 맨 아래
 //   const styles = useStyles();                                              // 컴포넌트 안
 //   const { Colors, Role } = useTheme();                                     // 아이콘 색처럼 스타일 밖에서 쓸 때
 // 로 받는다.
 import { StyleSheet, useColorScheme } from 'react-native';
-import { Palettes, buildPurposeColors, type Palette, type PurposeColorMap, type Scheme } from './colors';
+import { Palettes, buildPurposeColors, resolveAccent, withAccent, type Palette, type PurposeColorMap, type Scheme } from './colors';
+import { useAppStore } from '../store';
+import type { AccentId } from '../types';
 
 // 글자 크기는 여섯 단계만 쓴다. 가장 작은 글자가 12다 (11은 걸어가며 읽기 어렵다).
 export const FontSize = {
@@ -92,40 +94,66 @@ function buildRole(c: Palette) {
 
 export interface Theme {
   scheme: Scheme;
+  accent: AccentId;
   Colors: Palette;
   Role: ReturnType<typeof buildRole>;
   Shadow: ReturnType<typeof buildShadow>;
   PurposeColors: PurposeColorMap;
 }
 
-function buildTheme(scheme: Scheme): Theme {
-  const Colors = Palettes[scheme];
+function buildTheme(scheme: Scheme, accent: AccentId): Theme {
+  const Colors = withAccent(scheme, accent);
   return {
     scheme,
+    accent,
     Colors,
     Role: buildRole(Colors),
     Shadow: buildShadow(scheme),
-    PurposeColors: buildPurposeColors(Colors),
+    // 목적 색(출근=남색 등)은 메인 색과 상관없이 고정이다 — 메인 색을 따라가면
+    // 다른 목적의 색과 겹칠 수 있다.
+    PurposeColors: buildPurposeColors(Palettes[scheme]),
   };
 }
 
-const THEMES: Record<Scheme, Theme> = { light: buildTheme('light'), dark: buildTheme('dark') };
+type ThemeKey = `${Scheme}:${AccentId}`;
+const THEMES = new Map<ThemeKey, Theme>();
+
+function getTheme(scheme: Scheme, accent: AccentId): Theme {
+  const key: ThemeKey = `${scheme}:${accent}`;
+  let theme = THEMES.get(key);
+  if (!theme) {
+    theme = buildTheme(scheme, accent);
+    THEMES.set(key, theme);
+  }
+  return theme;
+}
 
 export function useScheme(): Scheme {
   return useColorScheme() === 'dark' ? 'dark' : 'light';
 }
 
-export function useTheme(): Theme {
-  return THEMES[useScheme()];
+export function useAccent(): AccentId {
+  return resolveAccent(useAppStore((s) => s.userSettings.accentColor));
 }
 
-// 스타일을 밝은/어두운 화면마다 한 번씩만 만든다. 돌려주는 훅은 지금 화면에 맞는 쪽을 준다.
+export function useTheme(): Theme {
+  return getTheme(useScheme(), useAccent());
+}
+
+// 스타일을 (밝은/어두운 화면 × 메인 색)마다 한 번씩만 만든다. 돌려주는 훅은 지금 화면에 맞는 쪽을 준다.
 export function makeStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
   factory: (theme: Theme) => T
 ): () => T {
-  const cache: Partial<Record<Scheme, T>> = {};
+  const cache = new Map<ThemeKey, T>();
   return () => {
     const scheme = useScheme();
-    return (cache[scheme] ??= StyleSheet.create(factory(THEMES[scheme])));
+    const accent = useAccent();
+    const key: ThemeKey = `${scheme}:${accent}`;
+    let styles = cache.get(key);
+    if (!styles) {
+      styles = StyleSheet.create(factory(getTheme(scheme, accent)));
+      cache.set(key, styles);
+    }
+    return styles;
   };
 }
