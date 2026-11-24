@@ -5,7 +5,8 @@ import type { CurrentWeather } from '@/types';
 // data.go.kr 계정 하나로 여러 API를 신청하면 보통 같은 디코딩 키를 재사용하므로,
 // 전용 키가 없으면 기상청 키를 그대로 시도해본다.
 const AIRKOREA_API_KEY =
-  process.env.EXPO_PUBLIC_AIRKOREA_API_KEY ?? process.env.EXPO_PUBLIC_KMA_API_KEY ?? '';
+  // .env에서 빈칸으로 둔 줄은 빈 문자열이라 ?? 로는 넘어가지 않는다 — || 로 빈칸도 "없음"으로 본다.
+  process.env.EXPO_PUBLIC_AIRKOREA_API_KEY || process.env.EXPO_PUBLIC_KMA_API_KEY || '';
 const AIRKOREA_BASE_URL = 'https://apis.data.go.kr/B552584/ArpltnInforInqireSvc';
 
 type DustLevel = CurrentWeather['dustLevel'];
