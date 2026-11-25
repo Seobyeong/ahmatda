@@ -172,6 +172,8 @@ interface AppActions {
   deleteItem: (id: string) => Undo;
   removePermanentRoutine: (id: string) => Undo;
   setRoutineDays: (id: string, days: number[] | undefined) => void;
+  // 꼭 챙김 켜기·끄기 — 오늘 목록의 항목 id로 받는다
+  setItemEssential: (id: string, essential: boolean) => void;
   buildChecklist: () => void;
   startNewDay: () => void;
 
@@ -275,6 +277,12 @@ function newRoutine(label: string, condition: Pick<ChecklistItem, 'days' | 'onDa
     ...condition,
     updatedAt: Date.now(),
   };
+}
+
+// 항목을 지울 때 꼭 챙김 이름도 거둘지 — 같은 이름의 루틴이 남아 있으면 그 루틴의 표시라 둔다.
+// 오늘만 항목은 이름 목록에 없던 것이다(항목에 직접 표시) — 같은 이름의 날씨·루틴 표시를 건드리지 않는다.
+function shouldDropEssential(item: ChecklistItem, essentialLabels: string[], remainingRoutines: ChecklistItem[]): boolean {
+  return !item.temp && essentialLabels.includes(item.label) && !remainingRoutines.some((r) => r.label === item.label);
 }
 
 // 지운 루틴을 원래 자리에 다시 넣는다 (이미 돌아와 있으면 그대로).
@@ -386,6 +394,7 @@ const defaultState: AppState = {
     disabledWeatherItems: [],
     disabledPurposeItems: [],
     customKeywords: {},
+    essentialLabels: [],
     mapApp: 'kakao',
     alertVoice: 'basic',
     customAlertText: '',
@@ -549,6 +558,13 @@ export const useAppStore = create<AppStore>()(
         // 되돌릴 때는 이번 삭제로 새로 꺼진 것만 다시 켠다.
         const newlyDisabledWeather = item.tier === 1 && !disabledWeatherItems.includes(item.label);
         const newlyDisabledPurpose = purposeKey !== null && !disabledPurposeItems.includes(purposeKey);
+        // 지운 항목의 꼭 챙김도 거둔다 — 남겨 두면 몇 달 뒤 같은 이름을 넣었을 때 묻지도 않고 꼭 챙김으로 뜬다.
+        const removedRoutineIds = new Set(removedRoutines.map(({ routine }) => routine.id));
+        const droppedEssential = shouldDropEssential(
+          item,
+          before.userSettings.essentialLabels,
+          before.permanentRoutines.filter((r) => !removedRoutineIds.has(r.id))
+        );
 
         // 한 번의 set으로 끝낸다 — set마다 구독자 알림과 persist 저장(전체 상태 직렬화)이
         // 따라붙어서, 나눠 부르면 항목 하나 지우는 데 저장이 세 번 일어난다.
@@ -559,11 +575,17 @@ export const useAppStore = create<AppStore>()(
             next.permanentRoutines = state.permanentRoutines.filter((routine) => !removedIds.has(routine.id));
             next.deletions = recordDeletions(state.deletions, 'routine', [...removedIds]);
           }
+          // 설정 변경은 patchSettings 한 번으로 — 따로 부르면 뒤의 것이 앞의 것을 덮는다.
+          const settings: Partial<UserSettings> = {};
           if (item.tier === 1) {
-            Object.assign(next, patchSettings(state, { disabledWeatherItems: appendUnique(state.userSettings.disabledWeatherItems, item.label) }));
+            settings.disabledWeatherItems = appendUnique(state.userSettings.disabledWeatherItems, item.label);
           } else if (purposeKey) {
-            Object.assign(next, patchSettings(state, { disabledPurposeItems: appendUnique(state.userSettings.disabledPurposeItems, purposeKey) }));
+            settings.disabledPurposeItems = appendUnique(state.userSettings.disabledPurposeItems, purposeKey);
           }
+          if (droppedEssential) {
+            settings.essentialLabels = state.userSettings.essentialLabels.filter((l) => l !== item.label);
+          }
+          Object.assign(next, patchSettings(state, settings));
           return next;
         });
 
@@ -580,11 +602,16 @@ export const useAppStore = create<AppStore>()(
               next.permanentRoutines = reinsertRoutines(state.permanentRoutines, removedRoutines);
               next.deletions = forgetDeletions(state.deletions, removedRoutines.map(({ routine }) => routine.id));
             }
+            const settings: Partial<UserSettings> = {};
             if (newlyDisabledWeather) {
-              Object.assign(next, patchSettings(state, { disabledWeatherItems: state.userSettings.disabledWeatherItems.filter((l) => l !== item.label) }));
+              settings.disabledWeatherItems = state.userSettings.disabledWeatherItems.filter((l) => l !== item.label);
             } else if (newlyDisabledPurpose) {
-              Object.assign(next, patchSettings(state, { disabledPurposeItems: state.userSettings.disabledPurposeItems.filter((k) => k !== purposeKey) }));
+              settings.disabledPurposeItems = state.userSettings.disabledPurposeItems.filter((k) => k !== purposeKey);
             }
+            if (droppedEssential) {
+              settings.essentialLabels = appendUnique(state.userSettings.essentialLabels, item.label);
+            }
+            Object.assign(next, patchSettings(state, settings));
             return next;
           });
       },
@@ -599,15 +626,26 @@ export const useAppStore = create<AppStore>()(
           (item) => item.permanent && item.label === routine.label && item.onDate === routine.onDate
         );
         const row = rowIndex >= 0 ? get().checklist[rowIndex] : null;
+        const droppedEssential = shouldDropEssential(
+          routine,
+          get().userSettings.essentialLabels,
+          get().permanentRoutines.filter((r) => r.id !== id)
+        );
         set((state) => ({
           permanentRoutines: state.permanentRoutines.filter((r) => r.id !== id),
           deletions: recordDeletions(state.deletions, 'routine', [id]),
+          ...(droppedEssential
+            ? patchSettings(state, { essentialLabels: state.userSettings.essentialLabels.filter((l) => l !== routine.label) })
+            : {}),
         }));
         return () =>
           set((state) => {
             const next: Partial<AppState> = {
               permanentRoutines: reinsertRoutines(state.permanentRoutines, [{ routine, index }]),
               deletions: forgetDeletions(state.deletions, [routine.id]),
+              ...(droppedEssential
+                ? patchSettings(state, { essentialLabels: appendUnique(state.userSettings.essentialLabels, routine.label) })
+                : {}),
             };
             if (row && !state.checklist.some((item) => item.label === row.label)) {
               const checklist = [...state.checklist];
@@ -628,6 +666,28 @@ export const useAppStore = create<AppStore>()(
               : routine
           ),
         })),
+
+      // 오늘만 항목은 그 항목에만 표시한다 — 하루짜리 이름을 설정에 영구히 쌓지 않는다.
+      // 나머지는 라벨로 기억해서 다음 조립(다음 날, 목적 변경)에도 이어진다.
+      setItemEssential: (id, essential) =>
+        set((state) => {
+          const item = state.checklist.find((i) => i.id === id);
+          if (!item || Boolean(item.essential) === essential) return {};
+          const checklist = state.checklist.map((i) => (i.id === id ? { ...i, essential } : i));
+          const labels = state.userSettings.essentialLabels;
+          if (item.temp) {
+            // 같은 이름의 루틴이 꼭 챙김이라 꼭 챙김으로 떠 있던 것을 끄면 그 이름도 거둔다 — 안 그러면 다시 조립될 때 되살아난다.
+            return essential || !labels.includes(item.label)
+              ? { checklist }
+              : { checklist, ...patchSettings(state, { essentialLabels: labels.filter((l) => l !== item.label) }) };
+          }
+          return {
+            checklist,
+            ...patchSettings(state, {
+              essentialLabels: essential ? appendUnique(labels, item.label) : labels.filter((l) => l !== item.label),
+            }),
+          };
+        }),
 
       buildChecklist: () => {
         const { currentWeather, weatherTimeline, purposeId, permanentRoutines, userSettings, checklist, checklistDate, forgottenHistory } = get();
@@ -739,7 +799,15 @@ export const useAppStore = create<AppStore>()(
             items.push({ ...routine, id: nextId(), checked: wasChecked.get(routine.label) ?? false });
           });
 
-        set({ checklist: items.map(withForgottenBadge), checklistDate: getTodayString() });
+        // 꼭 챙김 — 오늘만 항목은 자기 표시를 그대로 쓰고, 나머지는 라벨 목록에서 채운다.
+        const essentialLabels = new Set(userSettings.essentialLabels);
+        // 오늘만 항목이 같은 이름의 루틴을 가린 경우(이름이 겹치면 루틴은 빠진다) 루틴의 꼭 챙김을 이어받는다.
+        const withEssential = (item: ChecklistItem): ChecklistItem => {
+          if (!item.temp) return { ...item, essential: essentialLabels.has(item.label) };
+          return !item.essential && essentialLabels.has(item.label) ? { ...item, essential: true } : item;
+        };
+
+        set({ checklist: items.map((item) => withForgottenBadge(withEssential(item))), checklistDate: getTodayString() });
       },
 
       // 날짜가 바뀌었을 때 호출 — 체크리스트를 새로 빌드하고, 자정을 넘겨도 리셋되지

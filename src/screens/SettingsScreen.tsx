@@ -29,6 +29,7 @@ import { SensitivitySelector } from '../components/SensitivitySelector';
 import { TimeInput } from '../components/TimeInput';
 import { PersonalizeModal } from '../components/PersonalizeModal';
 import { DiagnosticsModal } from '../components/DiagnosticsModal';
+import { LostItemSheet } from '../components/LostItemSheet';
 import { ChoiceList } from '../components/ChoiceList';
 import { AlertVoiceSettings } from '../components/AlertVoiceSettings';
 import { AccentColorSettings } from '../components/AccentColorSettings';
@@ -195,6 +196,7 @@ export function SettingsScreen() {
   const [aiHasKey, setAiHasKey] = useState(false);
   const [aiKeyDraft, setAiKeyDraft] = useState('');
   const [personalizeVisible, setPersonalizeVisible] = useState(false);
+  const [lostVisible, setLostVisible] = useState(false);
   // 실기기 검증용 진단 화면 — "설정" 제목을 길게 눌러 연다 (docs/실기기-검증-가이드.md)
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
@@ -665,6 +667,17 @@ export function SettingsScreen() {
             })}
           </View>
         </View>
+
+        <View style={styles.row}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.rowLabel}>잃어버린 물건 찾기</Text>
+            <Text style={styles.weatherDescription}>경찰청 유실물 포털·서울 대중교통 분실물센터로 바로 가요</Text>
+          </View>
+          <Pressable onPress={() => setLostVisible(true)} hitSlop={LINK_HIT_SLOP} accessibilityRole="button" accessibilityLabel="잃어버린 물건 찾기 열기">
+            <Text style={styles.calendarSettingsLink}>열기</Text>
+          </Pressable>
+        </View>
+        <LostItemSheet visible={lostVisible} onClose={() => setLostVisible(false)} />
 
         <View style={styles.row}>
           <View style={styles.weatherTextArea}>

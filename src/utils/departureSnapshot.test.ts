@@ -29,6 +29,16 @@ describe('buildDepartureSnapshot', () => {
     expect(s.remaining).toBe(3);
   });
 
+  it('꼭 챙김 항목은 분류와 상관없이 맨 앞에 온다', () => {
+    const s = buildDepartureSnapshot(
+      [item('우산', 1), { ...item('혈압약', 3), essential: true }, item('노트북', 2)],
+      '08:15',
+      '2026-10-07'
+    );
+    expect(s.detail).toBe('혈압약 · 우산 외 1개');
+    expect(s.labels).toEqual(['혈압약', '우산']);
+  });
+
   it('체크한 항목은 빼고, 두 개 이하면 "외 N개"를 붙이지 않는다', () => {
     const s = buildDepartureSnapshot(
       [item('우산', 1, true), item('지갑', 3), item('충전기', 2)],

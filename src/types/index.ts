@@ -31,6 +31,9 @@ export interface ChecklistItem {
   permanent: boolean;  // 영구 루틴 항목
   days?: number[];     // 루틴이 나타날 요일 (0=일 ~ 6=토). 없으면 매일
   onDate?: string;     // "YYYY-MM-DD" — 특정 날짜 1회 (docs/체크리스트-항목-속성.md 2.3). 지나면 정리
+  // 꼭 챙김 (docs/체크리스트-항목-속성.md 2.2) — 알림·위젯에서 맨 앞에 온다.
+  // 오늘만(tier 0) 항목은 여기에 직접 저장하고, 나머지는 조립 때 userSettings.essentialLabels에서 채운다.
+  essential?: boolean;
   // 동기화 충돌 해결(last-write-wins)용 수정 시각. permanentRoutines처럼 사용자가
   // 직접 만들고 고치는 항목에만 의미가 있고, tier 1·2 항목은 매 빌드마다 새로
   // 생성되는 파생 데이터라 설정하지 않는다.
@@ -138,6 +141,9 @@ export interface UserSettings {
   disabledPurposeItems: string[]; // 사용자가 영구적으로 끈 목적별 준비물 — "purposeId:라벨" 형식
                                    // (같은 라벨이 여러 목적에 중복 등장해서 목적별로 구분 필요)
   customKeywords: Partial<Record<PurposeId, string[]>>; // 목적 자동감지에 추가할 사용자 키워드
+  // 꼭 챙김 항목 라벨 — 날씨·목적·루틴 항목 공통. 체크 상태·놓침 기록처럼 라벨 기준이라
+  // 날씨 '우산'을 꼭 챙김으로 두면 우산이 뜨는 날마다 꼭 챙김이다. (오늘만 항목은 항목에 직접 저장)
+  essentialLabels: string[];
   mapApp: MapApp; // [길찾기]를 넘길 지도 앱
   alertVoice: AlertVoiceId;   // 알림 말투
   customAlertText: string;    // 직접 쓴 알림 문장 — 빈칸 {물건} {개수} {출발}

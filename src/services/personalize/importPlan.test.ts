@@ -16,6 +16,7 @@ const settings: UserSettings = {
   disabledWeatherItems: [],
   disabledPurposeItems: [],
   customKeywords: { workout: ['PT'] },
+  essentialLabels: [],
   mapApp: 'kakao', alertVoice: 'basic', customAlertText: '', accentColor: 'indigo',
 };
 

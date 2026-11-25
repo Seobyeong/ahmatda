@@ -10,6 +10,7 @@ import { Mascot } from '../../components/Mascot';
 import { ProgressBar } from '../../components/ProgressBar';
 import { PurposeIcon } from '../../components/PurposeIcon';
 import { Button, Card } from '../../components/ui';
+import { ItemOptionsSheet } from '../../components/ItemOptionsSheet';
 import type { ChecklistItem as ChecklistItemType } from '../../types';
 
 const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
@@ -21,13 +22,14 @@ const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
 
 const TIERS = [0, 1, 2, 3] as const;
 
-// 분류별로 나누고, 각 분류 안에서는 안 챙긴 것을 위로 올린다 (정렬은 안정적이라 원래 순서 유지).
+// 분류별로 나누고, 각 분류 안에서는 안 챙긴 것을 위로, 그중 꼭 챙김을 맨 위로 올린다
+// (정렬은 안정적이라 나머지는 원래 순서 유지).
 function groupByTier(checklist: ChecklistItemType[]) {
   return TIERS.map((tier) => ({
     tier,
     items: checklist
       .filter((item) => item.tier === tier)
-      .sort((a, b) => Number(a.checked) - Number(b.checked)),
+      .sort((a, b) => Number(a.checked) - Number(b.checked) || Number(Boolean(b.essential)) - Number(Boolean(a.essential))),
   })).filter((section) => section.items.length > 0);
 }
 
@@ -36,6 +38,12 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
   const { Role, PurposeColors } = useTheme();
   const styles = useStyles();
   const [quickAddText, setQuickAddText] = useState('');
+  const [optionsLabel, setOptionsLabel] = useState<string | null>(null);
+  // 시트는 항목 이름으로 연다 — 다시 조립되면 id가 바뀐다 (ItemOptionsSheet 참고)
+  const openOptions = useCallback((id: string) => {
+    const item = useAppStore.getState().checklist.find((i) => i.id === id);
+    if (item) setOptionsLabel(item.label);
+  }, []);
 
   const checklist = useAppStore((s) => s.checklist);
   const purposeId = useAppStore((s) => s.purposeId);
@@ -140,6 +148,11 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
     });
   };
 
+  // 꼭 챙김을 한 번도 안 써 봤으면 길게 누르기를 알려 준다 — 쓰기 시작하면 사라진다.
+  const showEssentialHint = useAppStore(
+    (s) => s.userSettings.essentialLabels.length === 0 && !s.checklist.some((i) => i.essential)
+  );
+
   const total = checklist.length;
   const checkedCount = checklist.filter((i) => i.checked).length;
   const allChecked = total > 0 && checkedCount === total;
@@ -221,11 +234,18 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
               item={item}
               onToggle={toggleCheck}
               onDelete={handleDeleteItem}
+              onOpenOptions={openOptions}
               purposeColor={activePurposeColor}
             />
           ))}
         </View>
       ))}
+
+      {total > 0 && showEssentialHint ? (
+        <Text style={styles.hint}>항목을 길게 누르면 '꼭 챙김'으로 정할 수 있어요.</Text>
+      ) : null}
+
+      <ItemOptionsSheet label={optionsLabel} onClose={() => setOptionsLabel(null)} />
 
       <View style={styles.quickAddRow}>
         <TextInput
@@ -356,6 +376,11 @@ const useStyles = makeStyles(({ Role }) => ({
     fontWeight: '700',
     color: Role.textMuted,
     marginBottom: 2,
+  },
+  hint: {
+    marginTop: Space.sm,
+    fontSize: FontSize.caption,
+    color: Role.textMuted,
   },
   quickAddRow: {
     marginTop: Space.lg,

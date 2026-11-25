@@ -121,3 +121,80 @@ describe('삭제 되돌리기', () => {
     expect(useAppStore.getState().removePermanentRoutine('nope')).toBeNull();
   });
 });
+
+describe('꼭 챙김', () => {
+  it('루틴을 꼭 챙김으로 두면 다음 날 조립에도 이어지고, 끄면 풀린다', () => {
+    useAppStore.getState().setItemEssential(find('지갑').id, true);
+    expect(find('지갑').essential).toBe(true);
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual(['지갑']);
+
+    useAppStore.setState({ checklistDate: '2000-01-01' });
+    useAppStore.getState().startNewDay();
+    expect(find('지갑').essential).toBe(true);
+    expect(find('집 열쇠').essential).toBe(false);
+
+    useAppStore.getState().setItemEssential(find('지갑').id, false);
+    expect(find('지갑').essential).toBe(false);
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual([]);
+  });
+
+  it('"오늘만" 항목은 설정에 이름을 남기지 않고 그 항목에만 표시한다', () => {
+    useAppStore.getState().addTempItem('반품 택배');
+    useAppStore.getState().setItemEssential(find('반품 택배').id, true);
+    expect(find('반품 택배').essential).toBe(true);
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual([]);
+
+    // 같은 날 다시 조립해도 남는다
+    useAppStore.getState().buildChecklist();
+    expect(find('반품 택배').essential).toBe(true);
+  });
+
+  it('바뀐 게 없으면 설정 수정 시각을 올리지 않는다', () => {
+    useAppStore.getState().setItemEssential(find('지갑').id, true);
+    const at = useAppStore.getState().userSettings.updatedAt;
+    useAppStore.getState().setItemEssential(find('지갑').id, true);
+    expect(useAppStore.getState().userSettings.updatedAt).toBe(at);
+  });
+
+  it('루틴을 지우면 꼭 챙김 이름도 거두고, 되돌리면 돌아온다', () => {
+    useAppStore.getState().setItemEssential(find('지갑').id, true);
+    const undo = useAppStore.getState().deleteItem(find('지갑').id)!;
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual([]);
+
+    undo();
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual(['지갑']);
+  });
+
+  it('설정에서 루틴을 지워도 거두고, 되돌리면 돌아온다', () => {
+    useAppStore.getState().setItemEssential(find('지갑').id, true);
+    const undo = useAppStore.getState().removePermanentRoutine('routine-default-wallet')!;
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual([]);
+    undo();
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual(['지갑']);
+  });
+
+  it('같은 이름의 루틴이 남아 있으면 그날만 항목을 지워도 꼭 챙김을 둔다', () => {
+    useAppStore.getState().setItemEssential(find('지갑').id, true);
+    useAppStore.getState().addOneOffItem('지갑', '2099-01-01');
+    useAppStore.getState().removePermanentRoutine(
+      useAppStore.getState().permanentRoutines.find((r) => r.onDate === '2099-01-01')!.id
+    );
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual(['지갑']);
+  });
+
+  it('"오늘만" 항목이 같은 이름의 꼭 챙김 루틴을 가리면 꼭 챙김을 이어받고, 끄면 이름도 거둔다', () => {
+    // 오늘만 'USB'를 먼저 넣고, 나중에 같은 이름의 루틴을 꼭 챙김으로 둔 경우 — 조립 때 루틴 줄은 빠진다
+    useAppStore.getState().addTempItem('USB');
+    useAppStore.getState().addPermanentRoutine('USB');
+    useAppStore.setState((s) => ({ userSettings: { ...s.userSettings, essentialLabels: ['USB'] } }));
+    useAppStore.getState().buildChecklist();
+    expect(labels().filter((l) => l === 'USB')).toHaveLength(1);
+    expect(find('USB').temp).toBe(true);
+    expect(find('USB').essential).toBe(true);
+
+    useAppStore.getState().setItemEssential(find('USB').id, false);
+    useAppStore.getState().buildChecklist();
+    expect(find('USB').essential).toBe(false);
+    expect(useAppStore.getState().userSettings.essentialLabels).toEqual([]);
+  });
+});

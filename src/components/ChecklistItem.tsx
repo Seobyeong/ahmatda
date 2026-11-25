@@ -27,6 +27,8 @@ interface ChecklistItemProps {
   item: ChecklistItemType;
   onToggle: (id: string) => void;
   onDelete?: (id: string) => void;
+  // 길게 누르기 — 항목 속성(꼭 챙김) 시트를 연다
+  onOpenOptions?: (id: string) => void;
   purposeColor?: string;
 }
 
@@ -72,7 +74,7 @@ function getTierColor(Colors: Palette, tier: ChecklistItemType['tier'], purposeC
 
 // memo: 항목 하나를 체크하면 store가 그 항목 객체만 새로 만들고 나머지는 참조를 유지한다.
 // onToggle/onDelete는 store 액션이라 참조가 고정이어서, 바뀐 한 줄만 다시 그려진다.
-export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle, onDelete, purposeColor }: ChecklistItemProps) {
+export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle, onDelete, onOpenOptions, purposeColor }: ChecklistItemProps) {
   const { Colors } = useTheme();
   const styles = useStyles();
   // 체크 반응성이 이 앱의 핵심 사용성 요건이라, 탭하면 상태를 바로 바꾸고(딜레이 없음)
@@ -101,9 +103,15 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
       <Pressable
         style={styles.row}
         onPress={handlePress}
+        onLongPress={onOpenOptions ? () => onOpenOptions(item.id) : undefined}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: item.checked }}
-        accessibilityLabel={[item.label, item.tier !== 0 ? item.note : null, item.badge].filter(Boolean).join(', ')}
+        accessibilityLabel={[item.label, item.essential ? '꼭 챙김' : null, item.tier !== 0 ? item.note : null, item.badge].filter(Boolean).join(', ')}
+        // 화면 낭독기에서는 길게 누르기를 찾기 어렵다 — 동작 목록에 넣는다
+        accessibilityActions={onOpenOptions ? [{ name: 'longpress', label: '꼭 챙김 정하기' }] : undefined}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'longpress') onOpenOptions?.(item.id);
+        }}
       >
         <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
           {item.checked && <Check size={14} color={Colors.onColor} />}
@@ -116,6 +124,11 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
             <Text style={[styles.label, item.checked && styles.labelChecked]}>
               {item.label}
             </Text>
+            {item.essential ? (
+              <View style={styles.essentialPill}>
+                <Text style={styles.essentialPillText}>꼭</Text>
+              </View>
+            ) : null}
             {item.tier !== 0 && item.note ? (
               <Text style={styles.note}>{item.note}</Text>
             ) : null}
@@ -197,6 +210,19 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     marginLeft: 6,
     fontSize: FontSize.caption,
     color: Colors.slate500,
+  },
+  // 꼭 챙김 — 주의(호박색). 빨강은 위험, 남색은 누를 수 있는 것이라 피한다.
+  essentialPill: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radius.pill,
+    backgroundColor: Role.warnSoft,
+  },
+  essentialPillText: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    color: Role.warn,
   },
   tempPill: {
     marginLeft: 6,

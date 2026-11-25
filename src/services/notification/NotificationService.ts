@@ -7,7 +7,7 @@ import notifee, {
   RepeatFrequency,
 } from '@notifee/react-native';
 import { DEPARTURE_WINDOW_MS, toDateString } from '@/utils/time';
-import { departureAlertContent, type DepartureSnapshot } from '@/utils/departureSnapshot';
+import { departureAlertContent, sortByUrgency, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { ChecklistItem } from '@/types';
 import { renderAlert, type AlertKind, type AlertVars } from '@/constants/alertVoices';
 import { scheduleOf, useAppStore } from '@/store';
@@ -36,6 +36,19 @@ const LAST_CHECK_MAX_LABELS = 3;
 // 잠금화면 출발 상태 알림의 [떠나기]. launchActivity가 없어 앱을 열지 않고
 // 백그라운드 이벤트로 처리된다 — 잠금을 풀지 않고 누를 수 있어야 의미가 있다.
 const LEAVE_ACTION = { title: '떠나기', pressAction: { id: 'leave' } };
+
+// 우산 없이 나왔을 때의 수습 — 지도 앱에서 "편의점"을 검색한다. 지도 앱을 열려면 앱 화면이
+// 먼저 떠 있어야 해서(안드로이드는 백그라운드에서 다른 앱 화면을 못 띄운다) launchActivity를 준다.
+const FIND_STORE_ACTION = { title: '가까운 편의점', pressAction: { id: 'find-store', launchActivity: 'default' } };
+const FIND_STORE_QUERY = '편의점';
+// 앱이 꺼진 채 버튼으로 켜지면 같은 누름이 두 번 올 수 있다(처음 알림 PRESS + ACTION_PRESS) — 한 번만 연다.
+const FIND_STORE_DEDUP_MS = 15_000;
+const findStoreHandledAt = new Map<string, number>();
+
+// 날씨 항목 '우산'만 — 사용자가 직접 넣은 "우산"(루틴)은 날씨와 무관하게 챙기는 것이라 제외한다.
+function isUmbrellaItem(item: ChecklistItem): boolean {
+  return item.tier === 1 && item.label === '우산';
+}
 
 function departureBody(detail: string): string {
   return `출발 30분 전 · ${detail}`;
@@ -66,8 +79,9 @@ function voiceSignature(): string {
   return `${s.alertVoice}|${s.customAlertText}`;
 }
 
+// 꼭 챙김 항목은 "(꼭)"을 붙인다 — 물건을 말하는 알림은 받은 목록을 sortByUrgency로 다시 세워 꼭 챙김을 맨 앞에 둔다.
 function itemList(items: ChecklistItem[], max = 3): string {
-  const labels = items.slice(0, max).map((i) => `· ${i.label}`).join('\n');
+  const labels = items.slice(0, max).map((i) => `· ${i.label}${i.essential ? ' (꼭)' : ''}`).join('\n');
   const extra  = items.length > max ? `\n외 ${items.length - max}개` : '';
   return `${labels}${extra}`;
 }
@@ -312,7 +326,8 @@ export const NotificationService = {
 
   // [떠나기]를 눌렀는데 남은 게 있을 때 — 헤드업으로 한 번 보여주고 10분 뒤 사라진다.
   // [다 챙겼어요]를 누르면 전부 체크되고, 그러면 외출 감지 긴급 알림도 자연히 안 나간다.
-  async showLastCheck(unchecked: ChecklistItem[]): Promise<void> {
+  async showLastCheck(items: ChecklistItem[]): Promise<void> {
+    const unchecked = sortByUrgency(items);
     const text = voiceText('lastCheck', { items: unchecked.map((i) => i.label), count: unchecked.length });
 
     await notifee.displayNotification({
@@ -376,9 +391,13 @@ export const NotificationService = {
     lastNightlySignature = signature;
   },
 
-  // 긴급 알림 — Wi-Fi 이탈 시 미체크 항목 경고
-  async triggerUrgentAlert(uncheckedItems: ChecklistItem[]): Promise<void> {
+  // 긴급 알림 — 외출이 확정됐는데 안 챙긴 게 있을 때
+  // 우산(날씨 항목)을 두고 나왔으면 [가까운 편의점]을 붙인다 — 돌아가지 않고 수습할 길
+  // (docs/결합-서비스-설계.md 2장). 누르면 앱을 거쳐 지도 앱 검색을 연다. 위치는 앱이 쓰지 않는다.
+  async triggerUrgentAlert(items: ChecklistItem[]): Promise<void> {
+    const uncheckedItems = sortByUrgency(items);
     const text = voiceText('urgent', { items: uncheckedItems.map((i) => i.label), count: uncheckedItems.length });
+    const noUmbrella = uncheckedItems.some(isUmbrellaItem);
 
     await notifee.displayNotification({
       title:   text.title,
@@ -389,6 +408,7 @@ export const NotificationService = {
         pressAction: { id: 'open-checklist', launchActivity: 'default' },
         sound:       'default',
         vibrationPattern: [1, 500, 200, 500], // notifee는 0을 거부한다(양수만, 짝수 개)
+        ...(noUmbrella ? { actions: [FIND_STORE_ACTION] } : {}),
       },
     });
   },
@@ -411,7 +431,8 @@ export const NotificationService = {
 
   // 집 밖 장소에서 머물다 떠날 때 — 아침에 챙긴 것 중 꺼내 쓰는 물건 (docs/외출-감지-재설계.md 4장).
   // 긴급 알림보다 한 단계 부드럽게: 진동 짧게, 같은 id라 새로 오면 앞의 것을 대신한다.
-  async triggerPlaceLeaveAlert(items: ChecklistItem[]): Promise<void> {
+  async triggerPlaceLeaveAlert(carryItems: ChecklistItem[]): Promise<void> {
+    const items = sortByUrgency(carryItems);
     const text = voiceText('placeLeave', { items: items.map((i) => i.label), count: items.length });
 
     await notifee.displayNotification({
@@ -451,6 +472,23 @@ export async function handleNotificationEvent(
     } else if (type === EventType.DELIVERED || type === EventType.PRESS) {
       AlarmService.onRing(detail.notification);
     }
+    return;
+  }
+
+  // 긴급 알림의 [가까운 편의점]. 앱이 꺼져 있다 이 버튼으로 켜지면 App.tsx가 처음 알림을
+  // PRESS로 넘기므로 두 종류를 다 받는다.
+  if ((type === EventType.ACTION_PRESS || type === EventType.PRESS) && detail.pressAction?.id === 'find-store') {
+    const key = detail.notification?.id ?? '';
+    const now = Date.now();
+    const last = findStoreHandledAt.get(key);
+    if (last !== undefined && now - last < FIND_STORE_DEDUP_MS) return;
+    findStoreHandledAt.set(key, now);
+
+    const { useAppStore, whenHydrated } = await import('@/store');
+    await whenHydrated();
+    const { DirectionsService } = await import('@/services/directions/DirectionsService');
+    const opened = await DirectionsService.openPlaceWhenActive(useAppStore.getState().userSettings.mapApp, FIND_STORE_QUERY);
+    if (!opened) useAppStore.getState().showToast('지도 앱을 열지 못했어요. 지도 앱에서 "편의점"을 검색해 보세요.');
     return;
   }
 

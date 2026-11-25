@@ -20,9 +20,13 @@ const TIER_PRIORITY: Record<ItemTier, number> = { 1: 0, 2: 1, 0: 2, 3: 3 };
 
 export const SNAPSHOT_MAX_LABELS = 2;
 
-// 안 챙긴 항목을 급한 순서로 — 앱 밖 표시(위젯·잠금화면·마지막 확인 알림)가 같은 순서를 쓴다.
+// 안 챙긴 항목을 급한 순서로 — 앱 밖 표시(위젯·잠금화면·마지막 확인·외출 감지 알림)가 같은 순서를 쓴다.
+// 꼭 챙김이 언제나 맨 앞이다 (docs/체크리스트-항목-속성.md 2.2 — 표시 예산이 작은 화면에 먼저 보인다).
+// 그 안에서는 분류 순서.
 export function sortByUrgency(items: ChecklistItem[]): ChecklistItem[] {
-  return [...items].sort((a, b) => TIER_PRIORITY[a.tier] - TIER_PRIORITY[b.tier]);
+  return [...items].sort(
+    (a, b) => Number(Boolean(b.essential)) - Number(Boolean(a.essential)) || TIER_PRIORITY[a.tier] - TIER_PRIORITY[b.tier]
+  );
 }
 
 export function buildDepartureSnapshot(

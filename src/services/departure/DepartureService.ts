@@ -13,6 +13,7 @@ import { NotificationService } from '@/services/notification/NotificationService
 import { getTodayString } from '@/utils/time';
 import { currentWindow } from '@/utils/schedule';
 import type { ChecklistItem } from '@/types';
+import { sortByUrgency } from '@/utils/departureSnapshot';
 import { decideDeparture, WIFI_FALLBACK_MS, type DepartureSignal, type SignalAvailability } from './decide';
 import { SignalLog } from './signalLog';
 import { HomeGeofence } from './homeGeofence';
@@ -101,7 +102,8 @@ async function evaluateOnce(): Promise<ChecklistItem[] | null> {
     useAppStore.getState().startNewDay();
   }
 
-  const unchecked = useAppStore.getState().checklist.filter((i) => !i.checked);
+  // 꼭 챙김이 맨 앞 — 알림 제목의 {물건}과 본문 첫 줄이 꼭 챙길 것이 된다.
+  const unchecked = sortByUrgency(useAppStore.getState().checklist.filter((i) => !i.checked));
   if (unchecked.length === 0) {
     listeners.forEach((l) => l([]));
     return null;
