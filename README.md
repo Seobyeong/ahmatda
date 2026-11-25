@@ -4,6 +4,38 @@
 
 **아맞다**는 오늘의 날씨·일정을 읽어 챙길 것을 자동으로 정리하고, 집을 나서는 순간 아직 안 챙긴 것이 있으면 먼저 알려 줍니다. 사용자는 목록을 직접 적는 대신 앱이 만든 목록을 확인만 합니다.
 
+## 스크린샷
+
+<table>
+  <tr>
+    <td align="center"><img src="screenshots/dashboard.png" width="250" alt="대시보드"></td>
+    <td align="center"><img src="screenshots/weather.png" width="250" alt="체감온도 계산과 시간대별 날씨"></td>
+    <td align="center"><img src="screenshots/leave-alert.png" width="250" alt="떠나기 알림"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>오늘의 체크리스트</b><br>목적(출근)을 고르면 준비물이 자동으로 붙음</td>
+    <td align="center"><b>나에게 맞춘 체감온도</b><br>계산 근거와 시간대별 예보, 옷차림 피드백</td>
+    <td align="center"><b>떠나기</b><br>안 챙긴 게 남아 있으면 알림으로 한 번 더</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="screenshots/dark-mode.png" width="250" alt="다크 모드"></td>
+    <td align="center"><img src="screenshots/settings.png" width="250" alt="설정 - 시간과 알림"></td>
+    <td align="center"><img src="screenshots/settings-display.png" width="250" alt="설정 - 화면과 연결"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>다크 모드</b><br>기기 설정을 따름</td>
+    <td align="center"><b>설정 · 시간과 알림</b><br>요일별 외출 시간, 알림 성향, 알림 말투</td>
+    <td align="center"><b>설정 · 화면과 연결</b><br>앱 색상 6가지, 길찾기 앱, AI 연결</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="screenshots/widget.png" width="400" alt="Android 홈 위젯"><br>
+  <b>Android 홈 위젯</b> — 출발 시각과 아직 안 챙긴 것, 바로 떠나기
+</p>
+
+<sub>Android 에뮬레이터에서 찍은 화면입니다 (2026-11-25).</sub>
+
 ## 왜 만들었나
 
 | 문제 | 기존 도구의 한계 |
