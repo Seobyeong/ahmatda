@@ -16,7 +16,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { SignalLog } from './signalLog';
 import { markOutingToday } from '@/services/nightly/outingLog';
-import { peekHomeWifi } from '@/services/wifi/homeWifi';
+import { peekOnHomeWifiForGps } from '@/services/wifi/homeWifi';
 
 export const HOME_GEOFENCE_TASK = 'ahmatda-home-geofence';
 // Google은 지오펜스 반경을 최소 100~150m로 권한다 (그보다 작으면 실내 GPS 오차로 오탐이 잦다).
@@ -82,8 +82,11 @@ TaskManager.defineTask<GeofenceTaskData>(HOME_GEOFENCE_TASK, async ({ data, erro
     // 이 이탈이 Wi-Fi 이탈과 묶이지 않고, 밖에서 들어온 진짜 이탈이 잠깐의 재연결로 지워지지도 않는다.
     // 버리지 않고 적는 건 진단 화면에서 GPS 튐이 얼마나 잦은지 보기 위해서다.
     // 학습(위치 읽기·저장)은 하지 않고 지금 상태만 본다 — 백그라운드 태스크가 기록 전에 끊기지 않게
-    if ((await peekHomeWifi()) === 'home') {
+    if (await peekOnHomeWifiForGps()) {
       await SignalLog.record('locationExit', now, { onHomeWifi: true });
+      // OS는 이제 "반경 밖"으로 알고 있어 진짜로 나갈 때 이탈을 다시 보내지 않는다 — 다시 걸어 상태를
+      // 새로 잡게 한다. 다시 걸 때 OS가 곧바로 보내는 지금 상태는 위 REGISTER_GRACE_MS가 버린다.
+      await HomeGeofence.rearm();
       return;  // 외출 흔적(markOutingToday)도 남기지 않는다 — 진짜 외출이면 Wi-Fi 이탈이 남긴다
     }
     await SignalLog.record('locationExit', now);
@@ -176,7 +179,7 @@ export const HomeGeofence = {
   // 부른다. 이미 같은 좌표로 걸려 있으면 다시 걸지 않는다 — 다시 걸 때마다 OS가 지금 상태를
   // 알려와서 가짜 신호가 생길 수 있다.
   // 반환값: 지금 위치 신호를 쓸 수 있는지 (외출 판정의 availability.location).
-  async sync(): Promise<boolean> {
+  async sync(force = false): Promise<boolean> {
     try {
       const coords = await HomeGeofence.getHomeCoords();
       const started = await Location.hasStartedGeofencingAsync(HOME_GEOFENCE_TASK);
@@ -189,7 +192,7 @@ export const HomeGeofence = {
 
       const registered = await readJson<Registered>(REGISTERED_KEY);
       const sameCoords = registered?.lat === coords.lat && registered?.lon === coords.lon;
-      if (started && sameCoords) return true;
+      if (started && sameCoords && !force) return true;
 
       await AsyncStorage.setItem(REGISTERED_KEY, JSON.stringify({ ...coords, at: Date.now() }));
       await Location.startGeofencingAsync(HOME_GEOFENCE_TASK, [{
@@ -204,6 +207,11 @@ export const HomeGeofence = {
     } catch {
       return false;
     }
+  },
+
+  // GPS 튐 이탈 뒤 지오펜스를 다시 건다 (위 태스크) — 같은 좌표라도 새로 건다.
+  async rearm(): Promise<void> {
+    await HomeGeofence.sync(true);
   },
 
   // 판정용 — 권한을 다시 묻지 않고 지금 상태만 본다. 백그라운드 태스크 안에서도 불린다.

@@ -22,12 +22,13 @@ let monitorGeneration = 0;
 // 끊긴 뒤 10초 안에 같은 이름의 처음 보는 BSSID(카페·이웃의 'iptime' 등)에 붙었으면 classifyPresence는
 // 'unknown'이지만, 바로 전에 끊겼다는 게 나갔다는 증거다 — 학습(위치)으로 집이라고 확인되지 않으면 밖으로 본다.
 // 집 메시 노드로 넘어가며 잠깐 끊긴 경우도 밖으로 보일 수 있지만, 학습 전 동작(이름 무시, 밖)과 같다.
-async function leftHome(state: NetInfoState, home: HomeWifi): Promise<boolean> {
+// 'home'이면 같은 이름의 BSSID를 방금 집으로 배운 것 — 부르는 쪽이 재연결로 처리한다.
+async function leftHome(state: NetInfoState, home: HomeWifi): Promise<'away' | 'home' | 'unknown'> {
   const presence = classifyPresence(state, home);
-  if (presence !== 'unknown') return presence === 'away';
+  if (presence !== 'unknown') return presence;
   const kind = homeWifiLesson(state, home).kind;
-  if (kind !== 'needsLocation' && kind !== 'learnBssid') return false;  // BSSID를 못 읽음 — 모름
-  return (await observeHomeWifi(state)) !== 'home';
+  if (kind !== 'needsLocation' && kind !== 'learnBssid') return 'unknown';  // BSSID를 못 읽음 — 모름
+  return (await observeHomeWifi(state)) === 'home' ? 'home' : 'away';
 }
 
 export const WifiMonitorService = {
@@ -136,27 +137,35 @@ export const WifiMonitorService = {
 
       // 판정 불가 상태에서는 디바운스를 걸지도, 걸려 있던 것을 취소하지도 않는다.
       // 위치 권한이 잠깐 빠졌다고 진짜 이탈 감지를 취소해버리면 안 되기 때문이다.
-      // 같은 이름의 처음 보는 BSSID(5GHz·메시 노드일 수 있음)도 여기 — 집으로 배우면 재연결로 처리한다.
+      // 같은 이름의 처음 보는 BSSID(5GHz·메시 노드일 수 있음)도 여기 — 집으로 배우면 재연결로,
+      // 위치로 집 반경 밖이 확실하면(집에서 끊김 없이 같은 이름의 아래층 카페로 넘어감) 이탈로 처리한다.
       if (presence === 'unknown') {
         if (state.type === 'wifi') {
           observeHomeWifi(state).then(async (learned) => {
-            if (learned !== 'home' || listenerGeneration !== monitorGeneration) return;
-            homeWifi = (await getHomeWifi()) ?? homeWifi;
-            if (listenerGeneration === monitorGeneration && latest === state) onHome();
+            if (learned === 'unknown' || listenerGeneration !== monitorGeneration) return;
+            if (learned === 'home') homeWifi = (await getHomeWifi()) ?? homeWifi;
+            if (listenerGeneration !== monitorGeneration || latest !== state) return;
+            if (learned === 'home') onHome();
+            else startAway();
           }).catch(() => {});
         }
         return;
       }
 
       // 집 Wi-Fi 끊김 감지
-      if (presence === 'away' || !isConnected) {
+      if (presence === 'away' || !isConnected) startAway();
+      else onHome();
+    });
+
+    // 집 Wi-Fi 끊김 — 10초 디바운스 뒤 다시 보고 이탈을 기록한다
+    function startAway(): void {
         // 이탈 시각은 디바운스가 끝난 때가 아니라 처음 끊긴 때다 — 걷기·위치와 묶는 10분 창과
         // 안전장치 5분이 이 시각부터 센다.
         if (awaySince === null) awaySince = Date.now();
         // 10초 디바운스 — 일시적 끊김 무시
         if (debounceTimer) clearTimeout(debounceTimer);
         const exitAt = awaySince;
-        debounceTimer = setTimeout(async () => {
+        const timer: ReturnType<typeof setTimeout> = setTimeout(async () => {
           const homeSeenAtStart = homeSeen;
           // 재확인
           const rechecked = await NetInfo.fetch();
@@ -168,7 +177,16 @@ export const WifiMonitorService = {
           if (listenerGeneration !== monitorGeneration) return;
 
           if (homeSeen !== homeSeenAtStart) return;  // 기다리는 사이 다시 붙었다
-          if (await leftHome(rechecked, homeWifi)) {
+          const where = await leftHome(rechecked, homeWifi);
+          if (where === 'home') {
+            // 같은 이름의 5GHz·메시 노드를 방금 집으로 배웠다 — 재연결로 처리해 awaySince를 비운다
+            // (안 비우면 한참 뒤 진짜 외출 때 이 옛 시각이 이탈 시각으로 적힌다). 그사이 새 끊김으로
+            // 디바운스가 다시 걸렸으면 그쪽에 맡긴다.
+            homeWifi = (await getHomeWifi()) ?? homeWifi;
+            if (listenerGeneration === monitorGeneration && debounceTimer === timer) onHome();
+            return;
+          }
+          if (where === 'away') {
             // Wi-Fi 이탈은 이제 "부가 신호"다 (결정 2). 걷기·위치가 붙거나 안전장치 5분이
             // 지나야 확정되므로, 여기서는 기록하고 판정만 돌린다. 판정·알림·당일 중복 방지는
             // DepartureService가 백그라운드 폴링과 같은 키로 한다.
@@ -184,10 +202,8 @@ export const WifiMonitorService = {
             // 다시 붙으면(뭘 가지러 돌아옴) 복귀를 기록해야 안전장치가 울리지 않는다.
           }
         }, DEBOUNCE_MS);
-      } else {
-        onHome();
-      }
-    });
+        debounceTimer = timer;
+    }
   },
 
   // 모니터링 중지

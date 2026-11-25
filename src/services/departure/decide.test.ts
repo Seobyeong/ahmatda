@@ -35,8 +35,8 @@ describe('decideDeparture — 오탐 거르기', () => {
     expect(decideDeparture([sig('wifiExit', 0)], ALL, at(1))).toEqual({ status: 'candidate', since: at(0) });
   });
 
-  it('Wi-Fi 이탈 + [떠나기]는 부가 신호뿐이라 확정이 아니다', () => {
-    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 1)], ALL, at(2)).status).toBe('candidate');
+  it('Wi-Fi가 먼저 끊기고 [떠나기]를 누르면 부가 신호뿐이라 확정이 아니다 (공유기 꺼짐 뒤 누름)', () => {
+    expect(decideDeparture([sig('wifiExit', 0), sig('leaveIntent', 1)], ALL, at(2)).status).toBe('candidate');
   });
 
   it('[떠나기]만 누르고 아무 일도 없으면 아무것도 아니다', () => {
@@ -102,8 +102,39 @@ describe('decideDeparture — 집 Wi-Fi에서 들어온 GPS 튐 (규칙 7)', () 
     expect(d).toMatchObject({ status: 'confirmed', at: at(2) });
   });
 
-  it('위치 이탈만 거른다 — 걷기 + [떠나기]는 그대로 (기존 한계, 별도 결정)', () => {
-    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1)], ALL, at(2), 'home')).toMatchObject({ status: 'confirmed' });
+});
+
+describe('decideDeparture — [떠나기] 뒤엔 집 Wi-Fi가 끊길 때까지 (규칙 9)', () => {
+  it('집 Wi-Fi에 붙은 채 [떠나기] + 걷기(신발 신으며 집 안)는 확정이 아니다', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1)], ALL, at(2), 'home')).toEqual({ status: 'candidate', since: at(1) });
+  });
+
+  it('집 Wi-Fi가 끊긴 뒤에는 [떠나기] + 걷기로 확정', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1)], ALL, at(2), 'away')).toMatchObject({ status: 'confirmed', at: at(1) });
+  });
+
+  it('집 Wi-Fi 미등록·상태 모름이면 지금처럼 확정', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1)], ALL, at(2), 'unknown')).toMatchObject({ status: 'confirmed', at: at(1) });
+    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1)], ALL, at(2))).toMatchObject({ status: 'confirmed' });
+  });
+
+  it('밖에서 들어온 위치 이탈 + [떠나기]도 집 Wi-Fi에 붙어 있는 동안은 기다린다', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('locationExit', 1)], ALL, at(2), 'home').status).toBe('candidate');
+  });
+
+  it('걷기 + 위치 이탈(주 신호 2개)은 [떠나기]와 무관하게 그대로 — 세지 않은 [떠나기]는 근거에서 뺀다', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1), sig('locationExit', 2)], ALL, at(3), 'home'))
+      .toEqual({ status: 'confirmed', at: at(2), by: ['walking', 'locationExit'] });
+  });
+
+  it('규칙 10 — [떠나기] 뒤 집 Wi-Fi가 끊기면 바로 확정 (집 안 걷기는 이미 창 밖이어도)', () => {
+    const signals = [sig('leaveIntent', 0), sig('walking', 1), sig('wifiExit', 12)];
+    expect(decideDeparture(signals, ALL, at(12), 'away')).toEqual({ status: 'confirmed', at: at(12), by: ['leaveIntent', 'wifiExit'] });
+  });
+
+  it('규칙 10 — [떠나기]는 1시간 동안만 유효', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 59)], ALL, at(59), 'away').status).toBe('confirmed');
+    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 61)], ALL, at(61), 'away').status).toBe('candidate');
   });
 });
 

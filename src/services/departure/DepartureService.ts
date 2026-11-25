@@ -19,7 +19,7 @@ import { decideDeparture, WIFI_FALLBACK_MS, type DepartureSignal, type SignalAva
 import { SignalLog } from './signalLog';
 import { HomeGeofence } from './homeGeofence';
 import { markOutingToday } from '@/services/nightly/outingLog';
-import { currentHomeWifi } from '@/services/wifi/homeWifi';
+import { currentHomeWifi, peekHomeWifi } from '@/services/wifi/homeWifi';
 import { getWalkingStarts, hasMotionPermission, isMotionSupported } from '../../../modules/ahmatda-motion';
 
 // 기존 Wi-Fi 단독 감지와 같은 키 — 업데이트 당일 이미 알린 사용자에게 다시 울리지 않게.
@@ -47,9 +47,10 @@ async function getAvailability(): Promise<SignalAvailability> {
 }
 
 // 판정 재료 — evaluateOnce와 진단 화면이 같이 쓴다
-async function gatherInputs(leaveIntent: { date: string; at: number } | null) {
+// learn=false — 진단 화면: 집 Wi-Fi를 배우거나 위치를 켜지 않고 상태만 본다 (열어 봤다고 상태가 바뀌면 안 된다)
+async function gatherInputs(leaveIntent: { date: string; at: number } | null, learn = true) {
   const [signals, availability, homeWifiNow] = await Promise.all([
-    collectSignals(leaveIntent), getAvailability(), currentHomeWifi(),
+    collectSignals(leaveIntent), getAvailability(), learn ? currentHomeWifi() : peekHomeWifi(),
   ]);
   return { signals, availability, homeWifiNow };
 }
@@ -155,7 +156,7 @@ export const DepartureService = {
     await whenHydrated();
     const { leaveIntent } = useAppStore.getState();
     const [{ signals, availability, homeWifiNow }, alertedDate, departedDate] = await Promise.all([
-      gatherInputs(leaveIntent),
+      gatherInputs(leaveIntent, false),
       AsyncStorage.getItem(ALERT_DATE_KEY),
       AsyncStorage.getItem(DEPARTED_DATE_KEY),
     ]);

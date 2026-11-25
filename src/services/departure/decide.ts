@@ -27,11 +27,19 @@
 //   8. 지금 집 Wi-Fi에 붙어 있으면(homeWifiNow) Wi-Fi 이탈은 이미 지난 일이다 — 규칙 6 안전장치로도,
 //      걷기와 묶어서도 확정하지 않는다. 복귀 기록을 놓친 오래된 Wi-Fi 이탈(리스너 해제·프로세스 종료 중
 //      재연결)과 집 안 걷기로 집에서 울리지 않게.
+//   9. 지금 집 Wi-Fi에 붙어 있으면 [떠나기]는 부가 신호로 세지 않는다 (2026-11-25 결정) — [떠나기]를 누르고
+//      신발 신으며 집 안을 걸으면 현관 전에 확정되던 한계. 집 Wi-Fi가 끊기면(Wi-Fi 이탈) 그때 판정한다.
+//      집 Wi-Fi 미등록·상태 모름이면 기다릴 신호가 없으니 지금처럼 센다.
+//  10. [떠나기]를 누른 뒤 집 Wi-Fi가 끊기면(Wi-Fi 이탈이 [떠나기]보다 나중) 바로 확정한다 — 규칙 9로
+//      기다리게 한 만큼, 끊기는 순간이 곧 나가는 순간이다. 그래서 [떠나기]는 10분 창이 아니라
+//      LEAVE_VALID_MS 동안 유효하다 (누르고 신발 신고 10분 넘게 걸려도 끊길 때 바로 알리게).
 
 export const DECISION_WINDOW_MS = 10 * 60 * 1000;
 export const WIFI_FALLBACK_MS = 5 * 60 * 1000;
 // 감시 창(출발 30분 전 ~ +2시간)보다 오래된 Wi-Fi 이탈은 오늘 외출과 무관하다.
 export const SAFETY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+// [떠나기]를 누른 뒤 이만큼 안에 집 Wi-Fi가 끊기면 나간 것으로 본다 (규칙 10).
+export const LEAVE_VALID_MS = 60 * 60 * 1000;
 
 export type DepartureSignalType =
   | 'walking'        // 주 — 걷기 시작 (활동 인식)
@@ -71,7 +79,7 @@ export function decideDeparture(
   homeWifiNow: HomeWifiNow = 'unknown'
 ): DepartureDecision {
   const ordered = signals
-    .filter((s) => s.at <= now && now - s.at <= DECISION_WINDOW_MS)
+    .filter((s) => s.at <= now && now - s.at <= (s.type === 'leaveIntent' ? LEAVE_VALID_MS : DECISION_WINDOW_MS))
     // 규칙 7 — 집 Wi-Fi에 붙은 채 들어온 "반경 밖"은 GPS가 튄 것이다
     .filter((s) => !(s.type === 'locationExit' && s.onHomeWifi))
     // 규칙 8 — 지금 집 Wi-Fi에 붙어 있으면 Wi-Fi 이탈은 지난 일
@@ -92,18 +100,24 @@ export function decideDeparture(
   // 신호를 시간순으로 하나씩 더하다가 규칙을 처음 만족하는 순간이 확정 시각이다.
   // 같은 종류가 여러 번 와도 한 번으로 센다 (걷기가 계속 들어와도 "주 신호 2개"가 아니다).
   const noPrimarySource = !availability.walking && !availability.location;
+  // 규칙 9 — 집 Wi-Fi에 붙어 있는 동안 [떠나기]는 세지 않는다
+  const counts = (t: DepartureSignalType) => !(t === 'leaveIntent' && homeWifiNow === 'home');
   const seen = new Set<DepartureSignalType>();
   for (const s of live) {
+    // 규칙 10 — [떠나기] 뒤에 온 Wi-Fi 이탈 (wifiExit는 집 Wi-Fi에 붙어 있으면 이미 빠졌다, 규칙 8)
+    const leaveThenWifi = s.type === 'wifiExit' && seen.has('leaveIntent');
     seen.add(s.type);
-    const primary = [...seen].filter((t) => PRIMARY.has(t)).length;
-    const secondary = [...seen].filter((t) => SECONDARY.has(t)).length;
+    const counted = [...seen].filter(counts);
+    const primary = counted.filter((t) => PRIMARY.has(t)).length;
+    const secondary = counted.filter((t) => SECONDARY.has(t)).length;
 
     const confirmed =
       primary >= 2 ||
       (primary >= 1 && secondary >= 1) ||
+      leaveThenWifi ||
       (noPrimarySource && seen.has('wifiExit'));  // 규칙 4
 
-    if (confirmed) return { status: 'confirmed', at: s.at, by: [...seen] };
+    if (confirmed) return { status: 'confirmed', at: s.at, by: counted };
   }
 
   // 규칙 6 — 마지막 Wi-Fi 상태가 "이탈"이고 5분 넘게 복귀가 없으면 확정

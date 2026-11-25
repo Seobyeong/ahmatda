@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import notifee from '@notifee/react-native';
 import * as Location from 'expo-location';
-import { isUsableBssid } from '@/services/wifi/presence';
+import { isUsableBssid, readSsid } from '@/services/wifi/presence';
 import NetInfo, { NetInfoStateType } from '@react-native-community/netinfo';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AlarmClock, Bell, Calendar, Check, ChevronLeft, Footprints, MapPin } from 'lucide-react-native';
@@ -108,6 +108,8 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const departureTimeDefault = useAppStore((s) => s.userSettings.departureTime);
   const [time, setTime] = useState(departureTimeDefault);
   const [bssid, setBssid] = useState('');
+  // 자동으로 읽은 Wi-Fi 이름 — 듀얼밴드·메시 공유기 학습에 쓴다. 직접 입력하면 모르는 것으로 둔다.
+  const [ssid, setSsid] = useState<string | null>(null);
   const [wifiStatus, setWifiStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [homeStatus, setHomeStatus] = useState<'idle' | 'busy' | 'active' | 'saved' | 'error'>('idle');
 
@@ -288,6 +290,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
       // 권한 없음 자리표시자(02:00:…)는 등록하지 않는다 — 저장하면 영영 집으로 보이지 않는다
       if (state.type === NetInfoStateType.wifi && isUsableBssid(state.details.bssid)) {
         setBssid(state.details.bssid);
+        setSsid(readSsid(state));
         setWifiStatus('success');
       } else {
         setWifiStatus('error');
@@ -326,7 +329,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
       setHomeBssid(bssid);
       // WifiMonitorService는 스토어와 별개로 AsyncStorage에 자체 BSSID를 저장하므로
       // 여기서 함께 등록해야 이탈 감지 모니터링이 실제로 동작한다.
-      WifiMonitorService.registerHomeBssid(bssid);
+      WifiMonitorService.registerHomeBssid(bssid, ssid);
     }
     // AppNavigator가 userSettings.onboarded 값을 구독해 Dashboard 화면으로
     // 자동 전환하므로, 여기서 navigation.replace를 별도로 호출하지 않는다.
@@ -504,6 +507,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
             value={bssid}
             onChangeText={(value) => {
               setBssid(value);
+              setSsid(null);
               setWifiStatus('idle');
             }}
             placeholder="BSSID 직접 입력 (선택 사항)"

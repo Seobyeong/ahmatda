@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { distanceMeters } from '@/services/departure/awayPlace';
+import { SignalLog } from '@/services/departure/signalLog';
 import { classifyPresence, homeWifiLesson, readSsid, type HomePresence, type HomeWifi } from './presence';
 
 // 처음 등록한 BSSID — "집 Wi-Fi 등록됨" 여부와 예전 버전 호환에 쓴다.
@@ -74,7 +75,7 @@ export function registerHomeWifi(bssid: string, ssid: string | null = null): Pro
   });
 }
 
-// 배우지 않고 지금 상태만 — 지오펜스 태스크처럼 짧게 끝나야 하는 곳용.
+// 배우지 않고 지금 상태만 — 진단 화면처럼 상태를 바꾸면 안 되는 곳용.
 export async function peekHomeWifi(): Promise<HomePresence> {
   try {
     const home = await readStored();
@@ -82,6 +83,22 @@ export async function peekHomeWifi(): Promise<HomePresence> {
     return classifyPresence(await NetInfo.fetch(), home);
   } catch {
     return 'unknown';
+  }
+}
+
+// 지오펜스 태스크의 GPS 튐 거르기용 (판정 규칙 7) — 배우지 않고, 아직 못 배운 같은 이름의 BSSID
+// (집 5GHz·메시 노드)에 붙어 있어도 "집 Wi-Fi"로 본다. 틀려도 그 이탈 하나를 안 세는 것뿐이라 싸다
+// (진짜 외출이면 Wi-Fi 이탈과 걷기가 따로 잡는다). 반경 경계에서 같은 이름의 카페에 붙는 일은 드물다.
+export async function peekOnHomeWifiForGps(): Promise<boolean> {
+  try {
+    const home = await readStored();
+    if (!home) return false;
+    const state = await NetInfo.fetch();
+    if (classifyPresence(state, home) === 'home') return true;
+    const kind = homeWifiLesson(state, home).kind;
+    return kind === 'learnBssid' || kind === 'needsLocation';
+  } catch {
+    return false;
   }
 }
 
@@ -101,6 +118,9 @@ export function observeHomeWifi(given?: NetInfoState): Promise<HomePresence> {
       if (lesson.kind === 'learnSsid') {
         await save({ ...home, ssid: lesson.ssid });
       } else if (lesson.kind === 'learnBssid') {
+        // 같은 공유기로 보여도 집 반경 밖이 확실하면 배우지 않는다 — 기본 이름('iptime')에 MAC이
+        // 이어지는 이웃·단지 공유기를 집으로 배우지 않게.
+        if (judge(await recentFix()) === 'outside') return 'away';
         await save({ ...home, bssids: [...home.bssids, lesson.bssid] });
         return 'home';
       } else if (lesson.kind === 'needsLocation') {
@@ -184,6 +204,8 @@ function maybeFreshFix(bssid: string, registeredAt: number): void {
       const lesson = homeWifiLesson(state, stored);
       if (lesson.kind !== 'needsLocation' || lesson.bssid !== bssid) return;
       await save({ ...stored, bssids: [...stored.bssids, bssid] });
+      // 이 노드로 넘어올 때 Wi-Fi 이탈이 적혔을 수 있다 — 집으로 배웠으니 복귀를 적어 안전장치가 울리지 않게
+      await SignalLog.record('wifiReturn');
     });
   })().catch(() => {});
 }
