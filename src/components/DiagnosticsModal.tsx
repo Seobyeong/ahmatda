@@ -3,6 +3,7 @@
 // 미리보기 APK로도 검증해야 해서 정식 빌드에서도 열리지만, 실제 알림을 보내거나 기록을 지우는 버튼은
 // 누를 때마다 확인을 받는다 (잘못 들어온 사용자가 "놓침" 기록을 오염시키지 않게).
 
+import { getHomeWifi } from '@/services/wifi/homeWifi';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import notifee from '@notifee/react-native';
@@ -42,7 +43,7 @@ const recent = (times: number[], n = 5) =>
   times.length === 0 ? '없음' : [...times].sort((a, b) => b - a).slice(0, n).map(hm).join(', ');
 
 async function collect(): Promise<Section[]> {
-  const [fg, bg, motion, notif, homeCoords, homeStarted, departure, place, outing, triggers] = await Promise.all([
+  const [fg, bg, motion, notif, homeCoords, homeStarted, departure, place, outing, triggers, homeWifi] = await Promise.all([
     Location.getForegroundPermissionsAsync().catch(() => null),
     Location.getBackgroundPermissionsAsync().catch(() => null),
     hasMotionPermission().catch(() => false),
@@ -53,6 +54,7 @@ async function collect(): Promise<Section[]> {
     AwayPlaceService.inspect(),
     OutingLog.get(),
     notifee.getTriggerNotificationIds().catch(() => [] as string[]),
+    getHomeWifi().catch(() => null),
   ]);
 
   const d = departure.decision;
@@ -80,6 +82,8 @@ async function collect(): Promise<Section[]> {
         ['집 좌표 등록', yn(homeCoords !== null)],
         ['집 지오펜스', homeStarted ? '걸림' : '안 걸림'],
         // '연결됨'이면 Wi-Fi 안전장치로는 확정하지 않는다 (판정 규칙 8)
+        // 듀얼밴드·메시 공유기 자동 학습 — 이름을 아직 모르면 같은 이름의 다른 BSSID를 못 배운다
+        ['집 Wi-Fi 학습', homeWifi ? `${homeWifi.ssid ?? '이름 모름'} · BSSID ${homeWifi.bssids.length}개` : '미등록'],
         ['지금 집 Wi-Fi', departure.homeWifiNow === 'home' ? '연결됨' : departure.homeWifiNow === 'away' ? '밖' : '모름'],
         ['지금 판정', decision],
         // 판정이 "확정"이어도 아래가 막으면 알림은 안 간다 (DepartureService.evaluate의 조건)

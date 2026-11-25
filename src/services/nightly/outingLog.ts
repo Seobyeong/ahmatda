@@ -6,8 +6,7 @@
 //   · 집 밖 장소에서 머묾 (AwayPlaceService) · 백그라운드 확인·앱 복귀 때 집 Wi-Fi 밖/안 (observeWifi)
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
-import { classifyPresence } from '@/services/wifi/presence';
+import { observeHomeWifi } from '@/services/wifi/homeWifi';
 import { feedbackOutingDate } from '@/utils/schedule';
 
 const KEY = 'outing_log';
@@ -79,11 +78,8 @@ export const OutingLog = {
   // 다시 계획하지는 않는다 — 부르는 쪽이 이어서 NightlyService.plan()을 부른다.
   async observeWifi(): Promise<void> {
     try {
-      // 동적 import — WifiMonitorService → DepartureService → 이 모듈로 순환이 생긴다.
-      const { WifiMonitorService } = await import('@/services/wifi/WifiMonitorService');
-      const bssid = await WifiMonitorService.getHomeBssid();
-      if (!bssid) return;
-      const presence = classifyPresence(await NetInfo.fetch(), bssid);
+      // 집 Wi-Fi 미등록이면 'unknown' — 아무것도 안 한다
+      const presence = await observeHomeWifi();
       if (presence === 'home') await OutingLog.observeHome();
       if (presence === 'away') await OutingLog.markOut(await outingDateNow());
     } catch {

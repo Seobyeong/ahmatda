@@ -16,7 +16,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { SignalLog } from './signalLog';
 import { markOutingToday } from '@/services/nightly/outingLog';
-import { currentHomeWifi } from '@/services/wifi/homeWifi';
+import { peekHomeWifi } from '@/services/wifi/homeWifi';
 
 export const HOME_GEOFENCE_TASK = 'ahmatda-home-geofence';
 // Google은 지오펜스 반경을 최소 100~150m로 권한다 (그보다 작으면 실내 GPS 오차로 오탐이 잦다).
@@ -81,7 +81,8 @@ TaskManager.defineTask<GeofenceTaskData>(HOME_GEOFENCE_TASK, async ({ data, erro
     // 판정할 때의 Wi-Fi가 아니라 지금(들어온 순간) 상태를 적어야, 나중에 공유기가 재부팅돼도
     // 이 이탈이 Wi-Fi 이탈과 묶이지 않고, 밖에서 들어온 진짜 이탈이 잠깐의 재연결로 지워지지도 않는다.
     // 버리지 않고 적는 건 진단 화면에서 GPS 튐이 얼마나 잦은지 보기 위해서다.
-    if ((await currentHomeWifi()) === 'home') {
+    // 학습(위치 읽기·저장)은 하지 않고 지금 상태만 본다 — 백그라운드 태스크가 기록 전에 끊기지 않게
+    if ((await peekHomeWifi()) === 'home') {
       await SignalLog.record('locationExit', now, { onHomeWifi: true });
       return;  // 외출 흔적(markOutingToday)도 남기지 않는다 — 진짜 외출이면 Wi-Fi 이탈이 남긴다
     }

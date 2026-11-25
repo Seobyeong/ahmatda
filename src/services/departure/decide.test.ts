@@ -110,7 +110,13 @@ describe('decideDeparture — 집 Wi-Fi에서 들어온 GPS 튐 (규칙 7)', () 
 describe('decideDeparture — 지금 집 Wi-Fi면 안전장치 없음 (규칙 8)', () => {
   it('복귀 기록을 놓친 오래된 Wi-Fi 이탈로 집에서 확정하지 않는다', () => {
     expect(decideDeparture([sig('wifiExit', 0)], ALL, at(20), 'home')).toEqual({ status: 'none' });
-    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(6), 'home')).toEqual({ status: 'candidate', since: at(0) });
+    // 지금 집 Wi-Fi면 Wi-Fi 이탈은 지난 일이라 후보도 아니다 (재확인 타이머를 걸지 않는다)
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(6), 'home')).toEqual({ status: 'none' });
+  });
+
+  it('복귀를 놓친 Wi-Fi 이탈 + 집 안 걷기로도 확정하지 않는다', () => {
+    expect(decideDeparture([sig('wifiExit', 0), sig('walking', 3)], ALL, at(4), 'home')).toEqual({ status: 'candidate', since: at(3) });
+    expect(decideDeparture([sig('wifiExit', 0), sig('walking', 3)], ALL, at(4), 'away')).toMatchObject({ status: 'confirmed', at: at(3) });
   });
 
   it('상태를 모르거나 밖이면 안전장치는 그대로', () => {

@@ -12,12 +12,11 @@
 // 알려진 한계: Android는 앱이 종료돼 있으면 지오펜스·폴링 모두 앱을 깨우지 않는다 (v57 문서).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { NotificationService } from '@/services/notification/NotificationService';
-import { classifyPresence } from '@/services/wifi/presence';
+import { observeHomeWifi } from '@/services/wifi/homeWifi';
 import { isAwayPlaceAlertOn } from '@/constants/preferences';
 import { getTodayString } from '@/utils/time';
 import { DAILY_LIMIT, PAIR_WINDOW_MS, distanceMeters, hasLeftPlace, pickCarryItems, stayingSince } from './awayPlace';
@@ -133,17 +132,14 @@ async function canRun(): Promise<boolean> {
 // 본다 — 집 소파를 "머문 장소"로 잡아 두면 현관을 나설 때마다 엉뚱한 알림이 간다.
 // 위치를 켜기 전에 싸게 볼 수 있는 것 — 집 Wi-Fi에 붙어 있으면 집이다.
 async function onHomeWifi(): Promise<boolean> {
-  const bssid = await WifiMonitorService.getHomeBssid();
-  if (!bssid) return false;
-  return classifyPresence(await NetInfo.fetch(), bssid) === 'home';
+  return (await observeHomeWifi()) === 'home';
 }
 
 async function isAtHome(here: { lat: number; lon: number }): Promise<boolean> {
   const home = await HomeGeofence.getHomeCoords();
   if (home) return distanceMeters(home, here) <= HOME_RADIUS_M + HOME_MARGIN_M;
-  const bssid = await WifiMonitorService.getHomeBssid();
-  if (!bssid) return true;
-  return classifyPresence(await NetInfo.fetch(), bssid) !== 'away';
+  if (!(await WifiMonitorService.getHomeBssid())) return true;
+  return (await observeHomeWifi()) !== 'away';
 }
 
 async function currentFix(): Promise<{ lat: number; lon: number } | null> {

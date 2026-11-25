@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import notifee from '@notifee/react-native';
 import * as Location from 'expo-location';
+import { isUsableBssid } from '@/services/wifi/presence';
 import NetInfo, { NetInfoStateType } from '@react-native-community/netinfo';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AlarmClock, Bell, Calendar, Check, ChevronLeft, Footprints, MapPin } from 'lucide-react-native';
@@ -284,7 +285,8 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   const registerCurrentWifi = async () => {
     try {
       const state = await NetInfo.fetch();
-      if (state.type === NetInfoStateType.wifi && state.details.bssid) {
+      // 권한 없음 자리표시자(02:00:…)는 등록하지 않는다 — 저장하면 영영 집으로 보이지 않는다
+      if (state.type === NetInfoStateType.wifi && isUsableBssid(state.details.bssid)) {
         setBssid(state.details.bssid);
         setWifiStatus('success');
       } else {

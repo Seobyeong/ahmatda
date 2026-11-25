@@ -24,8 +24,9 @@
 //      판정하는 순간이 아니라 "들어온 순간"의 Wi-Fi 상태로 거른다 — 밖에서 제대로 들어온 이탈이
 //      잠깐의 재연결 때문에 지워지지 않게. 들어온 순간 상태를 몰랐으면 지금처럼 센다.
 //      Wi-Fi가 반경 끝까지 닿는 집의 진짜 외출은 Wi-Fi가 끊기는 순간 Wi-Fi 이탈로 이어 잡힌다.
-//   8. 지금 집 Wi-Fi에 붙어 있으면(homeWifiNow) 규칙 6 안전장치로 확정하지 않는다 — 복귀 기록을
-//      놓친 오래된 Wi-Fi 이탈(리스너 해제·프로세스 종료 중 재연결)로 집에서 울리지 않게.
+//   8. 지금 집 Wi-Fi에 붙어 있으면(homeWifiNow) Wi-Fi 이탈은 이미 지난 일이다 — 규칙 6 안전장치로도,
+//      걷기와 묶어서도 확정하지 않는다. 복귀 기록을 놓친 오래된 Wi-Fi 이탈(리스너 해제·프로세스 종료 중
+//      재연결)과 집 안 걷기로 집에서 울리지 않게.
 
 export const DECISION_WINDOW_MS = 10 * 60 * 1000;
 export const WIFI_FALLBACK_MS = 5 * 60 * 1000;
@@ -73,6 +74,8 @@ export function decideDeparture(
     .filter((s) => s.at <= now && now - s.at <= DECISION_WINDOW_MS)
     // 규칙 7 — 집 Wi-Fi에 붙은 채 들어온 "반경 밖"은 GPS가 튄 것이다
     .filter((s) => !(s.type === 'locationExit' && s.onHomeWifi))
+    // 규칙 8 — 지금 집 Wi-Fi에 붙어 있으면 Wi-Fi 이탈은 지난 일
+    .filter((s) => !(homeWifiNow === 'home' && s.type === 'wifiExit'))
     .sort((a, b) => a.at - b.at);
 
   // 규칙 3 — 마지막 귀가 신호 이후의 신호만 본다 ([떠나기]는 귀가와 무관하게 남긴다)
