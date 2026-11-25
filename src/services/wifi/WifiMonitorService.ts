@@ -5,9 +5,9 @@ import { SignalLog } from '@/services/departure/signalLog';
 import { currentWindow } from '@/utils/schedule';
 import { scheduleOf, useAppStore } from '@/store';
 import { classifyPresence } from './presence';
+import { HOME_BSSID_KEY, getHomeBssid } from './homeWifi';
 import type { ChecklistItem } from '@/types';
 
-const BSSID_KEY         = 'home_bssid';
 const DEBOUNCE_MS       = 10_000;  // 10초 디바운스 (오탐 방지)
 const TIMEOUT_MS        = 2 * 60 * 60 * 1000;  // 2시간 타임아웃 (배터리 보호용 안전장치)
 const ARM_CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 감시 창 진입/이탈 재확인 주기
@@ -22,12 +22,12 @@ export const WifiMonitorService = {
 
   // 집 Wi-Fi BSSID 저장
   async registerHomeBssid(bssid: string): Promise<void> {
-    await AsyncStorage.setItem(BSSID_KEY, bssid);
+    await AsyncStorage.setItem(HOME_BSSID_KEY, bssid);
   },
 
   // 저장된 집 BSSID 조회
   async getHomeBssid(): Promise<string | null> {
-    return AsyncStorage.getItem(BSSID_KEY);
+    return getHomeBssid();
   },
 
   // 현재 연결된 BSSID 조회

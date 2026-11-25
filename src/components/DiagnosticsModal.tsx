@@ -79,13 +79,15 @@ async function collect(): Promise<Section[]> {
         ['위치 신호 사용', yn(departure.availability.location)],
         ['집 좌표 등록', yn(homeCoords !== null)],
         ['집 지오펜스', homeStarted ? '걸림' : '안 걸림'],
+        // '연결됨'이면 Wi-Fi 안전장치로는 확정하지 않는다 (판정 규칙 8)
+        ['지금 집 Wi-Fi', departure.homeWifiNow === 'home' ? '연결됨' : departure.homeWifiNow === 'away' ? '밖' : '모름'],
         ['지금 판정', decision],
         // 판정이 "확정"이어도 아래가 막으면 알림은 안 간다 (DepartureService.evaluate의 조건)
         ['출발 감시 창 안', yn(departure.inWindow)],
         ['긴급 알림 보낸 날', departure.alertedDate ?? '없음'],
         ['외출 확정한 날', departure.departedDate ?? '없음'],
         ['신호 기록', departure.signals.length === 0 ? '없음'
-          : [...departure.signals].sort((a, b) => b.at - a.at).slice(0, 8).map((s) => `${s.type} ${hm(s.at)}`).join('\n')],
+          : [...departure.signals].sort((a, b) => b.at - a.at).slice(0, 8).map((s) => `${s.type}${s.onHomeWifi ? '(집 Wi-Fi·무시)' : ''} ${hm(s.at)}`).join('\n')],
       ],
     },
     {

@@ -25,14 +25,18 @@ const LOCATION: ReadonlySet<LoggedSignalType> = new Set(['locationExit', 'locati
 // 다시 보더라도 이탈 시각은 처음 본 때로 남아야 안전장치(이탈 후 5분)가 제대로 센다.
 export function appendSignal(
   log: DepartureSignal[],
-  signal: { type: LoggedSignalType; at: number },
+  signal: { type: LoggedSignalType; at: number; onHomeWifi?: true },
   now: number
 ): DepartureSignal[] {
   const kept = log.filter((s) => now - s.at <= LOG_RETENTION_MS);
   const source = WIFI.has(signal.type) ? WIFI : LOCATION;
   const last = lastOf(kept, source);
-  if (last?.type === signal.type) return kept;
-  return [...kept, { type: signal.type, at: signal.at }].sort((a, b) => a.at - b.at);
+  // 집 Wi-Fi에서 들어온(GPS 튐) 이탈 뒤의 제대로 된 이탈은 같은 상태로 보지 않는다 —
+  // 튐 표시가 마지막 상태로 남아 진짜 이탈을 삼키면 판정이 위치 신호를 영영 못 본다.
+  if (last?.type === signal.type && !!last.onHomeWifi === !!signal.onHomeWifi) return kept;
+  const entry: DepartureSignal = { type: signal.type, at: signal.at };
+  if (signal.onHomeWifi) entry.onHomeWifi = true;
+  return [...kept, entry].sort((a, b) => a.at - b.at);
 }
 
 function lastOf(log: DepartureSignal[], source: ReadonlySet<LoggedSignalType>): DepartureSignal | undefined {
@@ -64,9 +68,10 @@ async function read(): Promise<DepartureSignal[]> {
 }
 
 export const SignalLog = {
-  record(type: LoggedSignalType, at: number = Date.now()): Promise<void> {
+  // onHomeWifi: 위치 이탈이 집 Wi-Fi에 붙은 채 들어왔을 때 (판정 규칙 7이 거른다)
+  record(type: LoggedSignalType, at: number = Date.now(), opts: { onHomeWifi?: true } = {}): Promise<void> {
     return serialized(async () => {
-      const next = appendSignal(await read(), { type, at }, Date.now());
+      const next = appendSignal(await read(), { type, at, ...opts }, Date.now());
       await AsyncStorage.setItem(LOG_KEY, JSON.stringify(next));
     });
   },

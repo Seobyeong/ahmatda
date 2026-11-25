@@ -18,6 +18,14 @@
 //      확정한다. 조용히 넘어가는 것이 이 앱의 가장 나쁜 실패라서다. 공유기 재부팅은 보통
 //      그 전에 다시 붙는다. 이 판정만은 10분 창과 무관하게 SAFETY_MAX_AGE_MS 안의 마지막
 //      Wi-Fi 상태를 본다 — 확인이 늦게 돌아도(12분 뒤) 놓치지 않게.
+//   7. 집 Wi-Fi에 붙은 채 들어온 위치 이탈(onHomeWifi)은 세지 않는다 (2026-11-25 결정).
+//      집 Wi-Fi가 닿는 거리는 지오펜스 반경(150m)보다 훨씬 짧으므로, 붙어 있는데 "반경 밖"이라는 건
+//      GPS가 튄 것이다 — 집 안에서 걸어 다니는 걷기와 묶여 확정되면 집에서 긴급 알림이 간다.
+//      판정하는 순간이 아니라 "들어온 순간"의 Wi-Fi 상태로 거른다 — 밖에서 제대로 들어온 이탈이
+//      잠깐의 재연결 때문에 지워지지 않게. 들어온 순간 상태를 몰랐으면 지금처럼 센다.
+//      Wi-Fi가 반경 끝까지 닿는 집의 진짜 외출은 Wi-Fi가 끊기는 순간 Wi-Fi 이탈로 이어 잡힌다.
+//   8. 지금 집 Wi-Fi에 붙어 있으면(homeWifiNow) 규칙 6 안전장치로 확정하지 않는다 — 복귀 기록을
+//      놓친 오래된 Wi-Fi 이탈(리스너 해제·프로세스 종료 중 재연결)로 집에서 울리지 않게.
 
 export const DECISION_WINDOW_MS = 10 * 60 * 1000;
 export const WIFI_FALLBACK_MS = 5 * 60 * 1000;
@@ -35,7 +43,11 @@ export type DepartureSignalType =
 export interface DepartureSignal {
   type: DepartureSignalType;
   at: number; // epoch ms
+  onHomeWifi?: true; // locationExit만 — 들어온 순간 집 Wi-Fi에 붙어 있었음 (규칙 7)
 }
+
+// 판정하는 순간의 집 Wi-Fi 상태 (wifi/presence.ts의 HomePresence와 같은 값)
+export type HomeWifiNow = 'home' | 'away' | 'unknown';
 
 export interface SignalAvailability {
   walking: boolean;  // 활동 인식 권한 + 기기 지원
@@ -54,10 +66,13 @@ const RETURN: ReadonlySet<DepartureSignalType> = new Set(['wifiReturn', 'locatio
 export function decideDeparture(
   signals: DepartureSignal[],
   availability: SignalAvailability,
-  now: number
+  now: number,
+  homeWifiNow: HomeWifiNow = 'unknown'
 ): DepartureDecision {
   const ordered = signals
     .filter((s) => s.at <= now && now - s.at <= DECISION_WINDOW_MS)
+    // 규칙 7 — 집 Wi-Fi에 붙은 채 들어온 "반경 밖"은 GPS가 튄 것이다
+    .filter((s) => !(s.type === 'locationExit' && s.onHomeWifi))
     .sort((a, b) => a.at - b.at);
 
   // 규칙 3 — 마지막 귀가 신호 이후의 신호만 본다 ([떠나기]는 귀가와 무관하게 남긴다)
@@ -67,7 +82,8 @@ export function decideDeparture(
     (s) => !RETURN.has(s.type) && (s.type === 'leaveIntent' || s.at > lastReturn)
   );
   // 규칙 6 — 10분 창과 무관하게 본다 (창 안 신호가 하나도 없어도)
-  const fallback = wifiFallback(signals, now);
+  // 규칙 8 — 지금 집 Wi-Fi에 붙어 있으면 안전장치는 없다
+  const fallback = homeWifiNow === 'home' ? null : wifiFallback(signals, now);
   if (live.length === 0) return fallback ?? { status: 'none' };
 
   // 신호를 시간순으로 하나씩 더하다가 규칙을 처음 만족하는 순간이 확정 시각이다.

@@ -9,6 +9,14 @@ const MIN = 60 * 1000;
 const T0 = 1_800_000_000_000;
 
 describe('appendSignal', () => {
+  it('집 Wi-Fi에서 들어온 이탈은 표시를 남기고, 그 뒤 제대로 된 이탈은 중복으로 삼키지 않는다', () => {
+    const flagged = appendSignal([], { type: 'locationExit', at: T0, onHomeWifi: true }, T0);
+    expect(flagged).toEqual([{ type: 'locationExit', at: T0, onHomeWifi: true }]);
+    const real = appendSignal(flagged, { type: 'locationExit', at: T0 + 1000 }, T0 + 1000);
+    expect(real).toEqual([...flagged, { type: 'locationExit', at: T0 + 1000 }]);
+    expect(appendSignal(real, { type: 'locationExit', at: T0 + 2000 }, T0 + 2000)).toEqual(real);
+  });
+
   it('빈 기록에 신호를 더한다', () => {
     expect(appendSignal([], { type: 'wifiExit', at: T0 }, T0)).toEqual([{ type: 'wifiExit', at: T0 }]);
   });

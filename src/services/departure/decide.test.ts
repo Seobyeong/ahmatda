@@ -79,6 +79,46 @@ describe('decideDeparture — 돌아온 경우', () => {
   });
 });
 
+describe('decideDeparture — 집 Wi-Fi에서 들어온 GPS 튐 (규칙 7)', () => {
+  const jitter = (minutes: number): DepartureSignal => ({ type: 'locationExit', at: at(minutes), onHomeWifi: true });
+
+  it('집 Wi-Fi에 붙은 채 들어온 위치 이탈 + 걷기(집 안)는 확정이 아니다', () => {
+    expect(decideDeparture([jitter(0), sig('walking', 2)], ALL, at(3))).toEqual({ status: 'candidate', since: at(2) });
+  });
+
+  it('그런 위치 이탈 + [떠나기]도 확정이 아니고, 그 이탈만이면 후보도 아니다', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), jitter(1)], ALL, at(2))).toEqual({ status: 'none' });
+    expect(decideDeparture([jitter(0)], ALL, at(1))).toEqual({ status: 'none' });
+  });
+
+  it('공유기 재부팅 — 튄 이탈 뒤 10분 안의 Wi-Fi 이탈과 묶이지 않는다', () => {
+    const onlyLocation = { walking: false, location: true };
+    expect(decideDeparture([jitter(0), sig('wifiExit', 3)], onlyLocation, at(4)).status).toBe('candidate');
+    expect(decideDeparture([jitter(0), sig('wifiExit', 3)], ALL, at(4)).status).toBe('candidate');
+  });
+
+  it('밖에서 들어온 위치 이탈은 판정 순간 집 Wi-Fi에 잠깐 붙어 있어도 센다', () => {
+    const d = decideDeparture([sig('locationExit', 0), sig('walking', 2)], ALL, at(3), 'home');
+    expect(d).toMatchObject({ status: 'confirmed', at: at(2) });
+  });
+
+  it('위치 이탈만 거른다 — 걷기 + [떠나기]는 그대로 (기존 한계, 별도 결정)', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('walking', 1)], ALL, at(2), 'home')).toMatchObject({ status: 'confirmed' });
+  });
+});
+
+describe('decideDeparture — 지금 집 Wi-Fi면 안전장치 없음 (규칙 8)', () => {
+  it('복귀 기록을 놓친 오래된 Wi-Fi 이탈로 집에서 확정하지 않는다', () => {
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(20), 'home')).toEqual({ status: 'none' });
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(6), 'home')).toEqual({ status: 'candidate', since: at(0) });
+  });
+
+  it('상태를 모르거나 밖이면 안전장치는 그대로', () => {
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(20), 'unknown')).toMatchObject({ status: 'confirmed', at: at(5) });
+    expect(decideDeparture([sig('wifiExit', 0)], ALL, at(20), 'away')).toMatchObject({ status: 'confirmed', at: at(5) });
+  });
+});
+
 describe('decideDeparture — 권한 저하', () => {
   it('걷기·위치를 둘 다 못 쓰면 Wi-Fi 이탈 단독으로 확정 (지금 동작과 같음)', () => {
     expect(decideDeparture([sig('wifiExit', 0)], NONE, at(0))).toMatchObject({ status: 'confirmed', at: at(0) });

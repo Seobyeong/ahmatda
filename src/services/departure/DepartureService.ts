@@ -13,11 +13,13 @@ import { NotificationService } from '@/services/notification/NotificationService
 import { getTodayString } from '@/utils/time';
 import { currentWindow } from '@/utils/schedule';
 import type { ChecklistItem } from '@/types';
+import type { HomePresence } from '@/services/wifi/presence';
 import { sortByUrgency } from '@/utils/departureSnapshot';
 import { decideDeparture, WIFI_FALLBACK_MS, type DepartureSignal, type SignalAvailability } from './decide';
 import { SignalLog } from './signalLog';
 import { HomeGeofence } from './homeGeofence';
 import { markOutingToday } from '@/services/nightly/outingLog';
+import { currentHomeWifi } from '@/services/wifi/homeWifi';
 import { getWalkingStarts, hasMotionPermission, isMotionSupported } from '../../../modules/ahmatda-motion';
 
 // 기존 Wi-Fi 단독 감지와 같은 키 — 업데이트 당일 이미 알린 사용자에게 다시 울리지 않게.
@@ -46,8 +48,10 @@ async function getAvailability(): Promise<SignalAvailability> {
 
 // 판정 재료 — evaluateOnce와 진단 화면이 같이 쓴다
 async function gatherInputs(leaveIntent: { date: string; at: number } | null) {
-  const [signals, availability] = await Promise.all([collectSignals(leaveIntent), getAvailability()]);
-  return { signals, availability };
+  const [signals, availability, homeWifiNow] = await Promise.all([
+    collectSignals(leaveIntent), getAvailability(), currentHomeWifi(),
+  ]);
+  return { signals, availability, homeWifiNow };
 }
 
 async function collectSignals(leaveIntent: { date: string; at: number } | null): Promise<DepartureSignal[]> {
@@ -82,8 +86,8 @@ async function evaluateOnce(): Promise<ChecklistItem[] | null> {
   const today = getTodayString();
   if ((await AsyncStorage.getItem(ALERT_DATE_KEY)) === today) return null;
 
-  const { signals, availability } = await gatherInputs(leaveIntent);
-  const decision = decideDeparture(signals, availability, Date.now());
+  const { signals, availability, homeWifiNow } = await gatherInputs(leaveIntent);
+  const decision = decideDeparture(signals, availability, Date.now(), homeWifiNow);
   if (decision.status === 'candidate') scheduleRecheck();
   if (decision.status !== 'confirmed') return null;
 
@@ -141,6 +145,7 @@ export const DepartureService = {
   async inspect(): Promise<{
     signals: DepartureSignal[];
     availability: SignalAvailability;
+    homeWifiNow: HomePresence;
     decision: ReturnType<typeof decideDeparture>;
     inWindow: boolean;
     alertedDate: string | null;
@@ -149,13 +154,14 @@ export const DepartureService = {
     const { useAppStore, whenHydrated, scheduleOf } = await import('@/store');
     await whenHydrated();
     const { leaveIntent } = useAppStore.getState();
-    const [{ signals, availability }, alertedDate, departedDate] = await Promise.all([
+    const [{ signals, availability, homeWifiNow }, alertedDate, departedDate] = await Promise.all([
       gatherInputs(leaveIntent),
       AsyncStorage.getItem(ALERT_DATE_KEY),
       AsyncStorage.getItem(DEPARTED_DATE_KEY),
     ]);
     return {
-      signals, availability, decision: decideDeparture(signals, availability, Date.now()),
+      signals, availability, homeWifiNow,
+      decision: decideDeparture(signals, availability, Date.now(), homeWifiNow),
       inWindow: currentWindow(scheduleOf(useAppStore.getState()), new Date()) !== null, alertedDate, departedDate,
     };
   },
