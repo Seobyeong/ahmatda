@@ -33,6 +33,8 @@ const light = {
   orange400: '#fb923c',
   orange600: '#ea580c',
   orange50:  '#fff7ed',
+  orangeChip: '#ea580c', // 운동 목적 — 어두운 화면에서도 진하게 둬 호박색(여행)과 구분
+  orangeText: '#c2410c', // 옅은 주황 면 위 글자 (4.5:1 이상)
   blue500:   '#3b82f6',
   blue400:   '#60a5fa',
   blue600:   '#2563eb',
@@ -100,6 +102,8 @@ const dark: Palette = {
   orange400: '#fb923c',
   orange600: '#fb923c',
   orange50:  '#3a2010',
+  orangeChip: '#ea580c',
+  orangeText: '#fdba74',
   blue500:   '#60a5fa',
   blue400:   '#60a5fa',
   blue600:   '#93c5fd',
@@ -205,7 +209,7 @@ export type PurposeColorMap = Record<string, {
 export function buildPurposeColors(c: Palette): PurposeColorMap {
   return {
     indigo:  { chip: c.indigo600,  section: c.indigo600,  badge: c.indigo50,  badgeText: c.indigoText },
-    emerald: { chip: c.emerald600, section: c.emerald600, badge: c.emerald50, badgeText: c.emeraldText },
+    orange:  { chip: c.orangeChip, section: c.orangeChip, badge: c.orange50,  badgeText: c.orangeText },
     violet:  { chip: c.violet600,  section: c.violet600,  badge: c.violet50,  badgeText: c.violet600 },
     rose:    { chip: c.rose500,    section: c.rose500,    badge: c.rose50,    badgeText: c.rose500 },
     amber:   { chip: c.amber500,   section: c.amber500,   badge: c.amber50,   badgeText: c.amber500 },

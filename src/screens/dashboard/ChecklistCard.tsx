@@ -224,7 +224,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
         ) : null}
       </View>
 
-      <ProgressBar checked={checkedCount} total={total} color={purposeAccent} />
+      <ProgressBar checked={checkedCount} total={total} />
 
       {allChecked ? (
         <View style={styles.doneBanner}>

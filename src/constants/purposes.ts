@@ -18,7 +18,8 @@ export const PURPOSES: Record<PurposeId, Purpose> = {
     id: 'workout',
     label: '운동 · 헬스',
     shortLabel: '운동',
-    color: 'emerald',
+    // 초록은 '챙김·완료' 색이라 목적 색으로 쓰지 않는다 (2026-11-28)
+    color: 'orange',
     calKeywords: ['운동', '헬스', '필라테스', '요가', '러닝', '수영', '클라이밍'],
     items: [
       { label: '운동복',      icon: 'shirt',     note: '갈아입을 옷' },

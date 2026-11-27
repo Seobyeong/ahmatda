@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AppState, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Cloud,
   CloudDrizzle, CloudSnow,
   CloudFog,
@@ -12,13 +13,14 @@ import {
   Shirt,
   Sun,
   Wind,
+  X,
 } from 'lucide-react-native';
 import type { Palette } from '../../constants/colors';
 import { FEEDBACK_MESSAGES } from '../../constants/feedback';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../../constants/theme';
 import { scheduleOf, useAppStore } from '../../store';
 import { WeatherService } from '../../services/weather/WeatherService';
-import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta, getExposureAdjust } from '../../utils/temperature';
+import { calcPerceivedTemp, explainPerceived, formatTemp, getEffectiveDelta, getExposureAdjust } from '../../utils/temperature';
 import { getCurrentSlotIndex } from '../../utils/time';
 import { feedbackOutingDate } from '../../utils/schedule';
 import { Mascot } from '../../components/Mascot';
@@ -63,8 +65,8 @@ function getWeatherTint(Colors: Palette, weather: CurrentWeather | null): string
   return Colors.slate100;
 }
 
-// 날씨 — 평소엔 요약 한 덩어리만 보인다. 계산 근거·시간대별 예보·피드백은 눌렀을 때 편다.
-// 체크리스트가 화면 위쪽에 오도록 하기 위해서다.
+// 날씨 — 평소엔 요약 한 덩어리, 안 챙긴 게 남아 있으면 한 줄로 줄인다 (2026-11-28 — 체크리스트가 화면 위쪽에
+// 오게). 비·폭염 안내는 줄여도 남긴다. 눌러서 여는 바텀시트에 이유(문장)·시간대별 예보·옷차림 피드백이 있다.
 export function WeatherBlock({
   onRetry,
   usingFallbackLocation,
@@ -75,9 +77,30 @@ export function WeatherBlock({
 }) {
   const { Colors, Role } = useTheme();
   const styles = useStyles();
-  const [expanded, setExpanded] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // 안 챙긴 게 남아 있으면 한 줄 — 지금 할 일은 체크리스트다. 단 체크할 때마다 바꾸면 날씨 높이가 변해
+  // 아래 체크리스트가 위아래로 튄다 (다음 탭이 다른 줄에 간다). 화면에 들어올 때·앱으로 돌아올 때·목록이
+  // 새로 조립될 때(날짜·목적)만 다시 정한다.
+  const hasUnchecked = () => useAppStore.getState().checklist.some((i) => !i.checked);
+  const [compact, setCompact] = useState(hasUnchecked);
+  const focused = useIsFocused();
+  const checklistDate = useAppStore((s) => s.checklistDate);
+  const purposeId = useAppStore((s) => s.purposeId);
+  useEffect(() => {
+    if (focused) setCompact(hasUnchecked());
+  }, [focused, checklistDate, purposeId]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setCompact(hasUnchecked());
+    });
+    return () => sub.remove();
+  }, []);
 
   const currentWeather = useAppStore((s) => s.currentWeather);
+  useEffect(() => {
+    if (!currentWeather) setSheetOpen(false);
+  }, [currentWeather]);
   const weatherLoading = useAppStore((s) => s.weatherLoading);
   const weatherOutOfArea = useAppStore((s) => s.weatherOutOfArea);
   const weatherTimeline = useAppStore((s) => s.weatherTimeline);
@@ -105,17 +128,10 @@ export function WeatherBlock({
   const perceivedTemp = basePerceived !== null ? basePerceived + exposureAdj : null;
   const shownTemp = currentWeather ? perceivedTemp ?? currentWeather.temp : null;
 
-  const perceivedFormula =
+  const reasons =
     currentWeather && perceivedTemp !== null
-      ? formatPerceivedFormula(
-          currentWeather.temp,
-          currentWeather.humidity,
-          currentWeather.wind,
-          delta,
-          perceivedTemp,
-          exposureAdj
-        )
-      : null;
+      ? explainPerceived(currentWeather.temp, currentWeather.humidity, currentWeather.wind, delta, exposureAdj)
+      : [];
 
   const timelineHint = weatherTimeline.length > 0 ? WeatherService.getTimelineHint(weatherTimeline) : null;
   // 서비스가 주는 색은 밝은 화면용 고정값이라, 종류만 읽고 색은 테마에서 고른다.
@@ -132,33 +148,51 @@ export function WeatherBlock({
     <View style={[styles.block, { backgroundColor: getWeatherTint(Colors, currentWeather) }]}>
       {currentWeather && shownTemp !== null ? (
         <>
-          <Pressable
-            style={styles.summary}
-            onPress={() => setExpanded((v) => !v)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded }}
-            accessibilityLabel={`${placeLabel} 날씨 ${currentWeather.label}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
-            accessibilityHint={expanded ? '자세한 날씨를 접어요' : '시간대별 예보와 계산 근거를 펴요'}
-          >
-            <WeatherIcon size={44} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
-            <View style={styles.summaryText}>
-              <Text style={styles.caption}>나에게 맞춘 체감온도</Text>
-              <Text style={styles.temp}>{formatTemp(shownTemp)}</Text>
-              <Text style={styles.label}>{placeLabel} · {currentWeather.label}</Text>
-            </View>
-            <View style={styles.chevron}>
-              {expanded ? (
-                <ChevronUp size={20} color={Role.actionText} />
-              ) : (
-                <ChevronDown size={20} color={Role.actionText} />
-              )}
-            </View>
-          </Pressable>
+          {compact ? (
+            <Pressable
+              style={styles.compactRow}
+              onPress={() => setSheetOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`${placeLabel} 날씨 ${currentWeather.label}, 체감 ${formatTemp(shownTemp)}. ${currentWeather.recommendation}`}
+              accessibilityHint="자세한 날씨를 열어요"
+            >
+              <WeatherIcon size={24} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
+              <View style={styles.summaryText}>
+                <View style={styles.compactTop}>
+                  <Text style={styles.compactTemp}>체감 {formatTemp(shownTemp)}</Text>
+                  <Text style={styles.compactLabel} numberOfLines={1}>{currentWeather.label} · {placeLabel}</Text>
+                </View>
+                {/* 옷차림은 나가기 직전에 필요하다 — 줄여도 한 줄은 남긴다 */}
+                <Text style={styles.compactAdvice} numberOfLines={1}>{currentWeather.recommendation}</Text>
+              </View>
+              <ChevronRight size={18} color={Role.actionText} />
+            </Pressable>
+          ) : (
+            <>
+              <Pressable
+                style={styles.summary}
+                onPress={() => setSheetOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`${placeLabel} 날씨 ${currentWeather.label}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
+                accessibilityHint="시간대별 예보와 체감온도 이유를 열어요"
+              >
+                <WeatherIcon size={44} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
+                <View style={styles.summaryText}>
+                  <Text style={styles.caption}>나에게 맞춘 체감온도</Text>
+                  <Text style={styles.temp}>{formatTemp(shownTemp)}</Text>
+                  <Text style={styles.label}>{placeLabel} · {currentWeather.label}</Text>
+                </View>
+                <View style={styles.chevron}>
+                  <ChevronRight size={20} color={Role.actionText} />
+                </View>
+              </Pressable>
 
-          <View style={styles.adviceRow}>
-            <Shirt size={16} color={Role.textSub} />
-            <Text style={styles.adviceText}>{currentWeather.recommendation}</Text>
-          </View>
+              <View style={styles.adviceRow}>
+                <Shirt size={16} color={Role.textSub} />
+                <Text style={styles.adviceText}>{currentWeather.recommendation}</Text>
+              </View>
+            </>
+          )}
 
           {banners.map((banner, i) => (
             <View key={i} style={styles.alertBanner}>
@@ -174,62 +208,85 @@ export function WeatherBlock({
             </View>
           ) : null}
 
-          {expanded ? (
-            <View style={styles.detail}>
-              {perceivedFormula ? (
-                <View>
-                  <Text style={styles.detailTitle}>체감온도 계산</Text>
-                  <Text style={styles.detailText}>{perceivedFormula}</Text>
+          <Modal
+            // 날씨가 비었다가(자정 넘김) 다시 오면 저절로 열리지 않게 — 닫힌 것으로 본다
+            visible={sheetOpen}
+            animationType="slide"
+            transparent
+            statusBarTranslucent
+            navigationBarTranslucent
+            onRequestClose={() => setSheetOpen(false)}
+          >
+            <View style={styles.backdrop}>
+              <Pressable style={styles.dismissArea} onPress={() => setSheetOpen(false)} accessibilityLabel="닫기" />
+              <View style={styles.sheet}>
+                <View style={styles.sheetHeader}>
+                  <WeatherIcon size={28} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
+                  <View style={styles.summaryText}>
+                    <Text style={styles.sheetTitle} accessibilityRole="header">체감 {formatTemp(shownTemp)} · {currentWeather.label}</Text>
+                    <Text style={styles.label}>{placeLabel} · {currentWeather.recommendation}</Text>
+                  </View>
+                  <Pressable onPress={() => setSheetOpen(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
+                    <X size={20} color={Role.textMuted} />
+                  </Pressable>
                 </View>
-              ) : null}
+                <ScrollView contentContainerStyle={[styles.detail, { paddingBottom: insets.bottom + 32 }]}>
+                  <View>
+                    <Text style={styles.detailTitle}>왜 {formatTemp(shownTemp)}인가요?</Text>
+                    {reasons.map((line) => (
+                      <Text key={line} style={styles.reasonText}>{line}</Text>
+                    ))}
+                  </View>
 
-              <View style={styles.envStrip}>
-                <View style={styles.envCell}>
-                  <CloudFog size={18} color={Role.textMuted} />
-                  <Text style={styles.envValue}>{currentWeather.dustLevel}</Text>
-                  <Text style={styles.envLabel}>미세먼지</Text>
-                </View>
-                <View style={styles.envCell}>
-                  <Droplets size={18} color={Role.textMuted} />
-                  <Text style={styles.envValue}>{currentWeather.humidity}%</Text>
-                  <Text style={styles.envLabel}>습도</Text>
-                </View>
-                <View style={styles.envCell}>
-                  <Wind size={18} color={Role.textMuted} />
-                  <Text style={styles.envValue}>{currentWeather.wind}m/s</Text>
-                  <Text style={styles.envLabel}>바람</Text>
-                </View>
-              </View>
+                  <View style={styles.envStrip}>
+                    <View style={styles.envCell}>
+                      <CloudFog size={18} color={Role.textMuted} />
+                      <Text style={styles.envValue}>{currentWeather.dustLevel}</Text>
+                      <Text style={styles.envLabel}>미세먼지</Text>
+                    </View>
+                    <View style={styles.envCell}>
+                      <Droplets size={18} color={Role.textMuted} />
+                      <Text style={styles.envValue}>{currentWeather.humidity}%</Text>
+                      <Text style={styles.envLabel}>습도</Text>
+                    </View>
+                    <View style={styles.envCell}>
+                      <Wind size={18} color={Role.textMuted} />
+                      <Text style={styles.envValue}>{currentWeather.wind}m/s</Text>
+                      <Text style={styles.envLabel}>바람</Text>
+                    </View>
+                  </View>
 
-              {weatherTimeline.length > 0 ? (
-                <WeatherTimeline slots={weatherTimeline} currentSlot={getCurrentSlotIndex()} />
-              ) : null}
+                  {weatherTimeline.length > 0 ? (
+                    <WeatherTimeline slots={weatherTimeline} currentSlot={getCurrentSlotIndex()} />
+                  ) : null}
 
-              {/* 버튼만 있으면 무엇을 묻는지 알 수 없다 — 무엇에 대한 답이고 왜 묻는지 한 줄로 알린다. */}
-              <View>
-                <Text style={styles.detailTitle}>최근 외출 때 옷차림은 어땠나요?</Text>
-                <Text style={styles.detailText}>답할수록 체감온도가 나에게 맞춰져요.</Text>
-                <View style={styles.feedbackRow} accessibilityRole="radiogroup">
-                  {FEEDBACK_OPTIONS.map((opt) => (
-                    <Pressable
-                      key={opt.val}
-                      style={[styles.feedbackChip, currentFeedback === opt.val && styles.feedbackChipActive]}
-                      onPress={() => handleFeedback(opt.val)}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: currentFeedback === opt.val }}
-                      accessibilityLabel={`옷차림 ${opt.label}`}
-                    >
-                      <Text
-                        style={[styles.feedbackChipText, currentFeedback === opt.val && styles.feedbackChipTextActive]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                  {/* 버튼만 있으면 무엇을 묻는지 알 수 없다 — 무엇에 대한 답이고 왜 묻는지 한 줄로 알린다. */}
+                  <View>
+                    <Text style={styles.detailTitle}>최근 외출 때 옷차림은 어땠나요?</Text>
+                    <Text style={styles.detailText}>답할수록 체감온도가 나에게 맞춰져요.</Text>
+                    <View style={styles.feedbackRow} accessibilityRole="radiogroup">
+                      {FEEDBACK_OPTIONS.map((opt) => (
+                        <Pressable
+                          key={opt.val}
+                          style={[styles.feedbackChip, currentFeedback === opt.val && styles.feedbackChipActive]}
+                          onPress={() => handleFeedback(opt.val)}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: currentFeedback === opt.val }}
+                          accessibilityLabel={`옷차림 ${opt.label}`}
+                        >
+                          <Text
+                            style={[styles.feedbackChipText, currentFeedback === opt.val && styles.feedbackChipTextActive]}
+                          >
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                </ScrollView>
               </View>
             </View>
-          ) : null}
+          </Modal>
         </>
       ) : (
         <View style={styles.stateRow}>
@@ -254,7 +311,7 @@ export function WeatherBlock({
   );
 }
 
-const useStyles = makeStyles(({ Colors, Role }) => ({
+const useStyles = makeStyles(({ Role }) => ({
   block: {
     borderRadius: Radius.lg,
     padding: Space.lg,
@@ -314,12 +371,67 @@ const useStyles = makeStyles(({ Colors, Role }) => ({
     fontWeight: '600',
     color: Role.textStrong,
   },
+  compactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    minHeight: 44,
+  },
+  compactTemp: {
+    fontSize: FontSize.heading,
+    fontWeight: '800',
+    color: Role.text,
+  },
+  compactTop: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Space.sm,
+  },
+  compactLabel: {
+    flex: 1,
+    fontSize: FontSize.label,
+    color: Role.textSub,
+  },
+  compactAdvice: {
+    fontSize: FontSize.label,
+    color: Role.textStrong,
+  },
+  backdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+  },
+  dismissArea: {
+    flex: 1,
+  },
+  sheet: {
+    maxHeight: '85%',
+    backgroundColor: Role.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    paddingHorizontal: Space.xl,
+    paddingTop: 18,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    paddingBottom: Space.md,
+  },
+  sheetTitle: {
+    fontSize: FontSize.heading,
+    fontWeight: '700',
+    color: Role.text,
+  },
   detail: {
-    marginTop: Space.lg,
-    paddingTop: Space.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.slate300,
     gap: Space.lg,
+    paddingBottom: 32,
+  },
+  reasonText: {
+    marginTop: 4,
+    fontSize: FontSize.body,
+    lineHeight: 21,
+    color: Role.textStrong,
   },
   detailTitle: {
     fontSize: FontSize.label,
@@ -361,7 +473,8 @@ const useStyles = makeStyles(({ Colors, Role }) => ({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: Radius.md,
-    backgroundColor: Role.surface,
+    // 시트 면(surface) 위라 한 단계 옅은 면으로 구분한다
+    backgroundColor: Role.surfaceSoft,
   },
   feedbackChipActive: {
     backgroundColor: Role.action,

@@ -5,11 +5,10 @@ import { makeStyles, useTheme } from '../constants/theme';
 interface ProgressBarProps {
   checked: number;
   total: number;
-  /** 진행 중 색 — 고른 목적의 색을 넘긴다. 다 챙기면 항상 초록이다. */
-  color?: string;
 }
 
-export function ProgressBar({ checked, total, color }: ProgressBarProps) {
+// 챙긴 만큼 차오르는 막대라 체크박스와 같은 초록으로 칠한다 (2026-11-28 — 남색은 누를 수 있는 것의 색).
+export function ProgressBar({ checked, total }: ProgressBarProps) {
   const { Role } = useTheme();
   const styles = useStyles();
   const pct = total === 0 ? 0 : (checked / total) * 100;
@@ -29,7 +28,7 @@ export function ProgressBar({ checked, total, color }: ProgressBarProps) {
         style={[
           styles.fill,
           {
-            backgroundColor: pct === 100 ? Role.done : color ?? Role.textMuted,
+            backgroundColor: Role.done,
             width: widthAnim.interpolate({
               inputRange: [0, 100],
               outputRange: ['0%', '100%'],

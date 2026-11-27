@@ -18,6 +18,7 @@ import { NightlyService } from '../services/nightly/NightlyService';
 import { OutingLog } from '../services/nightly/outingLog';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
 import { useAppStore } from '../store';
+import { calcPerceivedTemp, formatPerceivedFormula, getEffectiveDelta, getExposureAdjust } from '../utils/temperature';
 import {
   clearMotionRecords, getStillStarts, getVehicleStarts, getWalkingStarts, hasMotionPermission, isMotionSupported,
 } from '../../modules/ahmatda-motion';
@@ -41,6 +42,15 @@ function hm(at: number): string {
 const yn = (b: boolean) => (b ? '예' : '아니요');
 const recent = (times: number[], n = 5) =>
   times.length === 0 ? '없음' : [...times].sort((a, b) => b - a).slice(0, n).map(hm).join(', ');
+
+function perceivedFormulaNow(): string {
+  const { currentWeather: w, userSettings: u } = useAppStore.getState();
+  if (!w) return '날씨 없음';
+  const delta = getEffectiveDelta(u.sensitivityLevel, u.learnedDelta);
+  const base = calcPerceivedTemp(w.temp, w.humidity, w.wind, delta);
+  const exposure = getExposureAdjust(base, u.commuteMode);
+  return formatPerceivedFormula(w.temp, w.humidity, w.wind, delta, base + exposure, exposure);
+}
 
 async function collect(): Promise<Section[]> {
   const [fg, bg, motion, notif, homeCoords, homeStarted, departure, place, outing, triggers, homeWifi] = await Promise.all([
@@ -110,6 +120,11 @@ async function collect(): Promise<Section[]> {
         ['자리 지오펜스', place.geofenceStarted ? '걸림' : '안 걸림'],
         ['오늘 보낸 횟수', `${place.state.sent} / 3`],
       ],
+    },
+    {
+      // 날씨 화면은 문장으로 설명하고(explainPerceived), 계산식은 여기서 본다
+      title: '체감온도 계산',
+      rows: [['계산식', perceivedFormulaNow()]],
     },
     {
       title: '자기 전 정리',

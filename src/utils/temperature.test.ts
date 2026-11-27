@@ -1,4 +1,4 @@
-import { calcPerceivedTemp, formatPerceivedFormula, formatTemp, getEffectiveDelta, getExposureAdjust } from './temperature';
+import { calcPerceivedTemp, explainPerceived, formatPerceivedFormula, formatTemp, getEffectiveDelta, getExposureAdjust } from './temperature';
 
 describe('calcPerceivedTemp', () => {
   it('보정 요인이 없으면 실제 온도를 그대로 반환한다', () => {
@@ -115,5 +115,22 @@ describe('formatPerceivedFormula — 노출 보정 표시', () => {
   it('보정이 있을 때만 도보 항을 붙인다', () => {
     expect(formatPerceivedFormula(10, 50, 1, 0, 9, -1)).toBe('10° + f(H:50%, W:1m/s) + Δt(+0°) + 도보(-1°) ≒ 9°C');
     expect(formatPerceivedFormula(10, 50, 1, 0, 10)).toBe('10° + f(H:50%, W:1m/s) + Δt(+0°) ≒ 10°C');
+  });
+});
+
+describe('explainPerceived — 계산식 대신 문장', () => {
+  it('바람·민감도·노출을 문장으로, 기온은 반올림한 하나만', () => {
+    expect(explainPerceived(6.9, 45, 6, -2, -1)).toEqual([
+      '실제 기온은 7°C예요.',
+      '바람이 불어서 2° 더 춥게 느껴져요.',
+      '추위를 타는 편이라 2° 낮춰 잡았어요.',
+      '걷거나 자전거로 다니면 바깥에 오래 있어서 1° 더 춥게 잡았어요.',
+    ]);
+    // 문장의 숫자를 더하면 체감온도와 같다
+    expect(7 - 2 - 2 - 1).toBe(calcPerceivedTemp(6.9, 45, 6, -2) - 1);
+  });
+  it('보정이 없으면 기온 그대로', () => {
+    expect(explainPerceived(20, 50, 2, 0)).toEqual(['실제 기온은 20°C예요.', '바람·습도 영향이 적어 기온 그대로 느껴질 거예요.']);
+    expect(explainPerceived(28, 85, 0, 1)).toEqual(['실제 기온은 28°C예요.', '습해서 2° 더 덥게 느껴져요.', '더위를 타는 편이라 1° 높여 잡았어요.']);
   });
 });
