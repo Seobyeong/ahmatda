@@ -167,6 +167,7 @@ export default function App() {
     return () => { unsubscribe(); appStateSub.remove(); urlSub.remove(); removeWalkingListener(); removeDepartedListener(); DepartureService.cancelRecheck(); };
   }, []);
 
+  const tripsSignature = useAppStore((s) => s.trips.map((t) => `${t.start}:${t.name}:${t.items.filter((i) => !i.checked).length}`).join('|'));
   useEffect(() => {
     // 온보딩 완료 또는 출발시각·자기 전 정리 시각 변경 시 정리 알림을 재예약한다.
     // (본문에 출발 시각이 들어가서 출발시각 변경에도 반응한다.)
@@ -182,6 +183,8 @@ export default function App() {
     userSettings.commuteMode, permanentRoutines,
     // 알림 말투가 바뀌면 예약된 정리 알림 문구도 바꾼다.
     userSettings.alertVoice, userSettings.customAlertText,
+    // 여행 짐 — 출발 전날 밤 알림에 남은 짐 수가 들어간다
+    tripsSignature,
   ]);
 
   useEffect(() => {

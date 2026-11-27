@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PURPOSES, findMatchingEvent, purposeItemKey, type TaggedEvents } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getTodayString } from '../utils/time';
+import { baseTripLabels, mergeWeatherItems, pruneTrips, tripNights, type Trip, type TripItem } from '../utils/trip';
 import { activeDates, activeToday, feedbackOutingDate, referenceTimeOn, weeklyPlanOn, type DatePlan, type DayPlan, type DepartureSchedule } from '../utils/schedule';
 import { EMPTY_HOLIDAY_CACHE, type HolidayCache } from '../services/holiday/HolidayService';
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
@@ -71,6 +72,8 @@ interface AppState {
   packedDays: string[];
   // 그날만 쉰다고 한 날 (오늘만 건너뛰기·공휴일에 쉬어요) — 날짜별 계획은 지나면 지워져서 연속 기록이 따로 기억한다
   restDays: string[];
+  // 여행·며칠 외출 짐 목록 (C5) — 일상 체크리스트와 따로
+  trips: Trip[];
 
   // AI 연결 (선택 기능) — 기기 로컬 전용
   ai: AiState;
@@ -235,6 +238,13 @@ interface AppActions {
   setAlertPreference: (pref: AlertPreference) => void;
   setAwayPlaceAlert: (on: boolean) => void;
   setHomecomingAlert: (on: boolean) => void;
+  // 여행 짐 (C5)
+  addTrip: (input: { name: string; start: string; end: string; destination: string | null }) => string;
+  deleteTrip: (tripId: string) => Undo;
+  toggleTripItem: (tripId: string, itemId: string) => void;
+  addTripItem: (tripId: string, label: string) => boolean;
+  removeTripItem: (tripId: string, itemId: string) => void;
+  setTripWeather: (tripId: string, items: Array<{ label: string; reason: string }>) => void;
   setHomecomingTasks: (tasks: string[]) => void;
   setCommuteMode: (mode: CommuteMode) => void;
   setHomeBssid: (bssid: string) => void;
@@ -449,6 +459,7 @@ const defaultState: AppState = {
   forgottenHistory: [],
   packedDays: [],
   restDays: [],
+  trips: [],
 
   ai: {
     enabled: false,
@@ -1001,6 +1012,48 @@ export const useAppStore = create<AppStore>()(
       ),
       setAwayPlaceAlert: (on) => set((state) => patchSettings(state, { awayPlaceAlert: on })),
       setHomecomingAlert: (on) => set((state) => patchSettings(state, { homecomingAlert: on })),
+      addTrip: ({ name, start, end, destination }) => {
+        const id = generateItemId();
+        const items: TripItem[] = baseTripLabels(tripNights({ start, end }))
+          .map((label) => ({ id: generateItemId(), label, checked: false, kind: 'base' as const }));
+        const trip: Trip = { id, name: name.trim() || '여행', start, end, destination: destination?.trim() || null, items };
+        set((state) => ({ trips: [...pruneTrips(state.trips, getTodayString()), trip] }));
+        return id;
+      },
+      deleteTrip: (tripId) => {
+        const trip = get().trips.find((t) => t.id === tripId);
+        if (!trip) return null;
+        set((state) => ({ trips: state.trips.filter((t) => t.id !== tripId) }));
+        return () => set((state) => (state.trips.some((t) => t.id === tripId) ? {} : { trips: [...state.trips, trip] }));
+      },
+      toggleTripItem: (tripId, itemId) => set((state) => ({
+        trips: state.trips.map((t) => t.id !== tripId ? t : {
+          ...t, items: t.items.map((i) => (i.id === itemId ? { ...i, checked: !i.checked } : i)),
+        }),
+      })),
+      addTripItem: (tripId, label) => {
+        const name = label.trim();
+        const trip = get().trips.find((t) => t.id === tripId);
+        if (!trip || !name || trip.items.some((i) => i.label === name)) return false;
+        set((state) => ({
+          trips: state.trips.map((t) => t.id !== tripId ? t : {
+            ...t, items: [...t.items, { id: generateItemId(), label: name, checked: false, kind: 'custom' as const }],
+          }),
+        }));
+        return true;
+      },
+      removeTripItem: (tripId, itemId) => set((state) => ({
+        trips: state.trips.map((t) => {
+          if (t.id !== tripId) return t;
+          const item = t.items.find((i) => i.id === itemId);
+          // 날씨 짐을 빼면 기억한다 — 예보를 다시 받아도 되살리지 않게
+          const dismissed = item?.kind === 'weather' ? [...new Set([...(t.dismissed ?? []), item.label])] : t.dismissed;
+          return { ...t, items: t.items.filter((i) => i.id !== itemId), dismissed };
+        }),
+      })),
+      setTripWeather: (tripId, fresh) => set((state) => ({
+        trips: state.trips.map((t) => t.id !== tripId ? t : { ...t, items: mergeWeatherItems(t.items, fresh, generateItemId, t.dismissed) }),
+      })),
       setHomecomingTasks: (tasks) => set((state) => patchSettings(state, {
         homecomingTasks: [...new Set(tasks.map((t) => t.trim()).filter(Boolean))].slice(0, 10),
       })),
@@ -1271,6 +1324,8 @@ export const useAppStore = create<AppStore>()(
           userSettings: { ...currentState.userSettings, ...persisted?.userSettings },
           // 울리던 알람 창은 다시 띄우지 않는다 — 아직 울리고 있으면 App.tsx가 알림을 보고 다시 띄운다.
           ringingAlarm: null,
+          // 끝난 지 며칠 지난 여행 짐은 앱이 켜질 때 정리한다 (목적지까지 오래 남지 않게)
+          trips: pruneTrips(persisted?.trips ?? currentState.trips, getTodayString()),
           // 오늘 직접 고른 목적이면 되살린다. 복원 직후 체크리스트 재빌드가 목적 준비물을
           // 빼버리지 않게 merge 단계에서 바로 넣는다.
           ...restoredPurposeState(persisted?.manualPurpose, getTodayString()),
@@ -1302,6 +1357,8 @@ export const useAppStore = create<AppStore>()(
         forgottenHistory: state.forgottenHistory,
         packedDays: state.packedDays,
         restDays: state.restDays,
+        // 여행 짐 — 이름·날짜·목적지와 짐 이름만
+        trips: state.trips,
         // 같은 날 앱이 재시작돼도(기기 재부팅, 강제 종료 등) 오늘 이미 준 피드백을
         // 기억해야 applyFeedback의 재선택 방지 로직이 제대로 동작한다.
         todayFeedback: state.todayFeedback,

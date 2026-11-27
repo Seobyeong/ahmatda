@@ -142,6 +142,8 @@ export interface NightlyEntry {
   departure: string | null;
   // 다음 날이 대답 없는 공휴일이면 묻는다 — 이때는 피드백 버튼 대신 [쉬어요]/[평소처럼]/[다른 시간].
   holiday?: NightlyHoliday | null;
+  // 다음 날 출발하는 여행 짐 (C5) — "'부산 여행' 짐 4개 남았어요"
+  trip?: string | null;
 }
 
 const NIGHTLY_ID_PREFIX = 'nightly-check-';
@@ -157,6 +159,11 @@ export function isNightlyCheckId(id: string | undefined): boolean {
 }
 
 function nightlyContent(entry: NightlyEntry) {
+  const content = nightlyBase(entry);
+  return entry.trip ? { ...content, body: `${content.body}\n${entry.trip}` } : content;
+}
+
+function nightlyBase(entry: NightlyEntry) {
   const noItems = { items: [], count: 0 };
   const android = {
     channelId:   CHANNEL_REMINDER,
@@ -473,7 +480,7 @@ export const NotificationService = {
   //   skip    — 예약하지 않음
   async scheduleNightlyChecks(entries: NightlyEntry[]): Promise<void> {
     const wanted = entries.filter((e) => e.variant !== 'skip');
-    const signature = JSON.stringify([voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat, e.departure, e.holiday ?? null])]);
+    const signature = JSON.stringify([voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat, e.departure, e.holiday ?? null, e.trip ?? null])]);
 
     const existing = await notifee.getTriggerNotificationIds();
     const wantedIds = new Set(wanted.map((e) => nightlyId(e)));

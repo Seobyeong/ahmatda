@@ -238,6 +238,17 @@ export const WeatherService = {
     }
   },
 
+  // 여러 날 예보 요약을 한 번의 요청으로 (여행 짐 — 날마다 같은 좌표를 다시 받지 않게). 실패하면 null들.
+  async getDayOutlooks(lat: number, lon: number, dates: Date[], fromHHmm: string): Promise<Array<DayOutlook | null>> {
+    if (!KMA_API_KEY) return dates.map(() => null);
+    try {
+      const items = await WeatherService._fetchVilageFcst(lat, lon);
+      return dates.map((d) => summarizeDayOutlook(items, formatLocalDate(d), fromHHmm));
+    } catch {
+      return dates.map(() => null);
+    }
+  },
+
   // 단기예보(getVilageFcst) 원본 항목 — 타임라인과 다음 날 예보가 같이 쓴다. 실패하면 throw.
   async _fetchVilageFcst(lat: number, lon: number): Promise<KmaItem[]> {
     const { nx, ny } = latLonToGrid(lat, lon);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { CalendarPlus, ChevronRight, MapPin, Moon, Settings } from 'lucide-react-native';
+import { CalendarPlus, ChevronRight, Luggage, MapPin, Moon, Settings } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,8 @@ import { TomorrowPreviewModal } from '../components/TomorrowPreviewModal';
 import { MemoModal } from '../components/MemoModal';
 import { AddEventSheet } from '../components/AddEventSheet';
 import { Button } from '../components/ui';
+import { TripSheet } from '../components/TripSheet';
+import { tripWhen, upcomingTrips, type Trip } from '../utils/trip';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { PurposeId } from '../types';
 import { ChecklistCard } from './dashboard/ChecklistCard';
@@ -52,6 +54,11 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const [tomorrowVisible, setTomorrowVisible] = useState(false);
   // 일정 추가 — 헤더 버튼, 공휴일 질문의 [일정 있어요]. 날짜를 주면 그 날짜로 연다.
   const [addEvent, setAddEvent] = useState<{ date: Date | null } | null>(null);
+  // 여행 짐 (C5) — null이면 닫힘, tripId null이면 새로 만들기
+  const [tripSheet, setTripSheet] = useState<{ tripId: string | null } | null>(null);
+  // 끝나지 않은 여행 전부 (출발 순) — 멀리 있는 여행도 다시 열 수 있게
+  const tripsJson = useAppStore((s) => JSON.stringify(upcomingTrips(s.trips, toDateString(now))));
+  const shownTrips = JSON.parse(tripsJson) as Trip[];
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -248,6 +255,38 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
           }}
         />
 
+        {/* 여행 짐 — 끝나지 않은 여행마다 한 줄 + 만들기 링크 (일상 체크리스트와 따로) */}
+        {shownTrips.map((trip) => {
+          const today = toDateString(now);
+          const packed = trip.items.filter((i) => i.checked).length;
+          return (
+            <Pressable
+              key={trip.id}
+              style={[styles.lightRow, styles.sectionSpacing]}
+              onPress={() => setTripSheet({ tripId: trip.id })}
+              accessibilityRole="button"
+              accessibilityLabel={`${trip.name} 짐, ${tripWhen(trip, today)}, ${trip.items.length}개 중 ${packed}개 챙김`}
+            >
+              <Luggage size={18} color={Role.textMuted} />
+              <View style={styles.lightRowText}>
+                <Text style={styles.lightRowTitle} numberOfLines={1}>{trip.name} 짐</Text>
+                <Text style={styles.lightRowSub} numberOfLines={1}>
+                  {tripWhen(trip, today)} · {trip.items.length}개 중 {packed}개 챙김
+                </Text>
+              </View>
+              <ChevronRight size={18} color={Role.actionText} />
+            </Pressable>
+          );
+        })}
+        <Button
+          label="여행 짐 싸기"
+          variant="text"
+          size="sm"
+          icon={<Luggage size={14} color={Role.actionText} />}
+          onPress={() => setTripSheet({ tripId: null })}
+          style={styles.tripLink}
+        />
+
         {aiSuggestions.length > 0 ? (
           <View style={styles.sectionSpacing}>
             <AiSuggestionCard
@@ -304,6 +343,13 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
         onClose={() => setAddEvent(null)}
         // 오늘 일정이면 일정을 다시 읽어 목적·연동 뱃지를 맞춘다.
         onSaved={(date) => { if (date === toDateString(new Date())) refresh(); }}
+      />
+
+      <TripSheet
+        visible={tripSheet !== null}
+        tripId={tripSheet?.tripId ?? null}
+        onClose={() => setTripSheet(null)}
+        onCreated={(id) => setTripSheet({ tripId: id })}
       />
 
       {/* 설정 화면이 위에 떠 있을 땐 그쪽이 토스트를 보여 준다. */}
@@ -389,6 +435,10 @@ const useStyles = makeStyles(({ Role }) => ({
   },
   lightRowText: {
     flex: 1,
+  },
+  tripLink: {
+    alignSelf: 'flex-start',
+    marginTop: Space.sm,
   },
   lightRowTitle: {
     fontSize: FontSize.body,

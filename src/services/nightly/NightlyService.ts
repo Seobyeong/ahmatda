@@ -18,6 +18,7 @@ import {
   type DepartureSchedule,
 } from '@/utils/schedule';
 import type { NightlyHoliday } from '@/services/notification/NotificationService';
+import type { Trip } from '@/utils/trip';
 import { fetchPreviewInputs } from './previewInputs';
 import { classifyOuting, decideNightly, nextOutingDiffers, previewHighlight } from './nightlyRules';
 import { OutingLog } from './outingLog';
@@ -57,6 +58,15 @@ function windowStartOf(date: string, departureTime: string): number {
   const [y, m, d] = date.split('-').map(Number);
   const [hh, mm] = departureTime.split(':').map(Number);
   return new Date(y, m - 1, d, hh, mm, 0, 0).getTime() - DEPARTURE_ALERT_LEAD_MS;
+}
+
+// 이 밤 다음 날 출발하는 여행 짐 (C5) — 남은 짐 수. 다 챙겼으면 말하지 않는다.
+function tripFor(at: Date, trips: readonly Trip[]): string | null {
+  const target = toDateString(new Date(at.getFullYear(), at.getMonth(), at.getDate() + (at.getHours() < 4 ? 0 : 1)));
+  const trip = trips.find((t) => t.start === target);
+  if (!trip) return null;
+  const left = trip.items.filter((i) => !i.checked).length;
+  return left > 0 ? `여행: '${trip.name}' 짐 ${left}개 남았어요` : null;
 }
 
 // 이 밤 알림이 물어볼 공휴일 — 다음 날 시작하는 대답 없는 공휴일(연휴는 한 번에).
@@ -135,6 +145,7 @@ async function planOnce(fresh: boolean): Promise<void> {
       departure: repeat ? null : nextDepartureLabel(atSchedule, at),
       // 매일 반복 칸은 날마다 달라서 묻지 않는다 (그 전에 앱이 다시 계획한다).
       holiday: repeat ? null : holidayFor(at, atSchedule),
+      trip: repeat ? null : tripFor(at, state.trips),
     };
   });
 
@@ -164,9 +175,10 @@ async function planOnce(fresh: boolean): Promise<void> {
       repeat: false,
       departure: entries[0].departure,
       holiday: entries[0].holiday,
+      trip: entries[0].trip,
     };
-    // 물어볼 공휴일이 있으면 건너뛰지 않는다 — 대답을 받을 기회가 이 알림이다.
-    if (entries[0].holiday && entries[0].variant === 'skip') entries[0].variant = 'preview';
+    // 물어볼 공휴일이나 내일 떠나는 여행이 있으면 건너뛰지 않는다 — 알릴 기회가 이 알림이다.
+    if ((entries[0].holiday || entries[0].trip) && entries[0].variant === 'skip') entries[0].variant = 'preview';
   }
 
   await NotificationService.scheduleNightlyChecks(entries);
