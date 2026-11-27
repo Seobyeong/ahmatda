@@ -28,10 +28,27 @@ export interface HomeWifi {
 
 export const MAX_HOME_BSSIDS = 8;
 
+// 새로 배운 BSSID를 맨 뒤에 더한다. 가득 차면 등록한 첫 번째는 남기고 맨 앞(가장 오래 안 붙은 것)을 뺀다 —
+// 공유기를 바꾸거나 메시 노드를 늘려도 계속 배우게 (한 번 차면 같은 이름이 영영 '모름'이던 한계).
+// 붙을 때마다 withSeenBssid로 맨 뒤로 옮기므로, 지금 쓰는 노드는 빠지지 않는다.
+export function withLearnedBssid<T extends HomeWifi>(home: T, bssid: string): T {
+  const next = [...home.bssids, bssid.toLowerCase()];
+  if (next.length > MAX_HOME_BSSIDS) next.splice(1, next.length - MAX_HOME_BSSIDS);
+  return { ...home, bssids: next };
+}
+
+// 아는 BSSID에 붙었으면 맨 뒤로 옮긴다 (첫 번째 = 등록한 것은 자리를 지킨다). 바뀔 게 없으면 null.
+export function withSeenBssid<T extends HomeWifi>(home: T, bssid: string): T | null {
+  const b = bssid.toLowerCase();
+  const i = home.bssids.findIndex((x) => x.toLowerCase() === b);
+  if (i <= 0 || i === home.bssids.length - 1) return null;
+  return { ...home, bssids: [...home.bssids.slice(0, i), ...home.bssids.slice(i + 1), home.bssids[i]] };
+}
+
 const asHome = (home: HomeWifi | string): HomeWifi =>
   typeof home === 'string' ? { bssids: [home.toLowerCase()], ssid: null } : home;
 
-function readBssid(state: NetInfoState): string | null {
+export function readBssid(state: NetInfoState): string | null {
   const raw = (state.details as { bssid?: string } | null)?.bssid ?? null;
   if (raw === null) return null;
   const bssid = raw.toLowerCase();
@@ -95,7 +112,6 @@ export function homeWifiLesson(state: NetInfoState, home: HomeWifi): HomeWifiLes
   const known = home.bssids.some((b) => b.toLowerCase() === bssid);
   if (known) return home.ssid === null ? { kind: 'learnSsid', ssid } : { kind: 'none' };
   if (home.ssid === null || ssid !== home.ssid) return { kind: 'none' };
-  if (home.bssids.length >= MAX_HOME_BSSIDS) return { kind: 'none' };
   return home.bssids.some((b) => sameRouter(b, bssid))
     ? { kind: 'learnBssid', bssid }
     : { kind: 'needsLocation', bssid };

@@ -133,8 +133,45 @@ describe('decideDeparture — [떠나기] 뒤엔 집 Wi-Fi가 끊길 때까지 (
   });
 
   it('규칙 10 — [떠나기]는 1시간 동안만 유효', () => {
-    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 59)], ALL, at(59), 'away').status).toBe('confirmed');
+    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 57)], ALL, at(60), 'away').status).toBe('confirmed');
     expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 61)], ALL, at(61), 'away').status).toBe('candidate');
+  });
+
+  it('규칙 10 — 누른 지 15분 안에 끊기면 바로 확정', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 15)], ALL, at(15), 'away'))
+      .toEqual({ status: 'confirmed', at: at(15), by: ['leaveIntent', 'wifiExit'] });
+  });
+
+  it('규칙 10 — 15분 뒤 끊기면 3분 이어질 때 확정 (공유기 재부팅 거르기)', () => {
+    const signals = [sig('leaveIntent', 0), sig('wifiExit', 30)];
+    expect(decideDeparture(signals, ALL, at(31), 'away'))
+      .toEqual({ status: 'candidate', since: at(30), recheckAt: at(33) });
+    expect(decideDeparture(signals, ALL, at(33), 'away'))
+      .toEqual({ status: 'confirmed', at: at(33), by: ['leaveIntent', 'wifiExit'] });
+  });
+
+  it('규칙 10 — 3분 안에 다시 붙으면 확정하지 않는다', () => {
+    const signals = [sig('leaveIntent', 0), sig('wifiExit', 30), sig('wifiReturn', 32)];
+    expect(decideDeparture(signals, ALL, at(34), 'home')).toEqual({ status: 'none' });
+    expect(decideDeparture(signals, ALL, at(34), 'unknown')).toEqual({ status: 'none' });
+  });
+
+  it('규칙 10 — 기다리는 중에 걷기가 오면 평소 규칙(주 1 + 부가 1)으로 바로 확정', () => {
+    const signals = [sig('leaveIntent', 0), sig('wifiExit', 30), sig('walking', 31)];
+    expect(decideDeparture(signals, ALL, at(31), 'away')).toMatchObject({ status: 'confirmed', at: at(31) });
+    // 3분이 지난 뒤 판정해도 확정 시각·근거는 더 이른 걷기 쪽이다
+    expect(decideDeparture(signals, ALL, at(34), 'away'))
+      .toEqual({ status: 'confirmed', at: at(31), by: ['leaveIntent', 'wifiExit', 'walking'] });
+  });
+
+  it('규칙 10 — 3분이 지나도 지금 집 Wi-Fi 상태를 모르면 기다림으로 확정하지 않는다', () => {
+    const signals = [sig('leaveIntent', 0), sig('wifiExit', 30)];
+    expect(decideDeparture(signals, ALL, at(33), 'unknown').status).toBe('candidate');
+  });
+
+  it('규칙 10 — 다시 볼 때 [떠나기]가 끝나 있으면 recheckAt을 주지 않는다', () => {
+    expect(decideDeparture([sig('leaveIntent', 0), sig('wifiExit', 58)], ALL, at(59), 'away'))
+      .toEqual({ status: 'candidate', since: at(58) });
   });
 });
 

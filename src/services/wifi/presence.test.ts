@@ -1,5 +1,5 @@
 import type { NetInfoState } from '@react-native-community/netinfo';
-import { classifyPresence, homeWifiLesson, readSsid, sameRouter, MAX_HOME_BSSIDS, type HomeWifi } from './presence';
+import { classifyPresence, homeWifiLesson, readSsid, sameRouter, withLearnedBssid, withSeenBssid, MAX_HOME_BSSIDS, type HomeWifi } from './presence';
 
 const HOME = 'aa:bb:cc:dd:ee:ff';
 
@@ -104,8 +104,24 @@ describe('homeWifiLesson', () => {
     expect(homeWifiLesson(cellular(), NAMED)).toEqual({ kind: 'none' });
   });
 
-  it('목록이 가득 차면 더 배우지 않는다', () => {
+  it('목록이 가득 차도 계속 배운다 — 등록한 첫 번째는 남기고 가장 먼저 배운 것을 뺀다', () => {
     const full: HomeWifi = { bssids: Array.from({ length: MAX_HOME_BSSIDS }, (_, i) => `aa:bb:cc:dd:ee:${String(i).padStart(2, '0')}`), ssid: 'MyHome' };
-    expect(homeWifiLesson(net(MESH, 'MyHome'), full)).toEqual({ kind: 'none' });
+    expect(homeWifiLesson(net(MESH, 'MyHome'), full).kind).not.toBe('none');
+    const next = withLearnedBssid(full, 'AA:BB:CC:DD:EE:99');
+    expect(next.bssids).toHaveLength(MAX_HOME_BSSIDS);
+    expect(next.bssids[0]).toBe(full.bssids[0]);
+    expect(next.bssids).not.toContain(full.bssids[1]);
+    expect(next.bssids[MAX_HOME_BSSIDS - 1]).toBe('aa:bb:cc:dd:ee:99');
+    expect(withLearnedBssid({ bssids: ['aa:bb:cc:dd:ee:00'], ssid: 'MyHome' }, 'aa:bb:cc:dd:ee:01').bssids)
+      .toEqual(['aa:bb:cc:dd:ee:00', 'aa:bb:cc:dd:ee:01']);
+  });
+
+  it('붙은 노드는 맨 뒤로 옮겨 가득 찰 때 빠지지 않는다 — 등록한 첫 번째는 그대로', () => {
+    const home: HomeWifi = { bssids: ['aa:00:00:00:00:00', 'aa:00:00:00:00:01', 'aa:00:00:00:00:02'], ssid: 'MyHome' };
+    expect(withSeenBssid(home, 'AA:00:00:00:00:01')?.bssids)
+      .toEqual(['aa:00:00:00:00:00', 'aa:00:00:00:00:02', 'aa:00:00:00:00:01']);
+    expect(withSeenBssid(home, 'aa:00:00:00:00:00')).toBeNull();
+    expect(withSeenBssid(home, 'aa:00:00:00:00:02')).toBeNull();
+    expect(withSeenBssid(home, 'bb:00:00:00:00:00')).toBeNull();
   });
 });

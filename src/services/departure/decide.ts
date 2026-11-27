@@ -32,7 +32,11 @@
 //      집 Wi-Fi 미등록·상태 모름이면 기다릴 신호가 없으니 지금처럼 센다.
 //  10. [떠나기]를 누른 뒤 집 Wi-Fi가 끊기면(Wi-Fi 이탈이 [떠나기]보다 나중) 바로 확정한다 — 규칙 9로
 //      기다리게 한 만큼, 끊기는 순간이 곧 나가는 순간이다. 그래서 [떠나기]는 10분 창이 아니라
-//      LEAVE_VALID_MS 동안 유효하다 (누르고 신발 신고 10분 넘게 걸려도 끊길 때 바로 알리게).
+//      LEAVE_VALID_MS 동안 유효하다 (누르고 신발 신고 10분 넘게 걸려도 끊길 때 알리게).
+//      단 누른 지 LEAVE_QUICK_MS가 지나서 끊기면 끊긴 상태가 LEAVE_WIFI_HOLD_MS 이어질 때 확정한다
+//      (2026-11-28 결정) — 누르고 한참 집에 있다가 공유기가 재부팅되는 경우(보통 1~3분)를 거른다.
+//      기다리는 동안은 후보이고 recheckAt에 다시 본다. 3분 뒤 판정할 때 집 Wi-Fi 상태가 'away'여야 한다
+//      ('unknown'으로 다시 붙으면 복귀 기록이 안 남는다). 기다리는 사이 걷기·위치가 오면 평소 규칙이 더 이르다.
 
 export const DECISION_WINDOW_MS = 10 * 60 * 1000;
 export const WIFI_FALLBACK_MS = 5 * 60 * 1000;
@@ -40,6 +44,9 @@ export const WIFI_FALLBACK_MS = 5 * 60 * 1000;
 export const SAFETY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 // [떠나기]를 누른 뒤 이만큼 안에 집 Wi-Fi가 끊기면 나간 것으로 본다 (규칙 10).
 export const LEAVE_VALID_MS = 60 * 60 * 1000;
+// [떠나기] 뒤 이만큼 안에 끊기면 바로, 그 뒤면 끊긴 상태가 LEAVE_WIFI_HOLD_MS 이어져야 확정 (규칙 10).
+export const LEAVE_QUICK_MS = 15 * 60 * 1000;
+export const LEAVE_WIFI_HOLD_MS = 3 * 60 * 1000;
 
 export type DepartureSignalType =
   | 'walking'        // 주 — 걷기 시작 (활동 인식)
@@ -65,7 +72,8 @@ export interface SignalAvailability {
 
 export type DepartureDecision =
   | { status: 'none' }
-  | { status: 'candidate'; since: number }          // 신호는 있지만 아직 확정 아님
+  // 신호는 있지만 아직 확정 아님. recheckAt — 이때 다시 보면 확정될 수 있다 (규칙 10 기다림)
+  | { status: 'candidate'; since: number; recheckAt?: number }
   | { status: 'confirmed'; at: number; by: DepartureSignalType[] };
 
 const PRIMARY: ReadonlySet<DepartureSignalType> = new Set(['walking', 'locationExit']);
@@ -103,13 +111,33 @@ export function decideDeparture(
   // 규칙 9 — 집 Wi-Fi에 붙어 있는 동안 [떠나기]는 세지 않는다
   const counts = (t: DepartureSignalType) => !(t === 'leaveIntent' && homeWifiNow === 'home');
   const seen = new Set<DepartureSignalType>();
+  let leaveAt: number | null = null;
+  let recheckAt: number | undefined;
+  // 규칙 10 기다림을 채운 확정 — 그 시각 전에 들어온 신호가 평소 규칙으로 더 일찍 확정하면 그쪽이 맞다.
+  let held: { status: 'confirmed'; at: number; by: DepartureSignalType[] } | null = null;
   for (const s of live) {
-    // 규칙 10 — [떠나기] 뒤에 온 Wi-Fi 이탈 (wifiExit는 집 Wi-Fi에 붙어 있으면 이미 빠졌다, 규칙 8)
-    const leaveThenWifi = s.type === 'wifiExit' && seen.has('leaveIntent');
+    if (held && s.at >= held.at) return held;
+    // 규칙 10 — [떠나기] 뒤에 온 Wi-Fi 이탈 (wifiExit는 집 Wi-Fi에 붙어 있으면 이미 빠졌다, 규칙 8).
+    let leaveThenWifi = false;
+    if (s.type === 'wifiExit' && leaveAt !== null && !held) {
+      const holdUntil = s.at + LEAVE_WIFI_HOLD_MS;
+      if (s.at - leaveAt <= LEAVE_QUICK_MS) {
+        leaveThenWifi = true;
+      } else if (now >= holdUntil && homeWifiNow === 'away') {
+        // live에 남은 이탈은 그 뒤 귀가 기록이 없다는 뜻이지만, 'unknown'으로 다시 붙으면 기록이 없다 —
+        // 지금 확실히 끊겨 있을 때만 "이어졌다"고 본다.
+        held = { status: 'confirmed', at: holdUntil, by: [] };
+      } else if (now < holdUntil && holdUntil - leaveAt <= LEAVE_VALID_MS) {
+        // 다시 볼 때 [떠나기]가 아직 유효해야 의미가 있다
+        recheckAt ??= holdUntil;
+      }
+    }
+    if (s.type === 'leaveIntent' && leaveAt === null) leaveAt = s.at;
     seen.add(s.type);
     const counted = [...seen].filter(counts);
     const primary = counted.filter((t) => PRIMARY.has(t)).length;
     const secondary = counted.filter((t) => SECONDARY.has(t)).length;
+    if (held && held.by.length === 0) held.by = counted;
 
     const confirmed =
       primary >= 2 ||
@@ -120,13 +148,17 @@ export function decideDeparture(
     if (confirmed) return { status: 'confirmed', at: s.at, by: counted };
   }
 
-  // 규칙 6 — 마지막 Wi-Fi 상태가 "이탈"이고 5분 넘게 복귀가 없으면 확정
+  // 규칙 6 — 마지막 Wi-Fi 상태가 "이탈"이고 5분 넘게 복귀가 없으면 확정 (둘 다면 이른 쪽)
+  if (held && fallback?.status === 'confirmed' && fallback.at < held.at) return fallback;
+  if (held) return held;
   if (fallback) return fallback;
 
   // [떠나기]만 있으면 "나갈 생각"일 뿐 신호가 아니다 — 후보로도 보지 않는다.
   const evidence = live.filter((s) => s.type !== 'leaveIntent');
   if (evidence.length === 0) return { status: 'none' };
-  return { status: 'candidate', since: evidence[0].at };
+  return recheckAt === undefined
+    ? { status: 'candidate', since: evidence[0].at }
+    : { status: 'candidate', since: evidence[0].at, recheckAt };
 }
 
 function wifiFallback(signals: DepartureSignal[], now: number): DepartureDecision | null {

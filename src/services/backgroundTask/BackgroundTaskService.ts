@@ -10,6 +10,8 @@ import { OutingLog } from '@/services/nightly/outingLog';
 import { NightlyService } from '@/services/nightly/NightlyService';
 
 const DEPARTURE_TASK_ID = 'ahmatda-departure-check';
+// 외출 판정 재확인 (규칙 10 — [떠나기] 뒤 끊김이 3분 이어지는지). 앱이 뒤에 있으면 JS 타이머가 멈출 수 있어서.
+const RECHECK_TASK_ID = 'ahmatda-departure-recheck';
 const PLAN_BUDGET_MS = 15 * 1000;
 
 export const BackgroundTaskService = {
@@ -29,7 +31,7 @@ export const BackgroundTaskService = {
         await BackgroundTaskService._runCheck();
         // AI 미리 계산은 주기 폴링에서만 한다. 출발 알림 태스크는 알림 판단만 하고 끝내야
         // 한다 — 알림 시각이 AI 응답 시간에 영향받으면 안 된다(AI 연결 설계 4장 규칙 4).
-        if (taskId !== DEPARTURE_TASK_ID) {
+        if (taskId !== DEPARTURE_TASK_ID && taskId !== RECHECK_TASK_ID) {
           // 집 밖 머묾 확인(감시 창과 무관하게 하루 종일, 켜져 있을 때만)과 AI 미리 계산은 서로 무관하다.
           // 위치 조회가 길어져도 OS 백그라운드 실행 시간 안에 둘 다 끝나게 같이 돌린다.
           // 자기 전 정리: 집 Wi-Fi 안/밖을 한 번 보고(외출했는지), 오늘 밤 알림을 다시 계획한다.
@@ -63,6 +65,16 @@ export const BackgroundTaskService = {
     await BackgroundFetch.scheduleTask({
       taskId: DEPARTURE_TASK_ID,
       delay: target.getTime() - Date.now(),
+      periodic: false,
+      forceAlarmManager: true,
+    });
+  },
+
+  // 외출 판정을 이 시각에 한 번 더 돌린다 (1회성). 같은 id로 다시 걸면 바뀐 시각으로 덮는다.
+  async scheduleDepartureRecheck(at: number): Promise<void> {
+    await BackgroundFetch.scheduleTask({
+      taskId: RECHECK_TASK_ID,
+      delay: Math.max(0, at - Date.now()),
       periodic: false,
       forceAlarmManager: true,
     });

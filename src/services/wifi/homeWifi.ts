@@ -16,7 +16,7 @@ import { AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { distanceMeters } from '@/services/departure/awayPlace';
 import { SignalLog } from '@/services/departure/signalLog';
-import { classifyPresence, homeWifiLesson, readSsid, type HomePresence, type HomeWifi } from './presence';
+import { classifyPresence, homeWifiLesson, readBssid, readSsid, withLearnedBssid, withSeenBssid, type HomePresence, type HomeWifi } from './presence';
 
 // 처음 등록한 BSSID — "집 Wi-Fi 등록됨" 여부와 예전 버전 호환에 쓴다.
 export const HOME_BSSID_KEY = 'home_bssid';
@@ -115,22 +115,30 @@ export function observeHomeWifi(given?: NetInfoState): Promise<HomePresence> {
       const presence = classifyPresence(state, home);
       const lesson = homeWifiLesson(state, home);
 
+      let current = home;
       if (lesson.kind === 'learnSsid') {
-        await save({ ...home, ssid: lesson.ssid });
+        current = { ...home, ssid: lesson.ssid };
+        await save(current);
       } else if (lesson.kind === 'learnBssid') {
         // 같은 공유기로 보여도 집 반경 밖이 확실하면 배우지 않는다 — 기본 이름('iptime')에 MAC이
         // 이어지는 이웃·단지 공유기를 집으로 배우지 않게.
         if (judge(await recentFix()) === 'outside') return 'away';
-        await save({ ...home, bssids: [...home.bssids, lesson.bssid] });
+        await save(withLearnedBssid(home, lesson.bssid));
         return 'home';
       } else if (lesson.kind === 'needsLocation') {
         const where = judge(await recentFix());
         if (where === 'near') {
-          await save({ ...home, bssids: [...home.bssids, lesson.bssid] });
+          await save(withLearnedBssid(home, lesson.bssid));
           return 'home';
         }
         if (where === 'outside') return 'away';
         maybeFreshFix(lesson.bssid, home.registeredAt);
+      }
+      if (presence === 'home') {
+        // 지금 붙은 노드를 목록 맨 뒤로 — 가득 차서 뺄 때 쓰는 노드가 빠지지 않게 (withLearnedBssid)
+        const bssid = readBssid(state);
+        const seen = bssid ? withSeenBssid(current, bssid) : null;
+        if (seen) await save(seen);
       }
       return presence;
     } catch {
@@ -203,7 +211,7 @@ function maybeFreshFix(bssid: string, registeredAt: number): void {
       if (!stored || stored.registeredAt !== registeredAt) return;
       const lesson = homeWifiLesson(state, stored);
       if (lesson.kind !== 'needsLocation' || lesson.bssid !== bssid) return;
-      await save({ ...stored, bssids: [...stored.bssids, bssid] });
+      await save(withLearnedBssid(stored, bssid));
       // 이 노드로 넘어올 때 Wi-Fi 이탈이 적혔을 수 있다 — 집으로 배웠으니 복귀를 적어 안전장치가 울리지 않게
       await SignalLog.record('wifiReturn');
     });

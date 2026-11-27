@@ -64,12 +64,23 @@ async function collectSignals(leaveIntent: { date: string; at: number } | null):
   return signals;
 }
 
-function scheduleRecheck(): void {
+// 판정이 다시 볼 시각을 알려 주면(규칙 10 — [떠나기] 뒤 끊김이 이어지는지) 그때, 아니면 Wi-Fi 안전장치 시각에.
+function scheduleRecheck(recheckAt?: number): void {
   if (recheckTimer) clearTimeout(recheckTimer);
+  const delay = recheckAt === undefined
+    ? WIFI_FALLBACK_MS
+    : Math.min(WIFI_FALLBACK_MS, Math.max(0, recheckAt - Date.now()));
   recheckTimer = setTimeout(() => {
     recheckTimer = null;
     DepartureService.evaluate().catch(() => {});
-  }, WIFI_FALLBACK_MS + RECHECK_SLACK_MS);
+  }, delay + RECHECK_SLACK_MS);
+  // 규칙 10 기다림은 몇 분 단위라 15분 폴링으로는 늦다 — 앱이 뒤에 있어 타이머가 멈춰도 그 시각에 깨운다.
+  // (순환 참조를 피해 늦게 불러온다: BackgroundTaskService → WifiMonitorService → 여기)
+  if (recheckAt !== undefined) {
+    import('@/services/backgroundTask/BackgroundTaskService')
+      .then(({ BackgroundTaskService }) => BackgroundTaskService.scheduleDepartureRecheck(recheckAt + RECHECK_SLACK_MS))
+      .catch(() => {});
+  }
 }
 
 async function evaluateOnce(): Promise<ChecklistItem[] | null> {
@@ -89,7 +100,7 @@ async function evaluateOnce(): Promise<ChecklistItem[] | null> {
 
   const { signals, availability, homeWifiNow } = await gatherInputs(leaveIntent);
   const decision = decideDeparture(signals, availability, Date.now(), homeWifiNow);
-  if (decision.status === 'candidate') scheduleRecheck();
+  if (decision.status === 'candidate') scheduleRecheck(decision.recheckAt);
   if (decision.status !== 'confirmed') return null;
 
   if (recheckTimer) { clearTimeout(recheckTimer); recheckTimer = null; }
