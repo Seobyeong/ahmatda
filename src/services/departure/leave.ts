@@ -8,6 +8,7 @@ import { NotificationService } from '@/services/notification/NotificationService
 import { buildDepartureSnapshot, sortByUrgency } from '@/utils/departureSnapshot';
 import { getTodayString } from '@/utils/time';
 import { nextDepartureLabel } from '@/utils/schedule';
+import { applyWidgetChecks } from '@/services/widget/widgetChecks';
 import type { ChecklistItem } from '@/types';
 
 export type LeaveResult =
@@ -26,6 +27,8 @@ async function getStore() {
 
 export async function pressLeave(): Promise<LeaveResult> {
   const { useAppStore } = await getStore();
+  // 위젯에서 누른 [챙김]을 먼저 반영한다 (C3)
+  await applyWidgetChecks().catch(() => 0);
 
   // 앱을 오늘 한 번도 안 열었으면 체크리스트는 아직 어제 것이다 (WifiMonitorService.checkOnce와 같은 이유).
   if (useAppStore.getState().checklistDate !== getTodayString()) {
@@ -59,6 +62,7 @@ export function leaveResultMessage(result: LeaveResult): string {
 // 바뀐 목록으로 출발 상태·마지막 확인 알림을 다시 그린다 (다음 물건 버튼이 붙는다).
 export async function checkFromNotification(label: string, date: string): Promise<void> {
   const { useAppStore, scheduleOf } = await getStore();
+  await applyWidgetChecks().catch(() => 0);
   if (date !== getTodayString()) return;
   if (useAppStore.getState().checklistDate !== date) useAppStore.getState().startNewDay();
   const item = useAppStore.getState().checklist.find((i) => i.label === label);

@@ -208,7 +208,7 @@ export function TripSheet({ visible, tripId, onClose, onCreated }: {
                 maxLength={40}
                 accessibilityLabel="목적지"
               />
-              <Text style={styles.hint}>목적지는 날씨를 찾는 데만 쓰고 이 기기에만 저장해요.</Text>
+              <Text style={styles.hint}>목적지는 이 기기에만 저장하고, 날씨를 찾을 때만 휴대폰의 지명 검색(Google·Apple)에 보내요.</Text>
               <Button label="짐 목록 만들기" onPress={create} style={styles.primary} />
             </ScrollView>
           ) : (

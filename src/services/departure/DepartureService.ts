@@ -88,6 +88,9 @@ async function evaluateOnce(): Promise<ChecklistItem[] | null> {
   // 출발 시각·체크리스트가 전부 틀린다 (leave.ts와 같은 이유).
   const { useAppStore, whenHydrated, scheduleOf } = await import('@/store');
   await whenHydrated();
+  // 위젯에서 챙긴 것부터 반영한다 — 위젯으로 챙긴 우산을 "안 챙김"으로 알리지 않게 (C3)
+  const { applyWidgetChecks } = await import('@/services/widget/widgetChecks');
+  await applyWidgetChecks().catch(() => 0);
 
   const { userSettings, leaveIntent } = useAppStore.getState();
   if (!userSettings.onboarded) return null;

@@ -13,7 +13,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// 홈 화면 출발 위젯 — "08:15 출발 / 우산 · 노트북 외 1개" 두 줄 + [떠나기].
+// 홈 화면 출발 위젯 — "08:15 출발 / 우산 · 노트북 외 1개" 두 줄 + [떠나기] + 안 챙긴 물건 줄(최대 3개, [챙김]).
+// 물건 줄의 [챙김]은 앱을 열지 않고 WidgetCheckReceiver가 받는다 (C3).
 // 표시 내용은 JS의 buildDepartureSnapshot이 정하고, 여기서는 그리기만 한다.
 //
 // [떠나기]는 앱을 ahmatda://leave?n=… 로 연다 (JS가 앱의 [떠나기]와 같은 흐름을 돈다).
@@ -36,6 +37,12 @@ class DepartureWidgetProvider : AppWidgetProvider() {
     private const val KEY_LEAVE_NONCE = "leave_nonce"
     private const val KEY_LEAVE_NONCE_PREV = "leave_nonce_prev"
     private val random = java.security.SecureRandom()
+    // 물건 줄 (줄, 이름, [챙김]) — 레이아웃의 최대 3줄
+    private val ITEM_ROWS = listOf(
+      Triple(R.id.widget_item_row_0, R.id.widget_item_label_0, R.id.widget_item_check_0),
+      Triple(R.id.widget_item_row_1, R.id.widget_item_label_1, R.id.widget_item_check_1),
+      Triple(R.id.widget_item_row_2, R.id.widget_item_label_2, R.id.widget_item_check_2),
+    )
 
     fun updateAll(context: Context) {
       val manager = AppWidgetManager.getInstance(context)
@@ -48,6 +55,23 @@ class DepartureWidgetProvider : AppWidgetProvider() {
       val nonce = issueNonce(context)
       ids.forEach { render(context, manager, it, nonce) }
     }
+
+    // 빠른 설정 타일 [떠나기] (LeaveTileService) — 위젯과 같은 발급값으로 링크를 만든다.
+    // 새 값을 발급하고 위젯도 그 값으로 다시 그린다 (위젯이 없어도 발급은 한다).
+    fun leaveIntent(context: Context): Intent? {
+      val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+      val nonce = issueNonce(context)
+      val manager = AppWidgetManager.getInstance(context)
+      manager.getAppWidgetIds(ComponentName(context, DepartureWidgetProvider::class.java))
+        .forEach { render(context, manager, it, nonce) }
+      return leaveViewIntent(launch, nonce)
+    }
+
+    private fun leaveViewIntent(launch: Intent, nonce: String): Intent =
+      Intent(Intent.ACTION_VIEW, Uri.parse("$LEAVE_LINK?n=$nonce")).apply {
+        component = launch.component
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
 
     // 새 값을 발급하고, 지금 값은 "바로 전 값"으로 한 칸 민다.
     @Synchronized
@@ -81,12 +105,36 @@ class DepartureWidgetProvider : AppWidgetProvider() {
       val today = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
 
       // 어제 요약을 오늘 것처럼 보여주면 안 된다 — 앱을 열어야 오늘 체크리스트가 만들어진다.
-      if (snapshot == null || snapshot.optString("date") != today) {
+      val fresh = snapshot != null && snapshot.optString("date") == today
+      if (!fresh) {
         views.setTextViewText(R.id.widget_title, context.getString(R.string.ahmatda_widget_label))
         views.setTextViewText(R.id.widget_detail, context.getString(R.string.ahmatda_widget_stale))
       } else {
-        views.setTextViewText(R.id.widget_title, snapshot.optString("title"))
+        views.setTextViewText(R.id.widget_title, snapshot!!.optString("title"))
         views.setTextViewText(R.id.widget_detail, snapshot.optString("detail"))
+      }
+
+      // 물건 줄 — 오늘 요약일 때만. 없는 줄은 숨긴다.
+      val checkable = if (fresh) snapshot!!.optJSONArray("checkable") else null
+      ITEM_ROWS.forEachIndexed { i, (row, label, check) ->
+        val item = checkable?.optString(i)?.takeIf { it.isNotEmpty() && i < checkable.length() }
+        if (item == null) {
+          views.setViewVisibility(row, android.view.View.GONE)
+        } else {
+          views.setViewVisibility(row, android.view.View.VISIBLE)
+          views.setTextViewText(label, item)
+          views.setContentDescription(check, context.getString(R.string.ahmatda_widget_check_desc, item))
+          val tap = Intent(context, WidgetCheckReceiver::class.java).apply {
+            action = WidgetCheckReceiver.ACTION_CHECK
+            putExtra(WidgetCheckReceiver.EXTRA_LABEL, item)
+            putExtra(WidgetCheckReceiver.EXTRA_DATE, today)
+          }
+          // 줄마다 requestCode를 달리해야 PendingIntent가 서로 덮어쓰지 않는다
+          views.setOnClickPendingIntent(
+            check,
+            PendingIntent.getBroadcast(context, 100 + i, tap, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+          )
+        }
       }
 
       val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
@@ -99,10 +147,7 @@ class DepartureWidgetProvider : AppWidgetProvider() {
 
         // [떠나기] — 런처 인텐트를 복사하지 않고 VIEW 인텐트를 새로 만든다 (LAUNCHER 카테고리가 섞이면
         // 일부 런처가 "앞으로 가져오기"로만 처리해 onNewIntent가 안 올 수 있다). requestCode로 열기와 구분.
-        val leave = Intent(Intent.ACTION_VIEW, Uri.parse("$LEAVE_LINK?n=$nonce")).apply {
-          component = launch.component
-          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val leave = leaveViewIntent(launch, nonce)
         views.setOnClickPendingIntent(
           R.id.widget_leave,
           PendingIntent.getActivity(context, 1, leave, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

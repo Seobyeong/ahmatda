@@ -14,6 +14,7 @@ import { scheduleOf, useAppStore, whenHydrated } from '@/store';
 import { currentDepartureLabel } from '@/utils/schedule';
 import { buildDepartureSnapshot, type DepartureSnapshot } from '@/utils/departureSnapshot';
 import { consumeLeaveNonce, setWidgetSnapshot } from './modules/ahmatda-widget';
+import { applyWidgetChecks } from '@/services/widget/widgetChecks';
 import { parseLeaveLink } from '@/services/departure/leaveLink';
 import { leaveResultMessage, pressLeave } from '@/services/departure/leave';
 import { addWalkingListener, syncWalkingDetection } from './modules/ahmatda-motion';
@@ -110,9 +111,12 @@ export default function App() {
     HolidayService.refresh();
     // 알람이 울리는 중에 앱이 열렸으면(잠금화면 전체 화면 · 알림 탭) 알람 창을 띄운다.
     whenHydrated().then(() => AlarmService.checkRinging()).catch(() => {});
+    // 홈 위젯에서 누른 [챙김] (C3)
+    applyWidgetChecks().catch(() => {});
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         whenHydrated().then(() => AlarmService.checkRinging()).catch(() => {});
+        applyWidgetChecks().catch(() => {});
         syncWalkingDetection();
         HomeGeofence.sync();
         AwayPlaceService.tick();

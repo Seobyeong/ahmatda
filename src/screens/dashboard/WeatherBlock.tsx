@@ -142,6 +142,10 @@ export function WeatherBlock({
   if (currentWeather?.heatAlert) banners.push('폭염 주의 — 물을 충분히 마시세요.');
 
   const WeatherIcon = WEATHER_ICONS[currentWeather?.weather ?? 'sunny'];
+  // 날씨 이름만 ("맑음") — 서비스 라벨에는 소수점 기온이 붙어 있어 체감온도 옆에 두면 숫자 둘이 헷갈린다 (A6).
+  // 실제 기온은 반올림해 한 번만 쓴다 (설명 시트의 "실제 기온은 10°C예요"와 같은 값).
+  const sky = currentWeather ? currentWeather.label.split(' · ')[0] : '';
+  const actual = currentWeather ? `기온 ${Math.round(currentWeather.temp)}°C` : '';
   const placeLabel = usingFallbackLocation ? '서울 (위치 확인 안 됨)' : '내 위치';
 
   return (
@@ -153,14 +157,14 @@ export function WeatherBlock({
               style={styles.compactRow}
               onPress={() => setSheetOpen(true)}
               accessibilityRole="button"
-              accessibilityLabel={`${placeLabel} 날씨 ${currentWeather.label}, 체감 ${formatTemp(shownTemp)}. ${currentWeather.recommendation}`}
+              accessibilityLabel={`${placeLabel} 날씨 ${sky}, ${actual}, 체감 ${formatTemp(shownTemp)}. ${currentWeather.recommendation}`}
               accessibilityHint="자세한 날씨를 열어요"
             >
               <WeatherIcon size={24} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
               <View style={styles.summaryText}>
                 <View style={styles.compactTop}>
                   <Text style={styles.compactTemp}>체감 {formatTemp(shownTemp)}</Text>
-                  <Text style={styles.compactLabel} numberOfLines={1}>{currentWeather.label} · {placeLabel}</Text>
+                  <Text style={styles.compactLabel} numberOfLines={1}>{sky} · {placeLabel}</Text>
                 </View>
                 {/* 옷차림은 나가기 직전에 필요하다 — 줄여도 한 줄은 남긴다 */}
                 <Text style={styles.compactAdvice} numberOfLines={1}>{currentWeather.recommendation}</Text>
@@ -173,14 +177,14 @@ export function WeatherBlock({
                 style={styles.summary}
                 onPress={() => setSheetOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel={`${placeLabel} 날씨 ${currentWeather.label}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
+                accessibilityLabel={`${placeLabel} 날씨 ${sky}, ${actual}, 나에게 맞춘 체감온도 ${formatTemp(shownTemp)}`}
                 accessibilityHint="시간대별 예보와 체감온도 이유를 열어요"
               >
                 <WeatherIcon size={44} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
                 <View style={styles.summaryText}>
                   <Text style={styles.caption}>나에게 맞춘 체감온도</Text>
                   <Text style={styles.temp}>{formatTemp(shownTemp)}</Text>
-                  <Text style={styles.label}>{placeLabel} · {currentWeather.label}</Text>
+                  <Text style={styles.label}>{placeLabel} · {sky} · {actual}</Text>
                 </View>
                 <View style={styles.chevron}>
                   <ChevronRight size={20} color={Role.actionText} />
@@ -223,7 +227,7 @@ export function WeatherBlock({
                 <View style={styles.sheetHeader}>
                   <WeatherIcon size={28} strokeWidth={1.75} color={getWeatherIconColor(Colors, currentWeather.weather)} />
                   <View style={styles.summaryText}>
-                    <Text style={styles.sheetTitle} accessibilityRole="header">체감 {formatTemp(shownTemp)} · {currentWeather.label}</Text>
+                    <Text style={styles.sheetTitle} accessibilityRole="header">체감 {formatTemp(shownTemp)} · {sky}</Text>
                     <Text style={styles.label}>{placeLabel} · {currentWeather.recommendation}</Text>
                   </View>
                   <Pressable onPress={() => setSheetOpen(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">

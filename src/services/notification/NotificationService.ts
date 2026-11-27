@@ -429,6 +429,9 @@ export const NotificationService = {
         pressAction:  { id: 'open-checklist', launchActivity: 'default' },
         timeoutAfter,
         onlyAlertOnce: shownAt !== undefined,
+        // 기본값(true)이면 [{물건} 챙김]을 누를 때 알림이 닫혀 다음 물건으로 다시 그릴 수 없다.
+        // 밀어서 지우기·10분 뒤 사라짐은 그대로다.
+        autoCancel:   false,
         // 하나 남았으면 [다 챙겼어요]와 같은 일이라 물건 버튼은 둘 이상일 때만
         actions:      [
           ...(unchecked.length > 1 ? checkItemAction(unchecked[0]?.label) : []),
@@ -672,6 +675,8 @@ export async function handleNotificationEvent(
     // 출발 알림/긴급 알림 본문을 탭해서 앱을 연 경우 — 체크리스트 섹션으로 스크롤 요청
     const { useAppStore } = await import('@/store');
     useAppStore.getState().requestScrollToChecklist();
+    // 마지막 확인 알림은 autoCancel을 껐다 — 본문을 눌러 앱을 열면 직접 내린다
+    if (detail.notification?.id === LAST_CHECK_ID) await notifee.cancelDisplayedNotification(LAST_CHECK_ID);
   } else if (
     type === EventType.PRESS &&
     (detail.pressAction?.id === 'open-tomorrow' || isNightlyCheckId(detail.notification?.id))

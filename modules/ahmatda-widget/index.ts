@@ -5,6 +5,7 @@ import { requireOptionalNativeModule } from 'expo';
 interface AhmatdaWidgetNative {
   setSnapshot(json: string): void;
   consumeLeaveNonce?(nonce: string): boolean;
+  takePendingChecks?(): string;
 }
 
 const native = requireOptionalNativeModule<AhmatdaWidgetNative>('AhmatdaWidget');
@@ -20,5 +21,19 @@ export function consumeLeaveNonce(nonce: string): boolean {
     return native?.consumeLeaveNonce?.(nonce) ?? false;
   } catch {
     return false;
+  }
+}
+
+// 위젯 물건 줄 [챙김]으로 쌓인 것 (C3) — 가져가면 네이티브 쪽은 비운다. 모듈이 없거나 깨진 값이면 [].
+export function takePendingWidgetChecks(): Array<{ label: string; date: string }> {
+  try {
+    const raw = native?.takePendingChecks?.() ?? '[]';
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x): x is { label: string; date: string } => typeof x?.label === 'string' && typeof x?.date === 'string'
+    );
+  } catch {
+    return [];
   }
 }

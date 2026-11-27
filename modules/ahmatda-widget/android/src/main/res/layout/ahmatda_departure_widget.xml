@@ -1,53 +1,157 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 위: 출발 시각·요약 + [떠나기]. 아래: 안 챙긴 물건 줄 최대 3개 (줄마다 [챙김], C3).
+     위젯을 1칸 높이로 두면 물건 줄은 잘려서 위쪽만 보인다 (예전 모양 그대로). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
   android:id="@+id/widget_root"
   android:layout_width="match_parent"
   android:layout_height="match_parent"
-  android:orientation="horizontal"
-  android:gravity="center_vertical"
+  android:orientation="vertical"
   android:padding="12dp"
   android:background="@drawable/ahmatda_widget_background">
 
   <LinearLayout
-    android:layout_width="0dp"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_weight="1"
-    android:orientation="vertical">
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
 
-    <TextView
-      android:id="@+id/widget_title"
-      android:layout_width="match_parent"
+    <LinearLayout
+      android:layout_width="0dp"
       android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:orientation="vertical">
+
+      <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="#1e293b"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+      <TextView
+        android:id="@+id/widget_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="#475569"
+        android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- [떠나기] — 앱의 [떠나기]와 같은 흐름 (docs/외출-감지-재설계.md 2장) -->
+    <TextView
+      android:id="@+id/widget_leave"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginStart="8dp"
+      android:paddingStart="14dp"
+      android:paddingEnd="14dp"
+      android:paddingTop="8dp"
+      android:paddingBottom="8dp"
+      android:background="@drawable/ahmatda_widget_leave_background"
+      android:text="@string/ahmatda_widget_leave"
+      android:textColor="#FFFFFF"
+      android:textSize="14sp"
+      android:textStyle="bold" />
+  </LinearLayout>
+
+  <LinearLayout
+    android:id="@+id/widget_item_row_0"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="8dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:visibility="gone">
+    <TextView
+      android:id="@+id/widget_item_label_0"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
       android:maxLines="1"
       android:ellipsize="end"
       android:textColor="#1e293b"
-      android:textSize="16sp"
-      android:textStyle="bold" />
-
+      android:textSize="14sp" />
     <TextView
-      android:id="@+id/widget_detail"
-      android:layout_width="match_parent"
+      android:id="@+id/widget_item_check_0"
+      android:layout_width="wrap_content"
       android:layout_height="wrap_content"
-      android:layout_marginTop="2dp"
-      android:maxLines="2"
-      android:ellipsize="end"
-      android:textColor="#475569"
-      android:textSize="13sp" />
+      android:minHeight="36dp"
+      android:gravity="center"
+      android:paddingStart="12dp"
+      android:paddingEnd="12dp"
+      android:background="@drawable/ahmatda_widget_check_background"
+      android:text="@string/ahmatda_widget_check"
+      android:textColor="#047857"
+      android:textSize="13sp"
+      android:textStyle="bold" />
   </LinearLayout>
 
-  <!-- [떠나기] — 앱의 [떠나기]와 같은 흐름 (docs/외출-감지-재설계.md 2장) -->
-  <TextView
-    android:id="@+id/widget_leave"
-    android:layout_width="wrap_content"
+  <LinearLayout
+    android:id="@+id/widget_item_row_1"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:paddingStart="14dp"
-    android:paddingEnd="14dp"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp"
-    android:background="@drawable/ahmatda_widget_leave_background"
-    android:text="@string/ahmatda_widget_leave"
-    android:textColor="#FFFFFF"
-    android:textSize="14sp"
-    android:textStyle="bold" />
+    android:layout_marginTop="6dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:visibility="gone">
+    <TextView
+      android:id="@+id/widget_item_label_1"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:maxLines="1"
+      android:ellipsize="end"
+      android:textColor="#1e293b"
+      android:textSize="14sp" />
+    <TextView
+      android:id="@+id/widget_item_check_1"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:minHeight="36dp"
+      android:gravity="center"
+      android:paddingStart="12dp"
+      android:paddingEnd="12dp"
+      android:background="@drawable/ahmatda_widget_check_background"
+      android:text="@string/ahmatda_widget_check"
+      android:textColor="#047857"
+      android:textSize="13sp"
+      android:textStyle="bold" />
+  </LinearLayout>
+
+  <LinearLayout
+    android:id="@+id/widget_item_row_2"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:visibility="gone">
+    <TextView
+      android:id="@+id/widget_item_label_2"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:maxLines="1"
+      android:ellipsize="end"
+      android:textColor="#1e293b"
+      android:textSize="14sp" />
+    <TextView
+      android:id="@+id/widget_item_check_2"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:minHeight="36dp"
+      android:gravity="center"
+      android:paddingStart="12dp"
+      android:paddingEnd="12dp"
+      android:background="@drawable/ahmatda_widget_check_background"
+      android:text="@string/ahmatda_widget_check"
+      android:textColor="#047857"
+      android:textSize="13sp"
+      android:textStyle="bold" />
+  </LinearLayout>
 </LinearLayout>

@@ -13,5 +13,21 @@
         android:name="android.appwidget.provider"
         android:resource="@xml/ahmatda_departure_widget_info" />
     </receiver>
+    <!-- 위젯 물건 줄의 [챙김] (C3) — 이 앱의 위젯 PendingIntent만 보낸다 -->
+    <receiver
+      android:name=".WidgetCheckReceiver"
+      android:exported="false" />
+
+    <!-- 빠른 설정 타일 [떠나기] (C6). 시스템(SystemUI)이 바인드하므로 exported=true + 바인드 권한. -->
+    <service
+      android:name=".LeaveTileService"
+      android:exported="true"
+      android:icon="@drawable/ahmatda_tile_icon"
+      android:label="@string/ahmatda_tile_label"
+      android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+      <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+      </intent-filter>
+    </service>
   </application>
 </manifest>

@@ -12,6 +12,7 @@ export interface DepartureSnapshot {
   detail: string; // "우산 · 노트북 외 2개" | "준비 완료"
   remaining: number;
   labels?: string[]; // detail에 이름이 나온 안 챙긴 물건 (급한 순) — 알림 말투의 {물건}
+  checkable?: string[]; // 홈 위젯에서 바로 챙길 수 있게 보여 줄 안 챙긴 물건 (급한 순, 최대 3개) — C3
 }
 
 // 날씨 항목이 가장 급하다 — 오늘만 필요하고, 평소 루틴과 달라서 잊기 쉽다.
@@ -19,6 +20,7 @@ export interface DepartureSnapshot {
 const TIER_PRIORITY: Record<ItemTier, number> = { 1: 0, 2: 1, 0: 2, 3: 3 };
 
 export const SNAPSHOT_MAX_LABELS = 2;
+export const WIDGET_MAX_ITEMS = 3;
 
 // 안 챙긴 항목을 급한 순서로 — 앱 밖 표시(위젯·잠금화면·마지막 확인·외출 감지 알림)가 같은 순서를 쓴다.
 // 꼭 챙김이 언제나 맨 앞이다 (docs/체크리스트-항목-속성.md 2.2 — 표시 예산이 작은 화면에 먼저 보인다).
@@ -45,7 +47,10 @@ export function buildDepartureSnapshot(
   else detail = shown.join(' · ') + (rest > 0 ? ` 외 ${rest}개` : '');
 
   const title = departureTime ? `${departureTime} 출발` : '외출 일정 없음';
-  return { date: today, title, detail, remaining: unchecked.length, labels: shown };
+  return {
+    date: today, title, detail, remaining: unchecked.length, labels: shown,
+    checkable: unchecked.slice(0, WIDGET_MAX_ITEMS).map((item) => item.label),
+  };
 }
 
 export const STALE_DEPARTURE_DETAIL = '오늘 챙길 것을 확인하세요';
