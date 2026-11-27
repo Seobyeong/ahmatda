@@ -83,7 +83,7 @@ export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>AI로 개인화하기</Text>
-            <Pressable onPress={handleClose} hitSlop={8}>
+            <Pressable onPress={handleClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
               <X size={20} color={Colors.slate500} />
             </Pressable>
           </View>
@@ -158,6 +158,7 @@ export function PersonalizeModal({ visible, onClose }: PersonalizeModalProps) {
                     setError(null);
                   }}
                   placeholder='{ "ahmatda": 1, ... }'
+                  accessibilityLabel="AI 답변 붙여넣기"
                   placeholderTextColor={Colors.slate400}
                   multiline
                   autoCapitalize="none"

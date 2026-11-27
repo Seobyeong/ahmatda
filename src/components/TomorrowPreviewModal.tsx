@@ -135,7 +135,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
         <View style={styles.sheet}>
           <View style={styles.header}>
             <Text style={styles.title}>다음 외출 준비</Text>
-            <Pressable onPress={handleClose} hitSlop={8}>
+            <Pressable onPress={handleClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="닫기">
               <X size={20} color={Colors.slate500} />
             </Pressable>
           </View>
@@ -165,6 +165,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
                     <Pressable
                       onPress={() => removePermanentRoutine(item.routineId!)}
                       hitSlop={8}
+                      accessibilityRole="button"
                       accessibilityLabel={`${item.label} 삭제`}
                     >
                       <X size={16} color={Colors.slate400} />
@@ -180,6 +181,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
                 value={draft}
                 onChangeText={setDraft}
                 placeholder="이 날만 챙길 것 추가..."
+                accessibilityLabel="이 날만 챙길 것 추가"
                 placeholderTextColor={Colors.slate400}
                 onSubmitEditing={handleAdd}
                 returnKeyType="done"

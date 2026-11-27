@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PURPOSES, findMatchingEvent, purposeItemKey, type TaggedEvents } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getTodayString } from '../utils/time';
-import { activeDates, activeToday, feedbackOutingDate, referenceTimeOn, type DatePlan, type DayPlan, type DepartureSchedule } from '../utils/schedule';
+import { activeDates, activeToday, feedbackOutingDate, referenceTimeOn, weeklyPlanOn, type DatePlan, type DayPlan, type DepartureSchedule } from '../utils/schedule';
 import { EMPTY_HOLIDAY_CACHE, type HolidayCache } from '../services/holiday/HolidayService';
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
 import { CUSTOM_TEXT_MAX } from '../constants/alertVoices';
@@ -944,10 +944,21 @@ export const useAppStore = create<AppStore>()(
           const { departureDates, departureToday } = get();
           const isTime = (p: string | undefined | null): p is string => !!p && p !== 'off' && p !== 'usual';
           const todayPlan = date === today && departureToday?.date === today ? departureToday.plan : null;
-          const earliest = [departureTime, departureDates[date], todayPlan]
+          // 평소 나가는 날(공휴일·쉬는 날·날짜별로 쉰다고 한 날이 아님)이면 요일 계획도 본다 — 평일 저녁 일정을 넣었다고
+          // 그날 아침 출근 알림이 저녁으로 옮겨 가면 안 된다. 쉬는 날·공휴일에는 일정 시간이 그날 외출이 된다.
+          const { userSettings, holidays } = get();
+          const [y, m, d] = date.split('-').map(Number);
+          const dated = departureDates[date];
+          const usualDay = todayPlan !== 'off' && (dated === 'usual' || (dated === undefined && !holidays.dates[date]));
+          const weekly = usualDay
+            ? weeklyPlanOn(new Date(y, m - 1, d), { base: userSettings.departureTime, weekdays: userSettings.departureWeekdays })
+            : null;
+          const earliest = [departureTime, dated, todayPlan, weekly]
             .filter(isTime)
             .sort()[0];
-          get().setDatePlans([date], earliest);
+          // 요일 계획이 가장 이르면 날짜별 계획을 만들지 않는다 — 나중에 요일 시간을 바꾸면 그대로 따라가게.
+          const keepWeekly = weekly !== null && earliest === weekly && (dated === undefined || dated === 'usual');
+          if (!keepWeekly) get().setDatePlans([date], earliest);
           if (todayPlan !== null) get().setTodayPlan(null);
         }
         items.forEach((label) => get().addOneOffItem(label, date));

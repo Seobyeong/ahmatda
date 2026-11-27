@@ -42,6 +42,16 @@ export function weeklyPlanOn(date: Date, s: Pick<DepartureSchedule, 'base' | 'we
   return s.weekdays[String(date.getDay())] ?? s.base;
 }
 
+// 대시보드 머리의 오늘 한 줄 (2026-11-28) — "출근하는 날 · 08:15 출발", "쉬는 날", "성탄절 · 08:15 출발".
+// purpose는 고른 목적의 짧은 이름(출근·운동…)이다.
+export function describeToday(now: Date, s: DepartureSchedule, purpose: string | null): string {
+  const plan = planOn(now, s);
+  const holiday = holidayOn(now, s);
+  if (plan === 'off') return holiday ? `${holiday} · 쉬는 날` : '쉬는 날';
+  const lead = holiday ?? (purpose ? `${purpose}하는 날` : null);
+  return lead ? `${lead} · ${plan} 출발` : `${plan} 출발`;
+}
+
 // ---- 공휴일 ----
 
 export function holidayOn(date: Date, s: DepartureSchedule): string | null {

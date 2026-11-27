@@ -519,6 +519,7 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
               setWifiStatus('idle');
             }}
             placeholder="BSSID 직접 입력 (선택 사항)"
+            accessibilityLabel="공유기 주소(BSSID) 직접 입력"
             placeholderTextColor={Colors.slate400}
             autoCapitalize="none"
             autoCorrect={false}

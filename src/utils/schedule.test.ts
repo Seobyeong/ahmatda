@@ -122,7 +122,7 @@ describe('currentDepartureLabel', () => {
   });
 });
 
-import { answeredHolidayFrom, holidayQuestionFrom, isUnansweredHoliday, pendingHolidayQuestion, planOn, activeDates, withIeyo } from './schedule';
+import { describeToday, answeredHolidayFrom, holidayQuestionFrom, isUnansweredHoliday, pendingHolidayQuestion, planOn, activeDates, withIeyo } from './schedule';
 
 describe('날짜별 계획과 공휴일', () => {
   // 11-19(목) 공휴일 가정, 11-20(금)도 공휴일, 11-21~22 주말(원래 쉼), 11-23(월) 대체공휴일
@@ -198,5 +198,16 @@ describe('공휴일 대답 보기·문구', () => {
   it('받침에 맞는 어미', () => {
     expect(withIeyo('성탄절')).toBe('성탄절이에요');
     expect(withIeyo('추석 연휴')).toBe('추석 연휴예요');
+  });
+});
+
+describe('describeToday — 대시보드 머리의 오늘 한 줄', () => {
+  const sat = new Date(2026, 10, 28, 7, 0); // 토요일
+  const base = { base: '08:15', weekdays: {} as Record<string, '08:15' | 'off'>, today: null };
+  it('목적·공휴일·쉬는 날', () => {
+    expect(describeToday(sat, base, '출근')).toBe('출근하는 날 · 08:15 출발');
+    expect(describeToday(sat, base, null)).toBe('08:15 출발');
+    expect(describeToday(sat, { ...base, weekdays: { 6: 'off' } }, '운동')).toBe('쉬는 날');
+    expect(describeToday(sat, { ...base, holidays: { '2026-11-28': '어떤 날' } }, '출근')).toBe('어떤 날 · 08:15 출발');
   });
 });

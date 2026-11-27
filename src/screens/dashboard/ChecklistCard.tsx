@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import { AccessibilityInfo, Animated, Platform, Pressable, Text, TextInput, Vibration, View, type LayoutChangeEvent } from 'react-native';
 import { ChevronDown, ChevronUp, Mic, Pin, Plus } from 'lucide-react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { PURPOSES } from '../../constants/purposes';
@@ -21,6 +21,26 @@ const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
 };
 
 // 이 화면의 주인공 — 흰 면과 그림자는 여기에만 쓴다.
+// 다 챙겼을 때 배너. celebrate면 작게 시작해 튀어 오른다.
+function DoneBanner({ celebrate }: { celebrate: boolean }) {
+  const styles = useStyles();
+  const scale = useRef(new Animated.Value(celebrate ? 0.85 : 1)).current;
+  useEffect(() => {
+    if (!celebrate) return;
+    scale.setValue(0.85);
+    Animated.spring(scale, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }).start();
+  }, [celebrate, scale]);
+  return (
+    <Animated.View style={[styles.doneBanner, { transform: [{ scale }] }]}>
+      <Mascot mood="happy" size={52} />
+      <View style={styles.stateTextArea}>
+        <Text style={styles.doneTitle}>다 챙겼어요</Text>
+        <Text style={styles.doneSub}>이대로 나가면 돼요.</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEvent) => void }) {
   const { Role, PurposeColors } = useTheme();
   const styles = useStyles();
@@ -143,16 +163,32 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
   const checkedCount = checklist.filter((i) => i.checked).length;
   const allChecked = total > 0 && checkedCount === total;
 
+  // 다 챙긴 순간 — 짧은 진동 두 번과 배너가 튀어 오르는 것으로 알린다 (B5). 사용자가 체크해서 다 찼을 때만
+  // (마지막 남은 것을 지웠거나 목록이 다시 조립돼 다 찬 건 방금 챙긴 게 아니다).
+  const [celebrate, setCelebrate] = useState(false);
+  useEffect(() => {
+    if (!allChecked) setCelebrate(false);
+  }, [allChecked]);
+
   const handleToggleAll = () => {
     if (allChecked) {
       uncheckAll();
     } else {
       checkAll();
+      celebrateIfDone();
     }
   };
 
   // 입력창에 글자를 칠 때마다(quickAddText) 다시 그려지는데, 그때마다 목록을
   // 다시 나누고 정렬할 필요는 없다.
+  const celebrateIfDone = useCallback(() => {
+    const list = useAppStore.getState().checklist;
+    if (list.length === 0 || list.some((i) => !i.checked)) return;
+    setCelebrate(true);
+    // iOS는 진동 길이를 무시하고 길게 울려서 안드로이드에서만 짧게 두 번
+    if (Platform.OS === 'android') Vibration.vibrate([0, 30, 80, 30]);
+    AccessibilityInfo.announceForAccessibility('다 챙겼어요. 이대로 나가면 돼요.');
+  }, []);
   const [settling, setSettling] = useState<ReadonlySet<string>>(() => new Set());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
@@ -172,6 +208,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
       });
       return;
     }
+    celebrateIfDone();
     setSettling((prev) => new Set(prev).add(id));
     timers.current.set(id, setTimeout(() => {
       timers.current.delete(id);
@@ -181,7 +218,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
         return next;
       });
     }, SETTLE_MS));
-  }, [toggleCheck]);
+  }, [toggleCheck, celebrateIfDone]);
   const [packedOpen, setPackedOpen] = useState(false);
   const { sections: tierSections, packed } = useMemo(() => splitChecklist(checklist, settling), [checklist, settling]);
   // 챙긴 것이 없어지면 접힌 상태로 돌아간다 — 다음에 다시 생길 때 펼쳐진 채 나오지 않게
@@ -226,15 +263,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
 
       <ProgressBar checked={checkedCount} total={total} />
 
-      {allChecked ? (
-        <View style={styles.doneBanner}>
-          <Mascot mood="happy" size={52} />
-          <View style={styles.stateTextArea}>
-            <Text style={styles.doneTitle}>다 챙겼어요</Text>
-            <Text style={styles.doneSub}>이대로 나가면 돼요.</Text>
-          </View>
-        </View>
-      ) : null}
+      {allChecked ? <DoneBanner celebrate={celebrate} /> : null}
 
       {total === 0 ? (
         <View style={styles.emptyState}>

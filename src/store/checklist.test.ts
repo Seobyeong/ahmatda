@@ -199,7 +199,13 @@ describe('꼭 챙김', () => {
   });
 });
 
+// 요일 계획은 모두 쉬는 날로 둔다 — 일정 시간만 보는 테스트 (평일 아침과 겹치는 경우는 아래에서 따로)
+const allDaysOff = () => useAppStore.setState((s) => ({
+  userSettings: { ...s.userSettings, departureWeekdays: { 0: 'off', 1: 'off', 2: 'off', 3: 'off', 4: 'off', 5: 'off', 6: 'off' } },
+}));
+
 describe('앱에서 등록한 일정', () => {
+  beforeEach(allDaysOff);
   it('목적·나가는 시간·그날 챙길 것을 남기고, 지난 표시는 정리한다', () => {
     useAppStore.setState({ taggedEvents: { old: { purposeId: 'work', date: '2000-01-01' } }, departureDates: {} });
     useAppStore.getState().registerEvent({
@@ -213,6 +219,7 @@ describe('앱에서 등록한 일정', () => {
 });
 
 describe('같은 날 일정을 또 넣으면', () => {
+  beforeEach(allDaysOff);
   it('더 이른 나가는 시간을 지킨다', () => {
     useAppStore.setState({ departureDates: {} });
     const reg = (eventId: string, departureTime: string) => useAppStore.getState().registerEvent({
@@ -229,5 +236,18 @@ describe('같은 날 일정을 또 넣으면', () => {
     useAppStore.getState().registerEvent({ eventId: 't', date: getTodayString(), purposeId: null, departureTime: '14:00', items: [] });
     expect(useAppStore.getState().departureToday).toBeNull();
     expect(useAppStore.getState().departureDates[getTodayString()]).toBe('14:00');
+  });
+});
+
+describe('평소 나가는 날에 저녁 일정을 넣으면', () => {
+  it('아침 요일 계획을 지키고 날짜별 계획을 만들지 않는다', () => {
+    useAppStore.setState((s) => ({ departureDates: {}, departureToday: null, holidays: { dates: {}, fetched: {} },
+      userSettings: { ...s.userSettings, departureTime: '08:15', departureWeekdays: {} } }));
+    useAppStore.getState().registerEvent({ eventId: 'd', date: '2099-12-24', purposeId: null, departureTime: '18:00', items: [] });
+    expect(useAppStore.getState().departureDates['2099-12-24']).toBeUndefined();
+    // 공휴일이면 일정 시간이 그날 외출이다
+    useAppStore.setState({ holidays: { dates: { '2099-12-25': '성탄절' }, fetched: {} } });
+    useAppStore.getState().registerEvent({ eventId: 'h', date: '2099-12-25', purposeId: null, departureTime: '13:00', items: [] });
+    expect(useAppStore.getState().departureDates['2099-12-25']).toBe('13:00');
   });
 });

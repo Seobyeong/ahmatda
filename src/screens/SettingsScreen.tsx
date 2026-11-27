@@ -610,6 +610,7 @@ export function SettingsScreen() {
                 value={keywordDraft}
                 onChangeText={setKeywordDraft}
                 placeholder="키워드 추가 (예: 회의)"
+                accessibilityLabel="자동감지 키워드 추가"
                 placeholderTextColor={Colors.slate500}
                 onSubmitEditing={handleAddKeyword}
                 returnKeyType="done"
@@ -812,6 +813,7 @@ export function SettingsScreen() {
               value={aiKeyDraft}
               onChangeText={setAiKeyDraft}
               placeholder="Anthropic API 키 (sk-ant-...)"
+              accessibilityLabel="Anthropic API 키"
               placeholderTextColor={Colors.slate500}
               secureTextEntry
               autoCapitalize="none"

@@ -27,6 +27,9 @@ function SensitivityButton({ value, selected, onPress }: SensitivityButtonProps)
       <Pressable
         onPress={onPress}
         style={[styles.sensitivityButton, selected && styles.sensitivityButtonActive]}
+        accessibilityRole="radio"
+        accessibilityState={{ checked: selected }}
+        accessibilityLabel={`민감도 ${value}, ${SENSITIVITY_LABELS[value]}`}
       >
         <Text
           style={[styles.sensitivityButtonText, selected && styles.sensitivityButtonTextActive]}
@@ -48,7 +51,7 @@ export function SensitivitySelector({ value, onChange }: SensitivitySelectorProp
   const styles = useStyles();
   return (
     <View>
-      <View style={styles.sensitivityRow}>
+      <View style={styles.sensitivityRow} accessibilityRole="radiogroup" accessibilityLabel="체온 민감도 (1 추위 많이 탐 ~ 5 더위 많이 탐)">
         {([1, 2, 3, 4, 5] as const).map((v) => (
           <SensitivityButton key={v} value={v} selected={value === v} onPress={() => onChange(v)} />
         ))}

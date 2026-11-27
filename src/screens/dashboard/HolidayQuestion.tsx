@@ -20,6 +20,8 @@ export function HolidayQuestion({ now, onAddEvent }: { now: Date; onAddEvent?: (
   const scheduleJson = useAppStore((s) => JSON.stringify(scheduleOf(s)));
   const setDatePlans = useAppStore((s) => s.setDatePlans);
   const showToast = useAppStore((s) => s.showToast);
+  // 앱에서 일정을 넣은 날짜 — 그날의 나가는 시간은 공휴일 대답이 아니라 일정에서 왔을 수 있다
+  const eventDates = useAppStore((s) => Object.values(s.taggedEvents).map((t) => t.date).join(','));
   const [picking, setPicking] = useState(false);
   const [time, setTime] = useState<string | null>(null);
 
@@ -30,11 +32,13 @@ export function HolidayQuestion({ now, onAddEvent }: { now: Date; onAddEvent?: (
     const a = answeredHolidayFrom(schedule, now);
     if (!a || a.dates.length === 0) return null;
     const summary = a.plan === 'off' ? '쉬어요' : a.plan === 'usual' ? '평소처럼 나가요' : `${a.plan}에 나가요`;
+    // 일정으로 정해진 시간이면 [바꾸기]로 지우지 않는다 — 일정의 출발 알림까지 사라진다
+    const fromEvent = a.plan !== 'off' && a.plan !== 'usual' && a.dates.some((d) => eventDates.split(',').includes(d));
     return (
       <View style={styles.answered}>
         <CalendarDays size={16} color={Role.textMuted} />
         <Text style={styles.answeredText}>{dayLabel(a.first, now)} {a.name} · {summary}</Text>
-        <Button label="바꾸기" size="sm" variant="text" onPress={() => setDatePlans(a.dates, null)} />
+        {fromEvent ? null : <Button label="바꾸기" size="sm" variant="text" onPress={() => setDatePlans(a.dates, null)} />}
       </View>
     );
   }

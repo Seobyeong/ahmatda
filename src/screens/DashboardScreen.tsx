@@ -4,14 +4,14 @@ import { CalendarPlus, ChevronRight, MapPin, Moon, Settings } from 'lucide-react
 import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { detectPurposeFromEvents, findMatchingEvent, untaggedEvents } from '../constants/purposes';
+import { PURPOSES, detectPurposeFromEvents, findMatchingEvent, untaggedEvents } from '../constants/purposes';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
 import { scheduleOf, taggedPurposes, useAppStore } from '../store';
 import { DirectionsService } from '../services/directions/DirectionsService';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import { pickNextPlaceEvent } from '../utils/directions';
 import { parseEventTime, toDateString } from '../utils/time';
-import { formatHm, nextAlert, referenceTimeOn } from '../utils/schedule';
+import { describeToday, formatHm, nextAlert, referenceTimeOn } from '../utils/schedule';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
 import { Mascot } from '../components/Mascot';
 import { PurposeSelector } from '../components/PurposeSelector';
@@ -150,6 +150,8 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const upcomingAlert = nextAlert(JSON.parse(scheduleJson), now);
   const alertTime = upcomingAlert ? formatHm(upcomingAlert.alertAt) : '외출 일정 없음';
   const todayLabel = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' });
+  // 날짜만으로는 쓸 데가 없다 — 오늘이 어떤 날인지 한 줄로 (B4)
+  const todayLine = describeToday(now, JSON.parse(scheduleJson), purposeId ? PURPOSES[purposeId].shortLabel : null);
 
   // 현재 시각으로 다시 고른다 — 이미 시작한 일정은 길찾기 대상에서 빠진다.
   const nextPlaceEvent = pickNextPlaceEvent(todayEvents, parseEventTime(now.toISOString()));
@@ -166,9 +168,9 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
       <View style={[styles.header, { paddingTop: insets.top + Space.md }]}>
         <View style={styles.headerBrand}>
           <Mascot mood="logo" size={40} />
-          <View>
+          <View style={styles.headerText}>
             <Text style={styles.headerTitle} accessibilityRole="header">아맞다</Text>
-            <Text style={styles.headerSubtitle}>{todayLabel}</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{todayLabel} · {todayLine}</Text>
           </View>
         </View>
         <View style={styles.headerActions}>
@@ -335,9 +337,13 @@ const useStyles = makeStyles(({ Role }) => ({
     backgroundColor: Role.bg,
   },
   headerBrand: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.sm,
+  },
+  headerText: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: FontSize.title,

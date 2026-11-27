@@ -53,6 +53,8 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.transistorsoft.fetch</string>
+		<string>com.transistorsoft.ahmatda-departure-check</string>
+		<string>com.transistorsoft.ahmatda-departure-recheck</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
