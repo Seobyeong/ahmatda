@@ -1,13 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Check, CircleAlert, CircleX, Info } from 'lucide-react-native';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
-import type { ToastAction } from '../store';
+import type { ToastAction, ToastTone } from '../store';
 
 interface ToastProps {
   message: string;
   /** 버튼 하나 (예: 되돌리기). 누르면 실행하고 토스트를 닫는다. */
   action?: ToastAction | null;
+  /** 성공(✓)·안내(i)·주의(!)·실패(✕) — 아이콘과 색이 다르다. "아직 안 챙겼어요"에 ✓가 붙지 않게. */
+  tone?: ToastTone;
   onDone: () => void;
   /** 화면 아래에 고정된 버튼이 있으면 그 위로 띄운다. */
   bottomOffset?: number;
@@ -17,11 +19,20 @@ const DURATION_MS = 2600;
 // 버튼이 있으면 읽고 누를 시간이 필요하다 — 되돌리기를 놓치면 루틴이 영구 삭제된다.
 const DURATION_WITH_ACTION_MS = 6000;
 
-export function Toast({ message, action, onDone, bottomOffset = 80 }: ToastProps) {
+const ICONS = { success: Check, info: Info, warning: CircleAlert, error: CircleX } as const;
+
+export function Toast({ message, action, tone = 'success', onDone, bottomOffset = 80 }: ToastProps) {
   const { Colors } = useTheme();
   const styles = useStyles();
   const translateY = useRef(new Animated.Value(10)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const Icon = ICONS[tone];
+  const iconColor = {
+    success: Colors.inverseDone,
+    info: Colors.onInverse,
+    warning: Colors.inverseWarn,
+    error: Colors.inverseError,
+  }[tone];
 
   useEffect(() => {
     Animated.parallel([
@@ -48,7 +59,7 @@ export function Toast({ message, action, onDone, bottomOffset = 80 }: ToastProps
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
       >
-        <Check size={16} color={Colors.emerald500} />
+        <Icon size={16} color={iconColor} />
         <Text style={styles.text}>{message}</Text>
         {action ? (
           <Pressable

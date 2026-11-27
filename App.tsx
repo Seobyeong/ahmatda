@@ -133,7 +133,7 @@ export default function App() {
     const removeDepartedListener = DepartureService.onDeparted((unchecked) => {
       WifiMonitorService.stopMonitoring();
       if (unchecked.length > 0) {
-        useAppStore.getState().showToast(`외출이 감지됐어요 — 아직 ${unchecked.length}개를 못 챙겼어요.`);
+        useAppStore.getState().showToast(`외출이 감지됐어요 — 아직 ${unchecked.length}개를 못 챙겼어요.`, null, 'warning');
       }
     });
 
@@ -158,7 +158,8 @@ export default function App() {
       if (!nonce || !consumeLeaveNonce(nonce)) return;
       await whenHydrated();
       if (!useAppStore.getState().userSettings.onboarded) return;
-      useAppStore.getState().showToast(leaveResultMessage(await pressLeave()));
+      const result = await pressLeave();
+      useAppStore.getState().showToast(leaveResultMessage(result), null, result.kind === 'all-packed' ? 'success' : 'warning');
     };
     Linking.getInitialURL().then(onUrl).catch(() => {});
     const urlSub = Linking.addEventListener('url', ({ url }) => { onUrl(url).catch(() => {}); });

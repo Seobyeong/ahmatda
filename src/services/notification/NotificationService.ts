@@ -59,6 +59,23 @@ function departureBody(detail: string, holiday?: string | null): string {
   return `${lead}출발 30분 전 · ${detail}`;
 }
 
+// [{물건} 챙김] — 맨 앞의 안 챙긴 것 하나를 앱을 열지 않고 챙김으로 (2026-11-28). 하나 챙기려고 앱을 열지 않게.
+// 안드로이드 알림 버튼은 3개까지라 [떠나기]·[오늘은 쉬어요]와 함께 하나만 둔다. 누르면 다음 물건으로 바뀐다.
+const CHECK_ITEM_ACTION_ID = 'check-item';
+const CHECK_LABEL_MAX = 8;
+function checkItemAction(label: string | undefined) {
+  if (!label) return [];
+  // 글자 단위로 자른다 (이모지 반쪽이 깨지지 않게)
+  const chars = [...label];
+  const short = chars.length > CHECK_LABEL_MAX ? `${chars.slice(0, CHECK_LABEL_MAX - 1).join('')}…` : label;
+  return [{ title: `${short} 챙김`, pressAction: { id: CHECK_ITEM_ACTION_ID } }];
+}
+
+// 출발 알림의 버튼 — [떠나기] [{물건} 챙김] [오늘은 쉬어요]
+function departureActions(checkLabel: string | undefined, holiday: string | null) {
+  return [LEAVE_ACTION, ...checkItemAction(checkLabel), ...(holiday ? [HOLIDAY_OFF_ACTION] : [])];
+}
+
 // 대답 없는 공휴일의 출발 알림 — 쉬면 이 버튼 하나로 그날 알림·외출 감지를 끈다. 앱을 열지 않는다.
 const HOLIDAY_OFF_ACTION = { title: '오늘은 쉬어요', pressAction: { id: 'holiday-off' } };
 
@@ -283,7 +300,9 @@ export const NotificationService = {
       };
       // 다른 날 예약은 일반 문구라 체크해도 그대로다 — 같으면 건너뛴다 (보통 오늘 것 하나만 다시 건다).
       const holiday = p.holiday ?? null;
-      const signature = JSON.stringify([p.alertAt.getTime(), p.weekly, title, content, holiday]);
+      // 울릴 날의 목록을 알 때만 물건 버튼을 단다 (다른 날 예약은 일반 문구)
+      const checkLabel = fresh && snapshot.remaining > 0 ? snapshot.labels?.[0] : undefined;
+      const signature = JSON.stringify([p.alertAt.getTime(), p.weekly, title, content, holiday, checkLabel ?? null]);
       if (alertSignatures.get(p.id) === signature && existing.includes(p.id)) continue;
 
       await notifee.createTriggerNotification(
@@ -291,7 +310,7 @@ export const NotificationService = {
           id:      p.id,
           title,
           body:    departureBody(content.detail, holiday),
-          data:    { date: alertDay },
+          data:    checkLabel ? { date: alertDay, checkLabel } : { date: alertDay },
           android: {
             channelId:     CHANNEL_CHECKLIST,
             pressAction:   { id: 'open-checklist', launchActivity: 'default' },
@@ -299,7 +318,7 @@ export const NotificationService = {
             autoCancel:    false,
             onlyAlertOnce: true,
             timeoutAfter:  DEPARTURE_WINDOW_MS,
-            actions:       holiday ? [LEAVE_ACTION, HOLIDAY_OFF_ACTION] : [LEAVE_ACTION],
+            actions:       departureActions(checkLabel, holiday),
           },
         },
         trigger
@@ -329,11 +348,14 @@ export const NotificationService = {
     }
 
     const holiday = holidayOf(schedule, window.departure);
+    const date = toDateString(window.departure);
+    // 목록이 그날 것일 때만 물건 버튼 (어제 목록의 물건을 챙김으로 만들지 않게)
+    const checkLabel = snapshot.date === date && snapshot.remaining > 0 ? snapshot.labels?.[0] : undefined;
     await notifee.displayNotification({
       id:    displayed.id,
       title: voiceText('departure', { items: snapshot.labels ?? [], count: snapshot.remaining }, formatHm(window.departure)).title,
       body:  departureBody(snapshot.detail, holiday),
-      data:  { date: toDateString(window.departure) },
+      data:  checkLabel ? { date, checkLabel } : { date },
       android: {
         channelId:     CHANNEL_CHECKLIST,
         pressAction:   { id: 'open-checklist', launchActivity: 'default' },
@@ -341,7 +363,7 @@ export const NotificationService = {
         autoCancel:    false,
         onlyAlertOnce: true,
         timeoutAfter:  window.remainingMs,
-        actions:       holiday ? [LEAVE_ACTION, HOLIDAY_OFF_ACTION] : [LEAVE_ACTION],
+        actions:       departureActions(checkLabel, holiday),
       },
     });
   },
@@ -371,22 +393,39 @@ export const NotificationService = {
 
   // [떠나기]를 눌렀는데 남은 게 있을 때 — 헤드업으로 한 번 보여주고 10분 뒤 사라진다.
   // [다 챙겼어요]를 누르면 전부 체크되고, 그러면 외출 감지 긴급 알림도 자연히 안 나간다.
-  async showLastCheck(items: ChecklistItem[]): Promise<void> {
+  // shownAt을 주면 버튼으로 다시 그리는 것이다 — 소리·헤드업 없이, 처음 띄운 때부터 10분에 사라지게.
+  async showLastCheck(items: ChecklistItem[], shownAt?: number): Promise<void> {
     const unchecked = sortByUrgency(items);
+    const first = shownAt ?? Date.now();
+    const timeoutAfter = Math.max(1000, LAST_CHECK_TIMEOUT_MS - (Date.now() - first));
     const text = voiceText('lastCheck', { items: unchecked.map((i) => i.label), count: unchecked.length });
 
     await notifee.displayNotification({
       id:    LAST_CHECK_ID,
       title: text.title,
       body:  withLead(text.lead, itemList(unchecked, LAST_CHECK_MAX_LABELS)),
+      data:  { date: toDateString(new Date()), checkLabel: unchecked[0]?.label ?? '', shownAt: String(first) },
       android: {
         channelId:    CHANNEL_CHECKLIST,
         importance:   AndroidImportance.HIGH,
         pressAction:  { id: 'open-checklist', launchActivity: 'default' },
-        timeoutAfter: LAST_CHECK_TIMEOUT_MS,
-        actions:      [{ title: '다 챙겼어요', pressAction: { id: 'all-packed' } }],
+        timeoutAfter,
+        onlyAlertOnce: shownAt !== undefined,
+        // 하나 남았으면 [다 챙겼어요]와 같은 일이라 물건 버튼은 둘 이상일 때만
+        actions:      [
+          ...(unchecked.length > 1 ? checkItemAction(unchecked[0]?.label) : []),
+          { title: '다 챙겼어요', pressAction: { id: 'all-packed' } },
+        ],
       },
     });
+  },
+
+  // 마지막 확인 알림이 떠 있으면 처음 띄운 시각, 없으면 null
+  async lastCheckShownAt(): Promise<number | null> {
+    const shown = (await notifee.getDisplayedNotifications()).find((n) => n.id === LAST_CHECK_ID);
+    if (!shown) return null;
+    const at = Number(shown.notification?.data?.shownAt);
+    return Number.isFinite(at) && at > 0 ? at : Date.now() - LAST_CHECK_TIMEOUT_MS / 2;
   },
 
   async clearLastCheck(): Promise<void> {
@@ -533,7 +572,7 @@ export async function handleNotificationEvent(
     await whenHydrated();
     const { DirectionsService } = await import('@/services/directions/DirectionsService');
     const opened = await DirectionsService.openPlaceWhenActive(useAppStore.getState().userSettings.mapApp, FIND_STORE_QUERY);
-    if (!opened) useAppStore.getState().showToast('지도 앱을 열지 못했어요. 지도 앱에서 "편의점"을 검색해 보세요.');
+    if (!opened) useAppStore.getState().showToast('지도 앱을 열지 못했어요. 지도 앱에서 "편의점"을 검색해 보세요.', null, 'error');
     return;
   }
 
@@ -582,6 +621,14 @@ export async function handleNotificationEvent(
 
       // TODO: 서버 전송이 필요하면 여기서 axios 호출
       // await axios.post('/api/v1/weather/feedback', { val: actionId });
+    }
+    // [{물건} 챙김] — 알림에 실린 이름과 날짜로 (leave.ts)
+    if (actionId === CHECK_ITEM_ACTION_ID) {
+      const data = detail.notification?.data ?? {};
+      if (typeof data.checkLabel === 'string' && data.checkLabel && typeof data.date === 'string') {
+        const { checkFromNotification } = await import('@/services/departure/leave');
+        await checkFromNotification(data.checkLabel, data.date);
+      }
     }
     // [떠나기] / [다 챙겼어요] — leave.ts가 NotificationService를 정적으로 물고 있어 동적 import
     if (actionId === 'leave' || actionId === 'all-packed') {

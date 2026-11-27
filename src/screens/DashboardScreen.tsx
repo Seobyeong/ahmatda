@@ -71,6 +71,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const scheduleJson = useAppStore((s) => JSON.stringify(scheduleOf(s)));
   const toast = useAppStore((s) => s.toast);
   const toastAction = useAppStore((s) => s.toastAction);
+  const toastTone = useAppStore((s) => s.toastTone);
   const scrollToChecklistRequested = useAppStore((s) => s.scrollToChecklistRequested);
   const tomorrowPreviewRequested = useAppStore((s) => s.tomorrowPreviewRequested);
   const aiEnabled = useAppStore((s) => s.ai.enabled);
@@ -156,7 +157,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const handleOpenDirections = async () => {
     if (!nextPlaceEvent?.location) return;
     const opened = await DirectionsService.openPlace(userSettings.mapApp, nextPlaceEvent.location);
-    if (!opened) showToast('지도를 열 수 없어요.');
+    if (!opened) showToast('지도를 열 수 없어요.', null, 'error');
   };
 
   return (
@@ -308,6 +309,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
         <Toast
           message={toast}
           action={toastAction}
+          tone={toastTone}
           onDone={clearToast}
           bottomOffset={keyboardVisible ? Space.lg : leaveBarHeight + Space.md}
         />

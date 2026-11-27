@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
-import { Mic, Pin, Plus } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Mic, Pin, Plus } from 'lucide-react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { PURPOSES } from '../../constants/purposes';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../../constants/theme';
@@ -11,7 +11,7 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { PurposeIcon } from '../../components/PurposeIcon';
 import { Button, Card } from '../../components/ui';
 import { ItemOptionsSheet } from '../../components/ItemOptionsSheet';
-import type { ChecklistItem as ChecklistItemType } from '../../types';
+import { SETTLE_MS, splitChecklist } from '../../utils/checklistSections';
 
 const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
   0: '오늘만',
@@ -19,19 +19,6 @@ const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
   2: '목적 준비물',
   3: '일상 루틴',
 };
-
-const TIERS = [0, 1, 2, 3] as const;
-
-// 분류별로 나누고, 각 분류 안에서는 안 챙긴 것을 위로, 그중 꼭 챙김을 맨 위로 올린다
-// (정렬은 안정적이라 나머지는 원래 순서 유지).
-function groupByTier(checklist: ChecklistItemType[]) {
-  return TIERS.map((tier) => ({
-    tier,
-    items: checklist
-      .filter((item) => item.tier === tier)
-      .sort((a, b) => Number(a.checked) - Number(b.checked) || Number(Boolean(b.essential)) - Number(Boolean(a.essential))),
-  })).filter((section) => section.items.length > 0);
-}
 
 // 이 화면의 주인공 — 흰 면과 그림자는 여기에만 쓴다.
 export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEvent) => void }) {
@@ -60,7 +47,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
   // 고르는 모달 없이 Enter 한 번으로 바로 오늘만 추가되게 한다. 매일 루틴으로 남기고
   // 싶을 때만 입력 중에 나타나는 별도 링크를 쓴다.
   const addToday = (label: string) => {
-    if (!addTempItem(label)) showToast(`'${label}'은(는) 이미 목록에 있어요.`);
+    if (!addTempItem(label)) showToast(`'${label}'은(는) 이미 목록에 있어요.`, null, 'info');
   };
 
   const handleQuickAddToday = () => {
@@ -77,13 +64,12 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
       buildChecklist();
       showToast(`'${trimmed}'을(를) 매일 루틴에 넣었어요.`);
     } else {
-      showToast(`'${trimmed}'은(는) 이미 루틴에 있어요.`);
+      showToast(`'${trimmed}'은(는) 이미 루틴에 있어요.`, null, 'info');
     }
     setQuickAddText('');
   };
 
-  // ✕는 체크 바로 옆이고, 루틴은 한 번에 영구 삭제된다(날씨·목적 항목은 영구 꺼짐).
-  // 잘못 눌러도 돌이킬 수 있게 되돌리기를 붙인다.
+  // 루틴은 한 번에 영구 삭제된다(날씨·목적 항목은 영구 꺼짐). 잘못 눌러도 돌이킬 수 있게 되돌리기를 붙인다.
   const handleDeleteItem = useCallback(
     (id: string) => {
       const item = useAppStore.getState().checklist.find((i) => i.id === id);
@@ -124,7 +110,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
     if (event.error === 'no-speech' || event.error === 'speech-timeout' || event.error === 'aborted') {
       return;
     }
-    showToast('음성 인식에 실패했어요. 다시 시도해주세요.');
+    showToast('음성 인식에 실패했어요. 다시 시도해주세요.', null, 'error');
   });
 
   const handleVoiceAdd = async () => {
@@ -138,7 +124,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
     }
     const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!permission.granted) {
-      showToast('마이크/음성 인식 권한이 필요해요.');
+      showToast('마이크/음성 인식 권한이 필요해요.', null, 'warning');
       return;
     }
     ExpoSpeechRecognitionModule.start({
@@ -167,7 +153,41 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
 
   // 입력창에 글자를 칠 때마다(quickAddText) 다시 그려지는데, 그때마다 목록을
   // 다시 나누고 정렬할 필요는 없다.
-  const tierSections = useMemo(() => groupByTier(checklist), [checklist]);
+  const [settling, setSettling] = useState<ReadonlySet<string>>(() => new Set());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+  const handleToggle = useCallback((id: string) => {
+    const wasChecked = useAppStore.getState().checklist.find((i) => i.id === id)?.checked;
+    toggleCheck(id);
+    const old = timers.current.get(id);
+    if (old) clearTimeout(old);
+    timers.current.delete(id);
+    if (wasChecked !== false) {
+      // 챙김을 풀었으면 머물 이유가 없다
+      setSettling((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      return;
+    }
+    setSettling((prev) => new Set(prev).add(id));
+    timers.current.set(id, setTimeout(() => {
+      timers.current.delete(id);
+      setSettling((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, SETTLE_MS));
+  }, [toggleCheck]);
+  const [packedOpen, setPackedOpen] = useState(false);
+  const { sections: tierSections, packed } = useMemo(() => splitChecklist(checklist, settling), [checklist, settling]);
+  // 챙긴 것이 없어지면 접힌 상태로 돌아간다 — 다음에 다시 생길 때 펼쳐진 채 나오지 않게
+  useEffect(() => {
+    if (packed.length === 0) setPackedOpen(false);
+  }, [packed.length]);
 
   const activePurposeColor = purposeId ? PurposeColors[PURPOSES[purposeId].color].chip : undefined;
   // 목적 색은 체크리스트 머리와 진행 막대에 쓴다 — 목적을 바꾸면 주인공 카드의 색이 따라 바뀐다.
@@ -232,7 +252,7 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
             <ChecklistItem
               key={item.id}
               item={item}
-              onToggle={toggleCheck}
+              onToggle={handleToggle}
               onDelete={handleDeleteItem}
               onOpenOptions={openOptions}
               purposeColor={activePurposeColor}
@@ -241,11 +261,38 @@ export function ChecklistCard({ onLayout }: { onLayout: (event: LayoutChangeEven
         </View>
       ))}
 
-      {total > 0 && showEssentialHint ? (
-        <Text style={styles.hint}>항목을 길게 누르면 '꼭 챙김'으로 정할 수 있어요.</Text>
+      {packed.length > 0 ? (
+        <View style={styles.tierSection}>
+          <Pressable
+            style={styles.packedToggle}
+            onPress={() => setPackedOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: packedOpen }}
+            accessibilityLabel={`챙긴 것 ${packed.length}개 ${packedOpen ? '접기' : '펼치기'}`}
+          >
+            <Text style={styles.packedLabel}>챙긴 것 {packed.length}개</Text>
+            {packedOpen
+              ? <ChevronUp size={16} color={Role.textMuted} />
+              : <ChevronDown size={16} color={Role.textMuted} />}
+          </Pressable>
+          {packedOpen ? packed.map((item) => (
+            <ChecklistItem
+              key={item.id}
+              item={item}
+              onToggle={handleToggle}
+              onDelete={handleDeleteItem}
+              onOpenOptions={openOptions}
+              purposeColor={activePurposeColor}
+            />
+          )) : null}
+        </View>
       ) : null}
 
-      <ItemOptionsSheet label={optionsLabel} onClose={() => setOptionsLabel(null)} />
+      {total > 0 && showEssentialHint ? (
+        <Text style={styles.hint}>항목을 길게 누르면 '꼭 챙김'으로 정하거나 지울 수 있어요.</Text>
+      ) : null}
+
+      <ItemOptionsSheet label={optionsLabel} onClose={() => setOptionsLabel(null)} onDelete={handleDeleteItem} />
 
       <View style={styles.quickAddRow}>
         <TextInput
@@ -376,6 +423,19 @@ const useStyles = makeStyles(({ Role }) => ({
     fontWeight: '700',
     color: Role.textMuted,
     marginBottom: 2,
+  },
+  packedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    paddingRight: Space.md,
+  },
+  packedLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '700',
+    color: Role.textMuted,
   },
   hint: {
     marginTop: Space.sm,

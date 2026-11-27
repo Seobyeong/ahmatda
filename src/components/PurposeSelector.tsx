@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, ScrollView, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { CalendarCheck } from 'lucide-react-native';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
 import { PURPOSES, PURPOSE_ORDER } from '../constants/purposes';
@@ -23,9 +24,10 @@ interface ChipProps {
   icon?: (color: string) => React.ReactNode;
   /** 고른 칩의 글자·아이콘 색 (기본: 색 있는 면 위의 흰색) */
   activeTextColor?: string;
+  hint?: string;
 }
 
-function Chip({ active, activeColor, onPress, label, text, icon, activeTextColor }: ChipProps) {
+function Chip({ active, activeColor, onPress, label, text, icon, activeTextColor, hint }: ChipProps) {
   const { Colors } = useTheme();
   const styles = useStyles();
   const scale = useRef(new Animated.Value(active ? 1.05 : 1)).current;
@@ -46,6 +48,7 @@ function Chip({ active, activeColor, onPress, label, text, icon, activeTextColor
         accessibilityRole="radio"
         accessibilityState={{ checked: active }}
         accessibilityLabel={label}
+        accessibilityHint={hint}
         style={[
           styles.chip,
           active
@@ -69,8 +72,13 @@ export function PurposeSelector({
   autoDetected,
   autoDetectedEvent,
 }: PurposeSelectorProps) {
-  const { Colors, Role, PurposeColors } = useTheme();
+  const { Role, PurposeColors } = useTheme();
   const styles = useStyles();
+  const [viewWidth, setViewWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+  const moreRight = contentWidth - viewWidth - scrollX > 4;
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setScrollX(e.nativeEvent.contentOffset.x);
   return (
     <View>
       {autoDetected ? (
@@ -94,37 +102,51 @@ export function PurposeSelector({
         </View>
       ) : null}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        accessibilityRole="radiogroup"
-        accessibilityLabel="오늘 외출 목적"
-      >
-        <Chip
-          active={purposeId === null}
-          activeColor={Colors.inverse}
-          activeTextColor={Colors.onInverse}
-          onPress={() => onSelect(null)}
-          label="목적 없음"
-          text="목적 없음"
-        />
-
-        {PURPOSE_ORDER.map((id) => {
-          const purpose = PURPOSES[id];
-          return (
-            <Chip
-              key={id}
-              active={purposeId === id}
-              activeColor={PurposeColors[purpose.color].chip}
-              onPress={() => onSelect(id)}
-              label={purpose.label}
-              text={purpose.shortLabel}
-              icon={(color) => <PurposeIcon id={id} color={color} />}
-            />
-          );
-        })}
-      </ScrollView>
+      <View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          accessibilityRole="radiogroup"
+          accessibilityLabel="오늘 외출 목적"
+          onLayout={(e) => setViewWidth(e.nativeEvent.layout.width)}
+          onContentSizeChange={(w) => setContentWidth(w)}
+          onScroll={onScroll}
+          scrollEventThrottle={32}
+        >
+          {/* '목적 없음' 칩은 없앴다 — 고른 칩을 다시 누르면 풀린다. 칩 하나가 줄어 '공부'까지 한 화면에 들어온다. */}
+          {PURPOSE_ORDER.map((id) => {
+            const purpose = PURPOSES[id];
+            const active = purposeId === id;
+            return (
+              <Chip
+                key={id}
+                active={active}
+                activeColor={PurposeColors[purpose.color].chip}
+                onPress={() => onSelect(active ? null : id)}
+                label={purpose.label}
+                text={purpose.shortLabel}
+                hint={active ? '다시 누르면 목적을 풀어요' : undefined}
+                icon={(color) => <PurposeIcon id={id} color={color} />}
+              />
+            );
+          })}
+        </ScrollView>
+        {/* 오른쪽에 칩이 더 있으면 끝을 흐리게 — 넘길 수 있다는 표시 */}
+        {moreRight ? (
+          <View style={styles.fade} pointerEvents="none">
+            <Svg width="100%" height="100%">
+              <Defs>
+                <LinearGradient id="purposeFade" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor={Role.bg} stopOpacity="0" />
+                  <Stop offset="1" stopColor={Role.bg} stopOpacity="1" />
+                </LinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100%" height="100%" fill="url(#purposeFade)" />
+            </Svg>
+          </View>
+        ) : null}
+      </View>
 
       {purposeId ? (
         <Text style={styles.clothingHint}>{PURPOSES[purposeId].clothingHint}</Text>
@@ -163,6 +185,13 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     paddingVertical: Space.xs,
     paddingHorizontal: 2,
   },
+  fade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: 32,
+  },
   clothingHint: {
     marginTop: Space.sm,
     fontSize: FontSize.caption,
@@ -173,7 +202,7 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     alignItems: 'center',
     gap: 6,
     minHeight: 44,
-    paddingHorizontal: Space.lg,
+    paddingHorizontal: Space.md,
     borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Role.border,

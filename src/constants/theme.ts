@@ -78,6 +78,7 @@ function buildRole(c: Palette) {
     warn: c.amber700,
     warnSoft: c.amber50,
     danger: c.red500,
+    dangerText: c.redText, // 지우기 같은 위험한 행동의 글자
 
     text: c.slate800,
     textStrong: c.slate700,

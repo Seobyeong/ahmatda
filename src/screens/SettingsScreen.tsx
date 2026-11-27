@@ -143,6 +143,7 @@ export function SettingsScreen() {
   const eventCalendar = useAppStore((s) => s.eventCalendar);
   const setEventCalendar = useAppStore((s) => s.setEventCalendar);
   const toastAction = useAppStore((s) => s.toastAction);
+  const toastTone = useAppStore((s) => s.toastTone);
   const clearToast = useAppStore((s) => s.clearToast);
 
   const departureTime = useAppStore((s) => s.userSettings.departureTime);
@@ -405,7 +406,7 @@ export function SettingsScreen() {
           <SettingSwitch value={awayPlaceOn} onValueChange={handleAwayPlaceToggle} disabled={!isMotionSupported()} accessibilityLabel="집 밖에서 떠날 때 알림" />
         </View>
 
-        <AlertVoiceSettings titleStyle={styles.sectionTitle} onMessage={(text) => showToast(text)} />
+        <AlertVoiceSettings titleStyle={styles.sectionTitle} onMessage={(text, tone) => showToast(text, null, tone)} />
 
         <AlarmSettings
           titleStyle={styles.sectionTitle}
@@ -759,7 +760,7 @@ export function SettingsScreen() {
         )}
       </ScrollView>
 
-      {toast ? <Toast message={toast} action={toastAction} onDone={clearToast} bottomOffset={insets.bottom + 24} /> : null}
+      {toast ? <Toast message={toast} action={toastAction} tone={toastTone} onDone={clearToast} bottomOffset={insets.bottom + 24} /> : null}
     </View>
   );
 }

@@ -29,6 +29,13 @@ const DISPLAY_NAMES: Record<string, string> = {
   '1월1일': '신정',
 };
 
+// '대체공휴일(삼일절)' → '삼일절 대체공휴일' ("내일은 삼일절 대체공휴일이에요")
+function displayName(name: string): string {
+  const sub = /^대체공휴일\((.+)\)$/.exec(name);
+  if (sub) return `${DISPLAY_NAMES[sub[1]] ?? sub[1]} 대체공휴일`;
+  return DISPLAY_NAMES[name] ?? name;
+}
+
 interface RawItem {
   dateName?: string;
   isHoliday?: string;
@@ -48,7 +55,7 @@ export function parseHolidayResponse(data: unknown): Record<string, string> {
     const s = String(it.locdate);
     if (!/^\d{8}$/.test(s)) continue;
     const name = (it.dateName ?? '').trim() || '공휴일';
-    out[`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`] = DISPLAY_NAMES[name] ?? name;
+    out[`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`] = displayName(name);
   }
   return out;
 }

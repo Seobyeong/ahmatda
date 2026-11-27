@@ -58,11 +58,16 @@ const light = {
   inverse:       '#1e293b',
   onInverse:     '#ffffff',
   inverseAction: '#c7d2fe',
+  // 토스트 면 위의 상태 아이콘 (완료는 emerald500)
+  inverseDone:   '#34d399',
+  inverseWarn:   '#fbbf24',
+  inverseError:  '#f87171',
 
   // Status
   emerald500: '#10b981',
   emerald100: '#d1fae5',
   red500:     '#ef4444',
+  redText:    '#dc2626', // 글자로 쓰는 빨강 (흰 면에서 4.5:1 이상)
 
   // Background
   bgDefault:  '#f8fafc',
@@ -116,10 +121,14 @@ const dark: Palette = {
   inverse:       '#e2e8f0',
   onInverse:     '#0f172a',
   inverseAction: '#4338ca',
+  inverseDone:   '#047857',
+  inverseWarn:   '#b45309',
+  inverseError:  '#dc2626',
 
   emerald500: '#10b981',
   emerald100: '#134e3a',
   red500:     '#f87171',
+  redText:    '#fca5a5',
 
   bgDefault:  '#0f172a',
 };

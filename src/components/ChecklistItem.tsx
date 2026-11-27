@@ -16,7 +16,6 @@ import {
   Umbrella,
   Wallet,
   Wind,
-  X,
   Zap,
 } from 'lucide-react-native';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
@@ -52,8 +51,13 @@ const ICONS: Record<string, typeof Check> = {
 // 챙긴 항목은 옅게 — 0.4면 글자가 거의 안 읽혀서(대비 2:1 미만) 다시 확인하기 어렵다.
 const CHECKED_OPACITY = 0.55;
 
-// 지웠을 때 벌어지는 일이 분류마다 달라서 화면 낭독기에 미리 알린다.
-function getDeleteHint(item: ChecklistItemType): string {
+// 지울 수 있는 항목 — 길게 누르기 시트의 [지우기]와 화면 낭독기 동작이 같은 기준을 쓴다.
+export function canDeleteItem(item: ChecklistItemType): boolean {
+  return Boolean(item.temp || item.permanent || item.tier === 1 || item.tier === 2);
+}
+
+// 지웠을 때 벌어지는 일이 분류마다 달라서 미리 알린다 (시트 설명·화면 낭독기).
+export function getDeleteHint(item: ChecklistItemType): string {
   if (item.temp) return '오늘 목록에서 지워요';
   if (item.permanent) return item.onDate ? '이 날만 챙기는 항목을 지워요' : '매일 루틴에서도 지워요';
   return '앞으로 이 항목을 추천하지 않아요';
@@ -96,7 +100,13 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
 
   const Icon = ICONS[item.icon] ?? Circle;
   const iconColor = getTierColor(Colors, item.tier, purposeColor);
-  const showDelete = item.temp || item.permanent || item.tier === 1 || item.tier === 2;
+  const deletable = Boolean(onDelete) && canDeleteItem(item);
+  // ✕ 버튼은 없앴다 — 체크 바로 옆이라 잘못 누르기 쉬웠다. 지우기는 길게 누르기 시트에 있다.
+  // 화면 낭독기에서는 길게 누르기를 찾기 어려워 동작 목록에 둘 다 넣는다.
+  const a11yActions = [
+    ...(onOpenOptions ? [{ name: 'longpress', label: '꼭 챙김·지우기 열기' }] : []),
+    ...(deletable ? [{ name: 'delete', label: `지우기 — ${getDeleteHint(item)}` }] : []),
+  ];
 
   return (
     <Animated.View style={[styles.wrapper, { opacity }]}>
@@ -107,10 +117,10 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
         accessibilityRole="checkbox"
         accessibilityState={{ checked: item.checked }}
         accessibilityLabel={[item.label, item.essential ? '꼭 챙김' : null, item.tier !== 0 ? item.note : null, item.badge].filter(Boolean).join(', ')}
-        // 화면 낭독기에서는 길게 누르기를 찾기 어렵다 — 동작 목록에 넣는다
-        accessibilityActions={onOpenOptions ? [{ name: 'longpress', label: '꼭 챙김 정하기' }] : undefined}
+        accessibilityActions={a11yActions.length > 0 ? a11yActions : undefined}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'longpress') onOpenOptions?.(item.id);
+          if (event.nativeEvent.actionName === 'delete') onDelete?.(item.id);
         }}
       >
         <View style={[styles.checkbox, item.checked && styles.checkboxChecked]}>
@@ -142,17 +152,6 @@ export const ChecklistItem = React.memo(function ChecklistItem({ item, onToggle,
         </View>
       </Pressable>
 
-      {showDelete ? (
-        <Pressable
-          style={styles.deleteButton}
-          onPress={() => onDelete?.(item.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.label} 삭제`}
-          accessibilityHint={getDeleteHint(item)}
-        >
-          <X size={18} color={Colors.slate500} />
-        </Pressable>
-      ) : null}
     </Animated.View>
   );
 });
@@ -162,6 +161,7 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 4,
+    paddingRight: 4,
   },
   // 줄 전체가 체크 버튼이다 — 높이 48 이상이라 걸어가면서 엄지로 눌러도 빗나가지 않는다.
   row: {
@@ -240,12 +240,5 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     fontSize: FontSize.caption,
     fontWeight: '600',
     color: Colors.amber700,
-  },
-  // 삭제는 체크 바로 옆이라 잘못 누르기 쉽다 — 44×44로 키우고, 눌러도 되돌릴 수 있게 했다.
-  deleteButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 }));

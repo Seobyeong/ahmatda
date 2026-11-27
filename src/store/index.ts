@@ -109,11 +109,15 @@ interface AppState {
   statusDismissed: boolean;
   toast: string | null;
   toastAction: ToastAction | null; // 토스트에 붙는 버튼 하나 (예: 삭제 되돌리기)
+  toastTone: ToastTone;
   scrollToChecklistRequested: boolean; // 알림 탭(딥링크)으로 체크리스트 스크롤 요청
   tomorrowPreviewRequested: boolean;   // 자기 전 정리 알림 탭 → 다음 외출 준비 화면 열기 요청
 }
 
 // 토스트에 붙는 버튼. 함수라 저장(persist) 대상이 아니다.
+// 토스트 종류 — 아이콘과 색이 다르다. 성공(✓)·안내(i)·주의(!)·실패(✕)
+export type ToastTone = 'success' | 'info' | 'warning' | 'error';
+
 export interface ToastAction {
   label: string;
   onPress: () => void;
@@ -264,7 +268,7 @@ interface AppActions {
   clearLeaveIntent: () => void; // 진단 화면의 테스트 기록 지우기
 
   dismissStatus: () => void;
-  showToast: (message: string, action?: ToastAction) => void;
+  showToast: (message: string, action?: ToastAction | null, tone?: ToastTone) => void;
   clearToast: () => void;
   requestScrollToChecklist: () => void;
   clearScrollToChecklistRequest: () => void;
@@ -467,6 +471,7 @@ const defaultState: AppState = {
   statusDismissed: false,
   toast: null,
   toastAction: null,
+  toastTone: 'success',
   scrollToChecklistRequested: false,
   tomorrowPreviewRequested: false,
 };
@@ -1183,7 +1188,7 @@ export const useAppStore = create<AppStore>()(
 
       // UI
       dismissStatus: () => set({ statusDismissed: true }),
-      showToast: (message, action) => set({ toast: message, toastAction: action ?? null }),
+      showToast: (message, action, tone = 'success') => set({ toast: message, toastAction: action ?? null, toastTone: tone }),
       clearToast: () => set({ toast: null, toastAction: null }),
       requestScrollToChecklist: () => set({ scrollToChecklistRequested: true }),
       clearScrollToChecklistRequest: () => set({ scrollToChecklistRequested: false }),

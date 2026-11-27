@@ -54,6 +54,29 @@ export function leaveResultMessage(result: LeaveResult): string {
   return `잠깐! ${names}${more} 아직 안 챙겼어요`;
 }
 
+// 알림의 [{물건} 챙김] — 맨 앞 하나를 챙김으로 표시한다 (앱을 열지 않고). 이름으로 찾는다: 알림을 만든 뒤
+// 목록이 다시 조립되면 id가 바뀐다. 알림이 어제 것이거나 이미 챙겼으면 아무것도 바꾸지 않는다.
+// 바뀐 목록으로 출발 상태·마지막 확인 알림을 다시 그린다 (다음 물건 버튼이 붙는다).
+export async function checkFromNotification(label: string, date: string): Promise<void> {
+  const { useAppStore, scheduleOf } = await getStore();
+  if (date !== getTodayString()) return;
+  if (useAppStore.getState().checklistDate !== date) useAppStore.getState().startNewDay();
+  const item = useAppStore.getState().checklist.find((i) => i.label === label);
+  if (item && !item.checked) useAppStore.getState().toggleCheck(item.id);
+
+  const state = useAppStore.getState();
+  const schedule = scheduleOf(state);
+  const snapshot = buildDepartureSnapshot(state.checklist, nextDepartureLabel(schedule, new Date()), state.checklistDate ?? '');
+  await NotificationService.updateDepartureStatus(schedule, snapshot);
+  // 마지막 확인 알림이 떠 있으면 어느 알림에서 눌렀든 같이 고친다 (방금 챙긴 것이 남아 있지 않게)
+  const shownAt = await NotificationService.lastCheckShownAt();
+  if (shownAt !== null) {
+    const unchecked = sortByUrgency(state.checklist.filter((i) => !i.checked));
+    if (unchecked.length === 0) await NotificationService.clearLastCheck();
+    else await NotificationService.showLastCheck(unchecked, shownAt);
+  }
+}
+
 // 마지막 확인 알림의 [다 챙겼어요]
 export async function markAllPacked(): Promise<void> {
   const { useAppStore, scheduleOf } = await getStore();

@@ -33,7 +33,7 @@ export function LostItemContent({ onClose, label }: { onClose: () => void; label
   const showToast = useAppStore((s) => s.showToast);
 
   const open = (url: string) => {
-    Linking.openURL(url).catch(() => showToast('페이지를 열지 못했어요.'));
+    Linking.openURL(url).catch(() => showToast('페이지를 열지 못했어요.', null, 'error'));
   };
 
   return (

@@ -12,6 +12,10 @@ describe('parseHolidayResponse', () => {
     expect(parseHolidayResponse(ok({ item: { dateName: '1월1일', isHoliday: 'Y', locdate: '20270101' } })))
       .toEqual({ '2027-01-01': '신정' });
     expect(parseHolidayResponse(ok(''))).toEqual({});
+    expect(parseHolidayResponse(ok({ item: [
+      { dateName: '대체공휴일(삼일절)', isHoliday: 'Y', locdate: 20260302 },
+      { dateName: '대체공휴일(기독탄신일)', isHoliday: 'Y', locdate: 20271227 },
+    ] }))).toEqual({ '2026-03-02': '삼일절 대체공휴일', '2027-12-27': '성탄절 대체공휴일' });
   });
   it('오류 응답은 던진다', () => {
     expect(() => parseHolidayResponse({ OpenAPI_ServiceResponse: {} })).toThrow();

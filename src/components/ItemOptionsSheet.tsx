@@ -1,19 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, Switch, Text, View } from 'react-native';
-import { X } from 'lucide-react-native';
+import { Trash2, X } from 'lucide-react-native';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
 import { useAppStore } from '../store';
 import { countRecentForgotten, FORGOTTEN_BADGE_THRESHOLD } from '../utils/forgotten';
 import { getTodayString } from '../utils/time';
 import { Button } from './ui';
 import { LostItemContent } from './LostItemSheet';
+import { canDeleteItem, getDeleteHint } from './ChecklistItem';
 
 // 항목을 길게 누르면 열린다 — 항목에 붙는 속성을 고르는 곳 (docs/체크리스트-항목-속성.md 2.1).
-// 지금은 꼭 챙김 하나. 속성은 전부 선택 사항이라 안 열어도 지금과 똑같이 동작한다.
+// 꼭 챙김과 지우기(줄마다 있던 ✕를 여기로 옮겼다 — 체크 옆이라 잘못 누르기 쉬웠다).
+// 속성은 전부 선택 사항이라 안 열어도 지금과 똑같이 동작한다.
 //
 // 항목은 id가 아니라 이름으로 찾는다 — 날씨를 새로 받거나 목적이 바뀌어 목록이 다시 조립되면
 // 항목 id가 전부 새로 나와서, id로 찾으면 보고 있던 시트가 저절로 닫힌다. 이름은 목록 안에서 하나뿐이다.
-export function ItemOptionsSheet({ label, onClose }: { label: string | null; onClose: () => void }) {
+export function ItemOptionsSheet({ label, onClose, onDelete }: {
+  label: string | null;
+  onClose: () => void;
+  // 지운 뒤 되돌리기 토스트는 부르는 쪽이 띄운다
+  onDelete?: (id: string) => void;
+}) {
   const styles = useStyles();
   const { Colors, Role } = useTheme();
   const item = useAppStore((s) => (label ? s.checklist.find((i) => i.label === label) ?? null : null));
@@ -70,13 +77,28 @@ export function ItemOptionsSheet({ label, onClose }: { label: string | null; onC
                 </Text>
               ) : null}
 
-              <Button
-                label="밖에서 잃어버렸어요"
-                variant="text"
-                size="sm"
-                onPress={() => setMode('lost')}
-                style={styles.lostButton}
-              />
+              <View style={styles.footer}>
+                <Button
+                  label="밖에서 잃어버렸어요"
+                  variant="text"
+                  size="sm"
+                  onPress={() => setMode('lost')}
+                />
+                {item && onDelete && canDeleteItem(item) ? (
+                  <Button
+                    label="지우기"
+                    variant="text"
+                    size="sm"
+                    icon={<Trash2 size={14} color={Role.dangerText} />}
+                    textStyle={styles.deleteText}
+                    accessibilityHint={getDeleteHint(item)}
+                    onPress={() => {
+                      onDelete(item.id);
+                      onClose();
+                    }}
+                  />
+                ) : null}
+              </View>
             </>
           )}
         </View>
@@ -144,8 +166,13 @@ const useStyles = makeStyles(({ Role }) => ({
     fontSize: FontSize.label,
     lineHeight: 19,
   },
-  lostButton: {
-    alignSelf: 'flex-start',
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: Space.xs,
+  },
+  deleteText: {
+    color: Role.dangerText,
   },
 }));

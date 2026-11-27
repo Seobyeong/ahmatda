@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
 import { ChoiceList } from './ChoiceList';
 import { Button } from './ui';
-import { useAppStore } from '../store';
+import { useAppStore, type ToastTone } from '../store';
 import { NotificationService } from '../services/notification/NotificationService';
 import {
   CUSTOM_TEXT_EXAMPLE, CUSTOM_TEXT_MAX, PLACEHOLDERS, SAMPLE_VARS, VOICES, renderAlert,
@@ -24,7 +24,7 @@ const CHOICES: Choice<AlertVoiceId>[] = [
 
 export function AlertVoiceSettings({ titleStyle, onMessage }: {
   titleStyle: object;
-  onMessage: (text: string) => void;
+  onMessage: (text: string, tone?: ToastTone) => void;
 }) {
   const styles = useStyles();
   const { Role } = useTheme();
@@ -52,7 +52,7 @@ export function AlertVoiceSettings({ titleStyle, onMessage }: {
   const handleSave = () => {
     const text = draft.trim();
     if (!text) {
-      onMessage('문장을 써 주세요.');
+      onMessage('문장을 써 주세요.', 'warning');
       return;
     }
     setCustomAlertText(text);
@@ -63,7 +63,7 @@ export function AlertVoiceSettings({ titleStyle, onMessage }: {
     try {
       await NotificationService.previewVoice();
     } catch {
-      onMessage('알림을 보낼 수 없어요. 알림 권한을 확인해 주세요.');
+      onMessage('알림을 보낼 수 없어요. 알림 권한을 확인해 주세요.', 'error');
     }
   };
 

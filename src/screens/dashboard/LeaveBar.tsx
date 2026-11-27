@@ -23,7 +23,8 @@ export function LeaveBar({ onHeight, onMemo }: { onHeight: (height: number) => v
     if (leaving) return;
     setLeaving(true);
     try {
-      showToast(leaveResultMessage(await pressLeave()));
+      const result = await pressLeave();
+      showToast(leaveResultMessage(result), null, result.kind === 'all-packed' ? 'success' : 'warning');
     } finally {
       setLeaving(false);
     }

@@ -54,7 +54,7 @@ export function HolidayQuestion({ now, onAddEvent }: { now: Date; onAddEvent?: (
 
   const saveTime = () => {
     if (!isValidHHmm(pickedTime)) {
-      showToast('시간을 다시 확인해 주세요.');
+      showToast('시간을 다시 확인해 주세요.', null, 'warning');
       return;
     }
     setDatePlans([q.dates[0]], pickedTime);

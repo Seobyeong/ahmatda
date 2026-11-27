@@ -1,6 +1,6 @@
 // 공용 부품 — 버튼과 카드. 화면마다 따로 만들던 "주요 버튼"·"흰 카드"를 하나로 모은다.
 import React from 'react';
-import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { FontSize, Radius, Space, makeStyles } from '../constants/theme';
 
 type ButtonVariant = 'primary' | 'soft' | 'neutral' | 'text';
@@ -17,11 +17,15 @@ interface ButtonProps {
   icon?: React.ReactNode;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** 글자 색을 바꿀 때 (예: 지우기는 빨강) */
+  textStyle?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export function Button({
-  label, onPress, variant = 'primary', size = 'md', pill = false, icon, disabled, style, accessibilityLabel,
+  label, onPress, variant = 'primary', size = 'md', pill = false, icon, disabled, style, textStyle,
+  accessibilityLabel, accessibilityHint,
 }: ButtonProps) {
   const styles = useStyles();
   return (
@@ -32,6 +36,7 @@ export function Button({
       hitSlop={size === 'sm' ? 8 : undefined}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [
         styles.base,
@@ -44,7 +49,7 @@ export function Button({
       ]}
     >
       {icon}
-      <Text style={[styles.label, size === 'sm' && styles.labelSm, styles[`${variant}Label`]]}>{label}</Text>
+      <Text style={[styles.label, size === 'sm' && styles.labelSm, styles[`${variant}Label`], textStyle]}>{label}</Text>
     </Pressable>
   );
 }

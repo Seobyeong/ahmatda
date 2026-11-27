@@ -51,10 +51,10 @@ export function TodayPlanSheet({ visible, onClose }: { visible: boolean; onClose
       showToast('오늘은 원래 일정대로예요.');
     } else if (choice === 'off') {
       setTodayPlan('off');
-      showToast('오늘은 외출 알림을 쉬어요. 내일부터 원래대로예요.');
+      showToast('오늘은 외출 알림을 쉬어요. 내일부터 원래대로예요.', null, 'info');
     } else {
       if (!isValidHHmm(time)) {
-        showToast('시간을 다시 확인해 주세요.');
+        showToast('시간을 다시 확인해 주세요.', null, 'warning');
         return;
       }
       setTodayPlan(time);
