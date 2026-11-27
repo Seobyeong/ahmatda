@@ -68,7 +68,7 @@ function holidayFor(at: Date, schedule: DepartureSchedule): NightlyHoliday | nul
 }
 
 async function nextOutingPreview(fireAt: Date, fresh: boolean): Promise<PreviewItem[] | null> {
-  const { useAppStore, scheduleOf } = await import('@/store');
+  const { useAppStore, scheduleOf, taggedPurposes } = await import('@/store');
   const state = useAppStore.getState();
   const s = state.userSettings;
   // 다음 외출 — 쉬는 날은 건너뛴다. 일주일 안에 외출이 없으면 미리볼 것도 없다.
@@ -93,6 +93,7 @@ async function nextOutingPreview(fireAt: Date, fresh: boolean): Promise<PreviewI
     routines: state.permanentRoutines,
     events,
     customKeywords: s.customKeywords,
+    tagged: taggedPurposes(state),
     disabledWeatherItems: s.disabledWeatherItems,
     disabledPurposeItems: s.disabledPurposeItems,
     outlook,

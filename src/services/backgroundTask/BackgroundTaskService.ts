@@ -1,7 +1,8 @@
 import BackgroundFetch from 'react-native-background-fetch';
 import { currentWindow, nextAlert, type DepartureSchedule } from '@/utils/schedule';
 import { WifiMonitorService } from '@/services/wifi/WifiMonitorService';
-import { scheduleOf, useAppStore } from '@/store';
+import { scheduleOf, taggedPurposes, useAppStore } from '@/store';
+import { untaggedEvents } from '@/constants/purposes';
 import { CalendarService } from '@/services/calendar/CalendarService';
 import { AiHintService } from '@/services/ai/AiHintService';
 import { AwayPlaceService } from '@/services/departure/AwayPlaceService';
@@ -84,7 +85,8 @@ export const BackgroundTaskService = {
         CalendarService.getEventsForDay(0),
         CalendarService.getEventsForDay(1),
       ]);
-      await AiHintService.precompute([...today, ...tomorrow]);
+      // 앱에서 목적을 직접 고른 일정은 보내지 않는다.
+      await AiHintService.precompute(untaggedEvents([...today, ...tomorrow], taggedPurposes(useAppStore.getState())));
     } catch {
       // 백그라운드 작업은 조용히 실패한다 — finish()는 호출부가 보장
     }

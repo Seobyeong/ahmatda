@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { PURPOSES, findMatchingEvent, purposeItemKey } from '../constants/purposes';
+import { PURPOSES, findMatchingEvent, purposeItemKey, type TaggedEvents } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getTodayString } from '../utils/time';
 import { activeDates, activeToday, feedbackOutingDate, referenceTimeOn, type DatePlan, type DayPlan, type DepartureSchedule } from '../utils/schedule';
@@ -89,6 +89,12 @@ interface AppState {
   // 공휴일 목록 캐시 (services/holiday/HolidayService.ts). 기기 로컬.
   holidays: HolidayCache;
 
+  // 앱에서 등록한 일정 — 캘린더 일정 id → 고른 목적과 날짜. 일정 제목·내용은 저장하지 않는다
+  // (개인정보처리방침: 일정은 기기에 저장하지 않음 — id와 목적만). 지난 날짜는 정리된다.
+  taggedEvents: Record<string, { purposeId: PurposeId; date: string }>;
+  // 앱에서 일정을 넣을 캘린더 — 처음 등록할 때 고른다. 캘린더 id는 기기마다 달라 기기 로컬.
+  eventCalendar: { id: string; title: string } | null;
+
   // 삭제 기록 (tombstone) — 나중에 기기 간 동기화를 붙일 때, 한 기기에서 지운 루틴·메모·알람이
   // 다른 기기에서 되살아나지 않게 "지웠음"을 남긴다 ("없음"만으로는 "아직 못 받음"과 구분이 안 된다).
   // 지금은 기록만 하고 쓰는 곳은 없다. 오래된 기록은 DELETION_KEEP_MS 뒤 정리된다 (docs/계정-기능-구상.md 7장).
@@ -126,6 +132,11 @@ export function scheduleOf(
     dates: activeDates(state.departureDates, now),
     holidays: state.holidays?.dates ?? {},
   };
+}
+
+// 목적 감지에 넘길 형태 (constants/purposes.ts TaggedEvents)
+export function taggedPurposes(state: Pick<AppState, 'taggedEvents'>): TaggedEvents {
+  return Object.fromEntries(Object.entries(state.taggedEvents ?? {}).map(([id, t]) => [id, t.purposeId]));
 }
 
 export interface Deletion {
@@ -209,6 +220,9 @@ interface AppActions {
   // 날짜별 — 공휴일 대답('usual' = 평소대로), 등록한 일정의 나가는 시간. null이면 정한 것을 지운다.
   setDatePlans: (dates: string[], plan: DatePlan | null) => void;
   setHolidays: (cache: HolidayCache) => void;
+  // 앱에서 일정을 등록한 뒤 — 목적 표시, 그날 나가는 시간(null이면 안 바꿈), 그날만 챙길 것.
+  registerEvent: (input: { eventId: string; date: string; purposeId: PurposeId | null; departureTime: string | null; items: string[] }) => void;
+  setEventCalendar: (calendar: { id: string; title: string } | null) => void;
   setNightlyCheckTime: (time: string) => void;
   setAlertPreference: (pref: AlertPreference) => void;
   setAwayPlaceAlert: (on: boolean) => void;
@@ -441,6 +455,9 @@ const defaultState: AppState = {
   departureDates: {},
 
   holidays: EMPTY_HOLIDAY_CACHE,
+
+  taggedEvents: {},
+  eventCalendar: null,
 
   deletions: [],
 
@@ -780,7 +797,8 @@ export const useAppStore = create<AppStore>()(
                 purposeId,
                 currentWeather.calendarEvents,
                 referenceTimeOn(new Date(), scheduleOf(get())),
-                userSettings.customKeywords
+                userSettings.customKeywords,
+                taggedPurposes(get())
               )
             : null;
           const badge = matchedEvent
@@ -908,6 +926,30 @@ export const useAppStore = create<AppStore>()(
           return { departureDates: next };
         }),
       setHolidays: (cache) => set({ holidays: cache }),
+      registerEvent: ({ eventId, date, purposeId, departureTime, items }) => {
+        const today = getTodayString();
+        set((state) => {
+          const tagged = Object.fromEntries(Object.entries(state.taggedEvents).filter(([, t]) => t.date >= today));
+          if (purposeId) tagged[eventId] = { purposeId, date };
+          return { taggedEvents: tagged };
+        });
+        if (departureTime) {
+          // 같은 날 이미 정한 나가는 시간이 더 이르면 그대로 둔다 — 아침 일정 뒤에 저녁 일정을 넣어도
+          // 아침 외출 알림이 사라지면 안 된다. 오늘이면 '오늘만 바꾸기'도 같이 본다(그쪽이 앞서므로 풀어 준다).
+          const { departureDates, departureToday } = get();
+          const isTime = (p: string | undefined | null): p is string => !!p && p !== 'off' && p !== 'usual';
+          const todayPlan = date === today && departureToday?.date === today ? departureToday.plan : null;
+          const earliest = [departureTime, departureDates[date], todayPlan]
+            .filter(isTime)
+            .sort()[0];
+          get().setDatePlans([date], earliest);
+          if (todayPlan !== null) get().setTodayPlan(null);
+        }
+        items.forEach((label) => get().addOneOffItem(label, date));
+        // 오늘 일정이면 지금 목록에 바로 보이게 (목적은 화면이 일정을 다시 읽으며 맞춘다).
+        if (date === today && items.length > 0) get().buildChecklist();
+      },
+      setEventCalendar: (calendar) => set({ eventCalendar: calendar }),
       setNightlyCheckTime: (time) => set((state) => patchSettings(state, { nightlyCheckTime: time })),
       // 성향을 다시 고르면 집 밖 머묾 알림도 성향을 따르게 되돌린다 (스위치로 따로 정한 값은 풀림).
       // 같은 성향을 다시 누른 건 바꾼 게 아니다 — 스위치로 끈 값을 지우지 않는다.
@@ -1231,6 +1273,9 @@ export const useAppStore = create<AppStore>()(
         departureDates: state.departureDates,
         // 공휴일 목록 — 인터넷 없이도 쓰게 둔다.
         holidays: state.holidays,
+        // 앱에서 등록한 일정의 목적(id와 목적만), 일정을 넣을 캘린더.
+        taggedEvents: state.taggedEvents,
+        eventCalendar: state.eventCalendar,
         // 삭제 기록 — 나중에 동기화할 때 지운 것이 되살아나지 않게.
         deletions: state.deletions,
       }),

@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { ChevronRight, MapPin, Moon, Settings } from 'lucide-react-native';
+import { CalendarPlus, ChevronRight, MapPin, Moon, Settings } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { detectPurposeFromEvents, findMatchingEvent } from '../constants/purposes';
+import { detectPurposeFromEvents, findMatchingEvent, untaggedEvents } from '../constants/purposes';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/theme';
-import { scheduleOf, useAppStore } from '../store';
+import { scheduleOf, taggedPurposes, useAppStore } from '../store';
 import { DirectionsService } from '../services/directions/DirectionsService';
 import { buildSuggestions, type AiSuggestion } from '../services/ai/hints';
 import { pickNextPlaceEvent } from '../utils/directions';
-import { parseEventTime } from '../utils/time';
+import { parseEventTime, toDateString } from '../utils/time';
 import { formatHm, nextAlert, referenceTimeOn } from '../utils/schedule';
 import { AiSuggestionCard } from '../components/AiSuggestionCard';
 import { Mascot } from '../components/Mascot';
@@ -18,6 +18,7 @@ import { PurposeSelector } from '../components/PurposeSelector';
 import { Toast } from '../components/Toast';
 import { TomorrowPreviewModal } from '../components/TomorrowPreviewModal';
 import { MemoModal } from '../components/MemoModal';
+import { AddEventSheet } from '../components/AddEventSheet';
 import { Button } from '../components/ui';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import type { PurposeId } from '../types';
@@ -49,6 +50,8 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
   const [memoVisible, setMemoVisible] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [tomorrowVisible, setTomorrowVisible] = useState(false);
+  // 일정 추가 — 헤더 버튼, 공휴일 질문의 [일정 있어요]. 날짜를 주면 그 날짜로 연다.
+  const [addEvent, setAddEvent] = useState<{ date: Date | null } | null>(null);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
@@ -115,7 +118,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
     () =>
       aiEnabled
         ? buildSuggestions(
-            todayEvents,
+            untaggedEvents(todayEvents, taggedPurposes(useAppStore.getState())),
             userSettings.customKeywords,
             aiHintCache,
             checklist.map((item) => item.label)
@@ -134,9 +137,10 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
     if (purposeId !== null && !autoDetected) return;
     const keywords = useAppStore.getState().userSettings.customKeywords;
     const refTime = referenceTimeOn(new Date(), scheduleOf(useAppStore.getState()));
-    const detectedId = detectPurposeFromEvents(todayEvents, refTime, keywords);
+    const tagged = taggedPurposes(useAppStore.getState());
+    const detectedId = detectPurposeFromEvents(todayEvents, refTime, keywords, tagged);
     const matchedEvent = detectedId
-      ? findMatchingEvent(detectedId, todayEvents, refTime, keywords)
+      ? findMatchingEvent(detectedId, todayEvents, refTime, keywords, tagged)
       : null;
     setAutoDetected(detectedId, matchedEvent);
   };
@@ -166,6 +170,16 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
             <Text style={styles.headerSubtitle}>{todayLabel}</Text>
           </View>
         </View>
+        <View style={styles.headerActions}>
+        <Pressable
+          style={styles.settingsButton}
+          onPress={() => setAddEvent({ date: null })}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="일정 추가"
+        >
+          <CalendarPlus size={22} color={Role.textSub} />
+        </Pressable>
         <Pressable
           style={styles.settingsButton}
           onPress={() => navigation.navigate('Settings')}
@@ -175,6 +189,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
         >
           <Settings size={22} color={Role.textSub} />
         </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -189,7 +204,7 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
       >
         <StatusRow now={now} />
 
-        <HolidayQuestion now={now} />
+        <HolidayQuestion now={now} onAddEvent={(date) => setAddEvent({ date })} />
 
         <WeatherBlock onRetry={refresh} usingFallbackLocation={usingFallbackLocation} />
 
@@ -280,6 +295,13 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
 
       <TomorrowPreviewModal visible={tomorrowVisible} onClose={() => setTomorrowVisible(false)} />
       <MemoModal visible={memoVisible} onClose={() => setMemoVisible(false)} />
+      <AddEventSheet
+        visible={addEvent !== null}
+        initialDate={addEvent?.date ?? null}
+        onClose={() => setAddEvent(null)}
+        // 오늘 일정이면 일정을 다시 읽어 목적·연동 뱃지를 맞춘다.
+        onSaved={(date) => { if (date === toDateString(new Date())) refresh(); }}
+      />
 
       {/* 설정 화면이 위에 떠 있을 땐 그쪽이 토스트를 보여 준다. */}
       {toast && focused ? (
@@ -323,6 +345,11 @@ const useStyles = makeStyles(({ Role }) => ({
   headerSubtitle: {
     fontSize: FontSize.label,
     color: Role.textMuted,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
   },
   settingsButton: {
     width: 44,

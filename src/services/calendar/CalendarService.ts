@@ -3,6 +3,15 @@ import RNCalendarEvents from 'react-native-calendar-events';
 import { CalendarEvent } from '@/types';
 import { getTodayStartMs, getTodayEndMs, parseEventTime } from '@/utils/time';
 
+// 일정을 넣을 수 있는 캘린더 (앱에서 일정 등록)
+export interface WritableCalendar {
+  id: string;
+  title: string;
+  account: string;
+  color: string;
+  isPrimary: boolean;
+}
+
 export const CalendarService = {
 
   // READ_CALENDAR 권한 요청
@@ -60,5 +69,38 @@ export const CalendarService = {
     } catch {
       return [];
     }
+  },
+
+  // 일정 쓰기 권한 — 읽기만 허용된 상태면 읽기+쓰기를 다시 요청한다.
+  async requestWritePermission(): Promise<boolean> {
+    try {
+      if ((await RNCalendarEvents.checkPermissions(false)) === 'authorized') return true;
+      return (await RNCalendarEvents.requestPermissions(false)) === 'authorized';
+    } catch {
+      return false;
+    }
+  },
+
+  // 일정을 넣을 수 있는 캘린더 — 기본(primary) 캘린더가 앞. 공휴일·생일 같은 읽기 전용은 뺀다.
+  async writableCalendars(): Promise<WritableCalendar[]> {
+    try {
+      const all = await RNCalendarEvents.findCalendars();
+      return all
+        .filter((c) => c.allowsModifications)
+        .map((c) => ({ id: c.id, title: c.title, account: c.source, color: c.color, isPrimary: c.isPrimary }))
+        .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+    } catch {
+      return [];
+    }
+  },
+
+  // 일정 하나를 넣고 일정 id를 돌려준다. 실패하면 던진다 (화면이 알린다).
+  async addEvent(input: { calendarId: string; title: string; start: Date; end: Date; location?: string }): Promise<string> {
+    return RNCalendarEvents.saveEvent(input.title, {
+      calendarId: input.calendarId,
+      startDate: input.start.toISOString(),
+      endDate: input.end.toISOString(),
+      ...(input.location ? { location: input.location } : {}),
+    });
   },
 };

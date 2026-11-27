@@ -66,3 +66,21 @@ describe('findMatchingEvent', () => {
     ).toEqual({ title: '농구 동아리', time: '10:00' });
   });
 });
+
+describe('직접 고른 일정의 목적', () => {
+  const events = [
+    { id: 'a', title: '팀 회의', time: '10:00' },
+    { id: 'b', title: '친구랑 배드민턴', time: '11:00' },
+  ];
+  it('직접 고른 일정은 키워드 없이도 그 목적 — 가까운 순서는 그대로', () => {
+    expect(detectPurposeFromEvents(events, '10:30')).toBe('work'); // 지난 회의뿐
+    expect(detectPurposeFromEvents(events, '10:30', undefined, { b: 'workout' })).toBe('workout');
+    expect(findMatchingEvent('workout', events, '10:30', undefined, { b: 'workout' })?.id).toBe('b');
+    // 이미 지난 직접 고른 일정이 뒤의 키워드 일정을 이기지 않는다
+    expect(detectPurposeFromEvents(events, '09:00', undefined, { b: 'workout' })).toBe('work');
+    expect(detectPurposeFromEvents(events, '10:30', undefined, { a: 'date' })).toBe('date');
+  });
+  it('다른 목적으로 고른 일정은 키워드가 맞아도 근거가 아니다', () => {
+    expect(findMatchingEvent('work', events, '09:00', undefined, { a: 'date' })).toBeNull();
+  });
+});

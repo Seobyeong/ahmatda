@@ -198,3 +198,36 @@ describe('꼭 챙김', () => {
     expect(useAppStore.getState().userSettings.essentialLabels).toEqual([]);
   });
 });
+
+describe('앱에서 등록한 일정', () => {
+  it('목적·나가는 시간·그날 챙길 것을 남기고, 지난 표시는 정리한다', () => {
+    useAppStore.setState({ taggedEvents: { old: { purposeId: 'work', date: '2000-01-01' } }, departureDates: {} });
+    useAppStore.getState().registerEvent({
+      eventId: 'ev1', date: '2099-12-24', purposeId: 'workout', departureTime: '13:00', items: ['라켓', '라켓'],
+    });
+    const s = useAppStore.getState();
+    expect(s.taggedEvents).toEqual({ ev1: { purposeId: 'workout', date: '2099-12-24' } });
+    expect(s.departureDates['2099-12-24']).toBe('13:00');
+    expect(s.permanentRoutines.filter((r) => r.label === '라켓' && r.onDate === '2099-12-24')).toHaveLength(1);
+  });
+});
+
+describe('같은 날 일정을 또 넣으면', () => {
+  it('더 이른 나가는 시간을 지킨다', () => {
+    useAppStore.setState({ departureDates: {} });
+    const reg = (eventId: string, departureTime: string) => useAppStore.getState().registerEvent({
+      eventId, date: '2099-12-24', purposeId: null, departureTime, items: [],
+    });
+    reg('m', '08:00');
+    reg('e', '18:00');
+    expect(useAppStore.getState().departureDates['2099-12-24']).toBe('08:00');
+    reg('x', '07:30');
+    expect(useAppStore.getState().departureDates['2099-12-24']).toBe('07:30');
+  });
+  it('오늘이면 오늘만 바꾸기를 풀고 날짜별 계획으로 합친다', () => {
+    useAppStore.setState({ departureDates: {}, departureToday: { date: getTodayString(), plan: 'off' } });
+    useAppStore.getState().registerEvent({ eventId: 't', date: getTodayString(), purposeId: null, departureTime: '14:00', items: [] });
+    expect(useAppStore.getState().departureToday).toBeNull();
+    expect(useAppStore.getState().departureDates[getTodayString()]).toBe('14:00');
+  });
+});

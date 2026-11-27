@@ -7,7 +7,9 @@
 // 보여준 우산이 아침에 빠지면 안 된다. 다만 예보는 밤사이 바뀔 수 있다.
 // 미세먼지는 내일 예보 API가 따로라 넣지 않는다 (아침 조립 때 실황으로 반영된다).
 
-import { PURPOSES, detectPurposeFromEvents, findMatchingEvent, purposeItemKey, type CustomKeywords } from '@/constants/purposes';
+import {
+  PURPOSES, detectPurposeFromEvents, findMatchingEvent, purposeItemKey, type CustomKeywords, type TaggedEvents,
+} from '@/constants/purposes';
 import { precipWord, usesRainForecast, type DayOutlook } from '@/services/weather/forecastDate';
 import { getForgottenBadge } from './forgotten';
 import { isOneOff, isRoutineActiveOn } from './routines';
@@ -31,8 +33,9 @@ export interface TomorrowPreviewInput {
   date: Date;
   departureTime: string;
   routines: ChecklistItem[];
-  events: Array<{ title: string; time: string }>;
+  events: Array<{ id?: string; title: string; time: string }>;
   customKeywords: CustomKeywords;
+  tagged?: TaggedEvents; // 앱에서 등록하며 목적을 고른 일정
   disabledWeatherItems: string[];
   disabledPurposeItems: string[];
   outlook: DayOutlook | null;
@@ -68,9 +71,9 @@ export function buildTomorrowPreview(input: TomorrowPreviewInput): TomorrowPrevi
     push({ label: '물병', kind: 'weather', reason: `최고 ${outlook.maxTemp}°C 폭염` });
   }
 
-  const purposeId = detectPurposeFromEvents(input.events, input.departureTime, input.customKeywords);
+  const purposeId = detectPurposeFromEvents(input.events, input.departureTime, input.customKeywords, input.tagged);
   if (purposeId) {
-    const event = findMatchingEvent(purposeId, input.events, input.departureTime, input.customKeywords);
+    const event = findMatchingEvent(purposeId, input.events, input.departureTime, input.customKeywords, input.tagged);
     const reason = event ? `${event.time} '${event.title}' 일정` : null;
     PURPOSES[purposeId].items
       .filter((p) => !input.disabledPurposeItems.includes(purposeItemKey(purposeId, p.label)))

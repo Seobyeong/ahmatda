@@ -4,7 +4,7 @@ import { X } from 'lucide-react-native';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { Button } from './ui';
 import { PURPOSES } from '../constants/purposes';
-import { scheduleOf, useAppStore } from '../store';
+import { scheduleOf, taggedPurposes, useAppStore } from '../store';
 import { dayLabel, formatHm, nextDeparture } from '../utils/schedule';
 import type { DayOutlook } from '../services/weather/forecastDate';
 import { fetchPreviewInputs } from '../services/nightly/previewInputs';
@@ -87,6 +87,7 @@ export function TomorrowPreviewModal({ visible, onClose }: TomorrowPreviewModalP
         routines: permanentRoutines,
         events,
         customKeywords: userSettings.customKeywords,
+        tagged: taggedPurposes(useAppStore.getState()),
         disabledWeatherItems: userSettings.disabledWeatherItems,
         disabledPurposeItems: userSettings.disabledPurposeItems,
         outlook,

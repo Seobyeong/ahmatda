@@ -139,6 +139,9 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const toast = useAppStore((s) => s.toast);
+  // 앱에서 일정을 넣을 캘린더 — [다시 고르기]는 지우기만 하고, 다음 등록 때 고른다.
+  const eventCalendar = useAppStore((s) => s.eventCalendar);
+  const setEventCalendar = useAppStore((s) => s.setEventCalendar);
   const toastAction = useAppStore((s) => s.toastAction);
   const clearToast = useAppStore((s) => s.clearToast);
 
@@ -370,6 +373,21 @@ export function SettingsScreen() {
         <TimeRow label="기본 외출 시간" value={departureTime} onCommit={updateDepartureTime} />
         <WeekdaySchedule />
         <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} />
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>일정을 넣을 캘린더</Text>
+          {eventCalendar ? (
+            <Pressable
+              onPress={() => setEventCalendar(null)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${eventCalendar.title}, 다음 일정 추가 때 다시 고르기`}
+            >
+              <Text style={[styles.rowValue, styles.rowValueEditable]}>{eventCalendar.title} · 다시 고르기</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.rowValue}>처음 추가할 때 골라요</Text>
+          )}
+        </View>
 
         <Text style={styles.sectionTitle}>알림 성향</Text>
         <ChoiceList choices={ALERT_PREFERENCE_CHOICES} value={alertPreference} onChange={handleAlertPreference} />

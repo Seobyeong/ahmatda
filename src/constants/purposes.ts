@@ -93,6 +93,21 @@ function keywordsFor(purposeId: PurposeId, custom?: CustomKeywords): string[] {
   return extra.length > 0 ? [...PURPOSES[purposeId].calKeywords, ...extra] : PURPOSES[purposeId].calKeywords;
 }
 
+// 앱에서 등록하면서 목적을 직접 고른 일정 — 캘린더 일정 id → 목적. 제목 키워드보다 앞선다
+// (예: "친구랑 배드민턴"을 운동으로 골랐으면 키워드가 없어도 운동이다).
+export type TaggedEvents = Record<string, PurposeId>;
+
+type MatchableEvent = { id?: string; title: string; time: string };
+
+function tagOf(ev: MatchableEvent, tagged?: TaggedEvents): PurposeId | undefined {
+  return ev.id ? tagged?.[ev.id] : undefined;
+}
+
+// AI 해석에 보낼 일정 — 사용자가 목적을 직접 고른 일정은 이미 아는 일정이라 뺀다.
+export function untaggedEvents<T extends MatchableEvent>(events: T[], tagged?: TaggedEvents): T[] {
+  return tagged ? events.filter((ev) => !tagOf(ev, tagged)) : events;
+}
+
 // 일정 제목 하나가 로컬 키워드(기본 + 사용자 추가)로 어느 목적에 걸리는지.
 // AI 연결에서 "로컬로 이미 아는 일정은 AI에 보내지 않는다"는 판단에 쓴다.
 export function matchPurposeByTitle(title: string, customKeywords?: CustomKeywords): PurposeId | null {
@@ -105,32 +120,33 @@ export function matchPurposeByTitle(title: string, customKeywords?: CustomKeywor
 // 캘린더 이벤트 제목으로 목적 감지
 // 외출 시각과 가장 가까운 미래 이벤트 우선
 export function detectPurposeFromEvents(
-  events: { title: string; time: string }[],
+  events: MatchableEvent[],
   departureTime: string,
-  customKeywords?: CustomKeywords
+  customKeywords?: CustomKeywords,
+  tagged?: TaggedEvents
 ): PurposeId | null {
-  const ordered = sortEventsByRelevance(events, departureTime);
-
-  for (const ev of ordered) {
-    for (const pid of Object.keys(PURPOSES) as PurposeId[]) {
-      if (keywordsFor(pid, customKeywords).some(kw => ev.title.includes(kw))) {
-        return pid;
-      }
-    }
+  // 관련 있는 순서(외출 뒤 가까운 일정 먼저)는 그대로 — 그 안에서 직접 고른 일정은 고른 목적, 아니면 키워드.
+  for (const ev of sortEventsByRelevance(events, departureTime)) {
+    const pid = tagOf(ev, tagged) ?? matchPurposeByTitle(ev.title, customKeywords);
+    if (pid) return pid;
   }
   return null;
 }
 
 // 주어진 목적과 매칭되는 이벤트를 detectPurposeFromEvents와 동일한 우선순위로 찾는다.
-export function findMatchingEvent<T extends { title: string; time: string }>(
+export function findMatchingEvent<T extends MatchableEvent>(
   purposeId: PurposeId,
   events: T[],
   departureTime: string,
-  customKeywords?: CustomKeywords
+  customKeywords?: CustomKeywords,
+  tagged?: TaggedEvents
 ): T | null {
   const keywords = keywordsFor(purposeId, customKeywords);
-  const ordered = sortEventsByRelevance(events, departureTime);
-  return ordered.find(ev => keywords.some(kw => ev.title.includes(kw))) ?? null;
+  // 직접 고른 일정은 고른 목적일 때만 근거다 — 다른 목적으로 골랐으면 키워드가 맞아도 아니다.
+  return sortEventsByRelevance(events, departureTime).find((ev) => {
+    const tag = tagOf(ev, tagged);
+    return tag ? tag === purposeId : keywords.some((kw) => ev.title.includes(kw));
+  }) ?? null;
 }
 
 // 사용자가 끈 목적별 준비물의 저장 키 — userSettings.disabledPurposeItems에 "purposeId:라벨"로 쌓인다.

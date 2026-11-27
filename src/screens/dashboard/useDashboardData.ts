@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { detectPurposeFromEvents, findMatchingEvent } from '../../constants/purposes';
-import { scheduleOf, useAppStore } from '../../store';
+import { detectPurposeFromEvents, findMatchingEvent, untaggedEvents } from '../../constants/purposes';
+import { scheduleOf, taggedPurposes, useAppStore } from '../../store';
 import { referenceTimeOn } from '../../utils/schedule';
 import { AiHintService } from '../../services/ai/AiHintService';
 import { CalendarService } from '../../services/calendar/CalendarService';
@@ -77,16 +77,17 @@ export function useDashboardData() {
 
     // 오늘 외출 시간 기준으로 일정을 맞춘다 (쉬는 날이면 기본 시간).
     const refTime = referenceTimeOn(new Date(), scheduleOf(useAppStore.getState()));
-    const detectedId = detectPurposeFromEvents(events, refTime, userSettings.customKeywords);
+    const tagged = taggedPurposes(useAppStore.getState());
+    const detectedId = detectPurposeFromEvents(events, refTime, userSettings.customKeywords, tagged);
     const matchedEvent = detectedId
-      ? findMatchingEvent(detectedId, events, refTime, userSettings.customKeywords)
+      ? findMatchingEvent(detectedId, events, refTime, userSettings.customKeywords, tagged)
       : null;
     setAutoDetected(detectedId, matchedEvent);
 
     // 키워드에 안 걸린 일정의 AI 해석 — 기다리지 않는다(AI 연결 설계 4장 규칙 1).
     // 결과는 캐시에 들어가고, "일정 기반 제안" 카드가 캐시를 읽어 나중에 나타난다.
     // AI가 꺼져 있거나 보낼 제목이 없으면 호출 없이 바로 끝난다.
-    AiHintService.precompute(events).catch(() => {});
+    AiHintService.precompute(untaggedEvents(events, tagged)).catch(() => {});
 
     const coords = await coordsPromise;
     if (superseded()) return;
