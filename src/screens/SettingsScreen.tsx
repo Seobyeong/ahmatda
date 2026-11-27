@@ -10,8 +10,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Check, ChevronLeft, Plus, X } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { Check, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react-native';
+import { useIsFocused, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList, SettingsSection } from '../navigation/AppNavigator';
+import { describeSchedule } from '../utils/schedule';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontSize, Radius, makeStyles, useTheme } from '../constants/theme';
 import { PURPOSES, purposeItemKey } from '../constants/purposes';
@@ -51,6 +54,18 @@ const DAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const MAP_APP_CHOICES: { value: MapApp; label: string }[] = [
   { value: 'kakao', label: '카카오맵' },
   { value: 'naver', label: '네이버지도' },
+];
+
+// 설정 묶음 — 한 화면에 1,000줄이 이어져 찾기 어려웠다 (2026-11-28). 첫 화면은 묶음 목록이고 누르면 그 묶음만 연다.
+// API 키처럼 기술적인 것은 '고급'으로 뺐다.
+const SECTIONS: { id: SettingsSection; title: string }[] = [
+  { id: 'time', title: '시간 · 알림' },
+  { id: 'checklist', title: '내 체크리스트' },
+  { id: 'weather', title: '날씨 · 체감온도' },
+  { id: 'departure', title: '외출 감지' },
+  { id: 'display', title: '화면' },
+  { id: 'connect', title: '연결' },
+  { id: 'advanced', title: '고급' },
 ];
 
 // 글자만 있는 링크("등록", "켜기")는 글자 높이만큼만 눌린다 — 위아래로 넉넉히 넓힌다.
@@ -137,7 +152,12 @@ export function SettingsScreen() {
   const { Colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const section = useRoute<RouteProp<RootStackParamList, 'Settings'>>().params?.section ?? null;
+  const show = (id: SettingsSection) => section === id;
+  // 설정 화면이 여러 겹(목록 → 묶음)이라 맨 위 화면만 토스트를 띄운다
+  const focused = useIsFocused();
+  const departureWeekdays = useAppStore((s) => s.userSettings.departureWeekdays);
   const toast = useAppStore((s) => s.toast);
   // 앱에서 일정을 넣을 캘린더 — [다시 고르기]는 지우기만 하고, 다음 등록 때 고른다.
   const eventCalendar = useAppStore((s) => s.eventCalendar);
@@ -169,7 +189,6 @@ export function SettingsScreen() {
   const allRoutines = useAppStore((s) => s.permanentRoutines);
   const permanentRoutines = useMemo(() => allRoutines.filter((r) => !isOneOff(r)), [allRoutines]);
   const feedbackHistory = useAppStore((s) => s.feedbackHistory);
-  const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const setSensitivity = useAppStore((s) => s.setSensitivity);
   const setMapApp = useAppStore((s) => s.setMapApp);
   const setHomeBssid = useAppStore((s) => s.setHomeBssid);
@@ -204,7 +223,10 @@ export function SettingsScreen() {
   // 실기기 검증용 진단 화면 — "설정" 제목을 길게 눌러 연다 (docs/실기기-검증-가이드.md)
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
+  // 보이는 화면만 확인한다 — 목록과 묶음 화면이 겹쳐 있어도 한 번씩만. 묶음에서 바꾸고 목록으로 돌아오면
+  // 다시 확인해 목록 요약(집 위치·캘린더·AI 키)이 맞게.
   useEffect(() => {
+    if (!focused) return;
     const check = () => {
       CalendarService.checkPermission().then((status) =>
         setCalendarConnected(status === 'authorized')
@@ -222,11 +244,12 @@ export function SettingsScreen() {
       if (state === 'active') check();
     });
     return () => subscription.remove();
-  }, []);
+  }, [focused]);
 
   useEffect(() => {
+    if (!focused) return;
     AiKeyStore.get(ai.provider).then((key) => setAiHasKey(!!key));
-  }, [ai.provider]);
+  }, [ai.provider, focused]);
 
   // 요일 칩 토글 — days가 없으면(매일) 해당 요일 하나만 끈 6일짜리 배열로 시작한다.
   const handleToggleRoutineDay = (routineId: string, currentDays: number[] | undefined, day: number) => {
@@ -351,6 +374,19 @@ export function SettingsScreen() {
 
   const recentFeedback = feedbackHistory.slice(-3).reverse();
 
+  // 묶음 목록의 한 줄 요약 — 들어가지 않고도 지금 상태를 본다
+  const menuSummary = (id: SettingsSection): string => {
+    switch (id) {
+      case 'time': return `외출 ${describeSchedule({ base: departureTime, weekdays: departureWeekdays })} · 정리 ${nightlyCheckTime}`;
+      case 'checklist': return `루틴 ${permanentRoutines.length}개 · 날씨·목적 준비물`;
+      case 'weather': return `체감온도 보정 ${deltaLabel}°C`;
+      case 'departure': return `집 Wi-Fi ${homeBssid ? '등록됨' : '미등록'} · 집 위치 ${hasHome ? '등록됨' : '미등록'}`;
+      case 'display': return '앱 색상';
+      case 'connect': return `캘린더 ${calendarConnected ? '연결됨' : '권한 없음'} · 길찾기 앱 · 분실물`;
+      case 'advanced': return `AI 일정 해석 ${aiHasKey ? (ai.enabled ? '켜짐' : '꺼짐') : '키 없음'} · 진단 화면`;
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -363,15 +399,36 @@ export function SettingsScreen() {
           <ChevronLeft size={26} color={Colors.slate700} />
         </Pressable>
         {/* 제목을 길게 누르면 실기기 검증용 진단 화면이 열린다 */}
-        <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting accessibilityRole="header">설정</Text>
+        <Text style={styles.headerTitle} onLongPress={() => setDiagnosticsVisible(true)} suppressHighlighting accessibilityRole="header">
+          {SECTIONS.find((x) => x.id === section)?.title ?? '설정'}
+        </Text>
       </View>
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.groupTitle, styles.groupTitleFirst]} accessibilityRole="header">시간 · 알림</Text>
-        <TimeRow label="기본 외출 시간" value={departureTime} onCommit={updateDepartureTime} />
+        {section === null ? (
+          <View>
+            {SECTIONS.map(({ id, title }) => (
+              <Pressable
+                key={id}
+                style={styles.menuRow}
+                onPress={() => navigation.push('Settings', { section: id })}
+                accessibilityRole="button"
+                accessibilityLabel={`${title}, ${menuSummary(id)}`}
+              >
+                <View style={styles.weatherTextArea}>
+                  <Text style={styles.menuTitle}>{title}</Text>
+                  <Text style={styles.weatherDescription} numberOfLines={1}>{menuSummary(id)}</Text>
+                </View>
+                <ChevronRight size={20} color={Colors.slate500} />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {show('time') ? (<>
         <WeekdaySchedule />
         <TimeRow label="자기 전 정리 시간" value={nightlyCheckTime} onCommit={setNightlyCheckTime} />
         <View style={styles.row}>
@@ -413,7 +470,9 @@ export function SettingsScreen() {
           onMessage={(text, undo) => showToast(text, undo ? { label: '되돌리기', onPress: undo } : undefined)}
         />
 
-        <Text style={styles.groupTitle} accessibilityRole="header">내 체크리스트</Text>
+        </>) : null}
+
+        {show('checklist') ? (<>
         <Text style={styles.sectionTitle}>내 루틴</Text>
         <Text style={styles.weatherDescription}>나갈 때마다 챙기는 것. 요일을 눌러 그 요일에만 뜨게 할 수 있어요.</Text>
         <View style={styles.keywordAddRow}>
@@ -562,7 +621,9 @@ export function SettingsScreen() {
           </>
         )}
 
-        <Text style={styles.groupTitle} accessibilityRole="header">날씨 · 체감온도</Text>
+        </>) : null}
+
+        {show('weather') ? (<>
         <Text style={styles.sectionTitle}>주 이동수단</Text>
         <ChoiceList choices={COMMUTE_CHOICES} value={commuteMode} onChange={setCommuteMode} />
 
@@ -608,7 +669,9 @@ export function SettingsScreen() {
           ))
         )}
 
-        <Text style={styles.groupTitle} accessibilityRole="header">외출 감지</Text>
+        </>) : null}
+
+        {show('departure') ? (<>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>홈 Wi-Fi</Text>
           <Pressable onPress={handleRegisterWifi} hitSlop={LINK_HIT_SLOP} accessibilityRole="button" accessibilityLabel={homeBssid ? '홈 Wi-Fi 다시 등록' : '홈 Wi-Fi 등록'}>
@@ -651,10 +714,14 @@ export function SettingsScreen() {
           )}
         </View>
 
-        <Text style={styles.groupTitle} accessibilityRole="header">화면</Text>
+        </>) : null}
+
+        {show('display') ? (<>
         <AccentColorSettings titleStyle={styles.sectionTitle} descriptionStyle={styles.weatherDescription} />
 
-        <Text style={styles.groupTitle} accessibilityRole="header">연결</Text>
+        </>) : null}
+
+        {show('connect') ? (<>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>캘린더 연동</Text>
           {calendarConnected ? (
@@ -696,7 +763,6 @@ export function SettingsScreen() {
             <Text style={styles.calendarSettingsLink}>열기</Text>
           </Pressable>
         </View>
-        <LostItemSheet visible={lostVisible} onClose={() => setLostVisible(false)} />
 
         <View style={styles.row}>
           <View style={styles.weatherTextArea}>
@@ -707,10 +773,10 @@ export function SettingsScreen() {
             <Text style={styles.calendarSettingsLink}>시작</Text>
           </Pressable>
         </View>
-        <PersonalizeModal visible={personalizeVisible} onClose={() => setPersonalizeVisible(false)} />
-        <DiagnosticsModal visible={diagnosticsVisible} onClose={() => setDiagnosticsVisible(false)} />
+        </>) : null}
 
-        <Text style={styles.sectionTitle}>AI 일정 해석 (선택)</Text>
+        {show('advanced') ? (<>
+        <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>AI 일정 해석 (선택)</Text>
         <Text style={styles.weatherDescription}>
           키워드로 알 수 없는 일정(예: 부산 출장)을 Claude가 해석해 준비물을 제안해요. 본인의
           Anthropic API 키가 필요해요.
@@ -758,9 +824,24 @@ export function SettingsScreen() {
             </Pressable>
           </View>
         )}
+
+        <View style={styles.row}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.rowLabel}>진단 화면</Text>
+            <Text style={styles.weatherDescription}>외출 감지 신호·예약된 알림·체감온도 계산식을 봐요</Text>
+          </View>
+          <Pressable onPress={() => setDiagnosticsVisible(true)} hitSlop={LINK_HIT_SLOP} accessibilityRole="button" accessibilityLabel="진단 화면 열기">
+            <Text style={styles.calendarSettingsLink}>열기</Text>
+          </Pressable>
+        </View>
+        </>) : null}
+
+        <LostItemSheet visible={lostVisible} onClose={() => setLostVisible(false)} />
+        <PersonalizeModal visible={personalizeVisible} onClose={() => setPersonalizeVisible(false)} />
+        <DiagnosticsModal visible={diagnosticsVisible} onClose={() => setDiagnosticsVisible(false)} />
       </ScrollView>
 
-      {toast ? <Toast message={toast} action={toastAction} tone={toastTone} onDone={clearToast} bottomOffset={insets.bottom + 24} /> : null}
+      {toast && focused ? <Toast message={toast} action={toastAction} tone={toastTone} onDone={clearToast} bottomOffset={insets.bottom + 24} /> : null}
     </View>
   );
 }
@@ -795,19 +876,22 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     paddingHorizontal: 20,
     paddingTop: 4,
   },
-  // 묶음 제목 — 설정이 한 줄로 길게 이어져 원하는 항목을 찾기 어려웠다. 다섯 묶음으로 나눈다.
-  groupTitle: {
-    marginTop: 22,
-    marginBottom: 4,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.slate200,
-    fontSize: FontSize.heading,
-    fontWeight: '800',
-    color: Colors.slate800,
-  },
-  groupTitleFirst: {
+  sectionTitleFirst: {
     marginTop: 8,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 64,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.slate100,
+  },
+  menuTitle: {
+    fontSize: FontSize.heading,
+    fontWeight: '600',
+    color: Colors.slate800,
   },
   headerTitle: {
     fontSize: FontSize.title,

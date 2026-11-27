@@ -111,6 +111,8 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
   // 자동으로 읽은 Wi-Fi 이름 — 듀얼밴드·메시 공유기 학습에 쓴다. 직접 입력하면 모르는 것으로 둔다.
   const [ssid, setSsid] = useState<string | null>(null);
   const [wifiStatus, setWifiStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  // BSSID 직접 입력은 기술적인 항목이라 숨겨 둔다 — 자동 등록이 실패했거나 사용자가 열 때만 (2026-11-28)
+  const [manualWifi, setManualWifi] = useState(false);
   const [homeStatus, setHomeStatus] = useState<'idle' | 'busy' | 'active' | 'saved' | 'error'>('idle');
 
   const setSensitivity = useAppStore((s) => s.setSensitivity);
@@ -294,9 +296,11 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
         setWifiStatus('success');
       } else {
         setWifiStatus('error');
+        setManualWifi(true);
       }
     } catch {
       setWifiStatus('error');
+      setManualWifi(true);
     }
   };
 
@@ -496,23 +500,30 @@ export function OnboardingScreen(_props: OnboardingScreenProps) {
           />
 
           {wifiStatus === 'success' ? (
-            <Text style={styles.wifiSuccessText}>등록됨 · {bssid}</Text>
+            <Text style={styles.wifiSuccessText}>등록됨 · {ssid ?? bssid}</Text>
           ) : null}
           {wifiStatus === 'error' ? (
-            <Text style={styles.wifiErrorText}>Wi-Fi 정보를 가져오지 못했어요. 직접 입력해주세요.</Text>
+            <Text style={styles.wifiErrorText}>Wi-Fi 정보를 가져오지 못했어요. 공유기 주소(BSSID)를 알면 직접 넣을 수 있어요.</Text>
           ) : null}
 
+          {!manualWifi ? (
+            <Button label="공유기 주소 직접 입력" variant="text" size="sm" onPress={() => setManualWifi(true)} style={styles.manualWifiButton} />
+          ) : (
           <TextInput
             style={styles.bssidInput}
             value={bssid}
             onChangeText={(value) => {
+              setManualWifi(true);
               setBssid(value);
               setSsid(null);
               setWifiStatus('idle');
             }}
             placeholder="BSSID 직접 입력 (선택 사항)"
             placeholderTextColor={Colors.slate400}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
+          )}
 
           <View style={styles.divider} />
 
@@ -695,6 +706,10 @@ const useStyles = makeStyles(({ Colors, Role, Shadow }) => ({
     marginTop: 10,
     fontSize: FontSize.caption,
     color: Colors.red500,
+  },
+  manualWifiButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
   bssidInput: {
     marginTop: 12,

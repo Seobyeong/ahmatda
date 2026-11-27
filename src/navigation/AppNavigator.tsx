@@ -8,10 +8,13 @@ import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 
+export type SettingsSection = 'time' | 'checklist' | 'weather' | 'departure' | 'display' | 'connect' | 'advanced';
+
 export type RootStackParamList = {
   Onboarding: undefined;
   Dashboard:  undefined;
-  Settings:   undefined;
+  // section이 없으면 묶음 목록, 있으면 그 묶음만
+  Settings:   { section?: SettingsSection } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

@@ -12,13 +12,18 @@ const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 type Mode = 'base' | 'time' | 'off';
 
-// 설정 > 요일별 외출 시간. 기본 시간과 다른 요일만 바꾼다 (기본 / 다른 시간 / 쉬는 날).
+// 설정 > 외출 시간. 한 줄 요약("평일 08:15 · 주말 쉼")을 누르면 기본 시간과 요일별(기본 / 다른 시간 / 쉼)을
+// 함께 고친다 — 예전엔 '기본 외출 시간'과 '요일별 외출 시간'이 따로 있어 둘의 관계가 안 보였다 (2026-11-28).
 // 쉬는 날은 출발 알림·외출 감지 알림만 쉬고 체크리스트는 그대로다.
 export function WeekdaySchedule() {
   const styles = useStyles();
+  const { Role } = useTheme();
   const base = useAppStore((s) => s.userSettings.departureTime);
   const weekdays = useAppStore((s) => s.userSettings.departureWeekdays);
+  const updateDepartureTime = useAppStore((s) => s.updateDepartureTime);
   const [open, setOpen] = useState(false);
+  // 기본 시간은 [완료]를 눌러야 저장 (글자마다 알림을 다시 예약하지 않게)
+  const [baseDraft, setBaseDraft] = useState<string | null>(null);
 
   return (
     <View>
@@ -27,16 +32,47 @@ export function WeekdaySchedule() {
         onPress={() => setOpen((v) => !v)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`요일별 외출 시간, ${describeSchedule({ base, weekdays })}`}
+        accessibilityLabel={`외출 시간, ${describeSchedule({ base, weekdays })}`}
       >
         <View style={styles.summaryText}>
-          <Text style={styles.rowLabel}>요일별 외출 시간</Text>
+          <Text style={styles.rowLabel}>외출 시간</Text>
           <Text style={styles.summary}>{describeSchedule({ base, weekdays })}</Text>
         </View>
         <Text style={styles.link}>{open ? '닫기' : '바꾸기'}</Text>
       </Pressable>
       {open ? (
         <View style={styles.list}>
+          <View style={styles.dayRow}>
+            <Text style={styles.baseName}>기본</Text>
+            {baseDraft !== null ? (
+              <View style={styles.editRow}>
+                <TimeInput value={baseDraft} onChange={setBaseDraft} compact autoFocus />
+                <Pressable
+                  onPress={() => {
+                    // 덜 쓴 시간이면 닫지 않는다 (저장된 줄 알고 넘어가지 않게)
+                    if (!isValidHHmm(baseDraft)) return;
+                    updateDepartureTime(baseDraft);
+                    setBaseDraft(null);
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="기본 외출 시간 저장"
+                >
+                  <Check size={18} color={Role.doneText} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={() => setBaseDraft(base)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`기본 외출 시간 ${base}, 눌러서 변경`}
+              >
+                <Text style={styles.link}>{base} · 변경</Text>
+              </Pressable>
+            )}
+          </View>
+          <Text style={styles.summary}>요일마다 기본 시간을 따르거나, 다른 시간·쉼으로 바꿀 수 있어요.</Text>
           {DAY_ORDER.map((day) => (
             <DayRow key={day} day={day} base={base} plan={weekdays[String(day)] ?? null} />
           ))}
@@ -147,6 +183,11 @@ const useStyles = makeStyles(({ Colors, Role }) => ({
     alignItems: 'center',
     gap: Space.md,
     minHeight: 40,
+  },
+  baseName: {
+    fontSize: FontSize.body,
+    fontWeight: '700',
+    color: Role.textStrong,
   },
   dayName: {
     width: 20,
