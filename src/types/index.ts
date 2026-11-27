@@ -124,6 +124,9 @@ export interface UserSettings {
   // 집 밖에서 머물다 떠날 때 알림 (docs/외출-감지-재설계.md 4장). null = 알림 성향을 따름("자주"면 켜짐).
   // 설정의 스위치로 성향과 상관없이 켜고 끌 수 있고, 성향을 다시 고르면 null로 돌아간다.
   awayPlaceAlert: boolean | null;
+  // 귀가 루틴 (C4) — 집에 돌아오면 할 일 알림. 할 일 = 정한 것 + 오늘 챙겨 나간 것에서 자동(우산 말리기 등)
+  homecomingAlert: boolean;
+  homecomingTasks: string[];
   commuteMode: CommuteMode | null; // null = 아직 안 고름 → 대중교통과 같은 기준
   homeBssid: string | null; // 집 Wi-Fi BSSID
   // 체감온도 보정치 Δt는 두 성분의 합이다. 한 필드에 섞으면 민감도를 다시 고를 때

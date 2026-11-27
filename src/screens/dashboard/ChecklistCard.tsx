@@ -4,7 +4,8 @@ import { ChevronDown, ChevronUp, Mic, Pin, Plus } from 'lucide-react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { PURPOSES } from '../../constants/purposes';
 import { FontSize, Radius, Space, makeStyles, useTheme } from '../../constants/theme';
-import { useAppStore } from '../../store';
+import { scheduleOf, useAppStore } from '../../store';
+import { packedStreak, STREAK_SHOW_FROM } from '../../utils/streak';
 import { ChecklistItem } from '../../components/ChecklistItem';
 import { Mascot } from '../../components/Mascot';
 import { ProgressBar } from '../../components/ProgressBar';
@@ -24,6 +25,8 @@ const TIER_LABELS: Record<0 | 1 | 2 | 3, string> = {
 // 다 챙겼을 때 배너. celebrate면 작게 시작해 튀어 오른다.
 function DoneBanner({ celebrate }: { celebrate: boolean }) {
   const styles = useStyles();
+  // 연속 다 챙김 — 3일 이상일 때만 작게 (압박이 되지 않게 끊겨도 말하지 않는다)
+  const streak = useAppStore((s) => packedStreak(s.packedDays, scheduleOf(s), new Date(), s.restDays));
   const scale = useRef(new Animated.Value(celebrate ? 0.85 : 1)).current;
   useEffect(() => {
     if (!celebrate) return;
@@ -34,7 +37,9 @@ function DoneBanner({ celebrate }: { celebrate: boolean }) {
     <Animated.View style={[styles.doneBanner, { transform: [{ scale }] }]}>
       <Mascot mood="happy" size={52} />
       <View style={styles.stateTextArea}>
-        <Text style={styles.doneTitle}>다 챙겼어요</Text>
+        <Text style={styles.doneTitle}>
+          다 챙겼어요{streak >= STREAK_SHOW_FROM ? <Text style={styles.streak}> · {streak}일째</Text> : null}
+        </Text>
         <Text style={styles.doneSub}>이대로 나가면 돼요.</Text>
       </View>
     </Animated.View>
@@ -423,6 +428,11 @@ const useStyles = makeStyles(({ Role }) => ({
   doneTitle: {
     fontSize: FontSize.heading,
     fontWeight: '700',
+    color: Role.doneText,
+  },
+  streak: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
     color: Role.doneText,
   },
   doneSub: {

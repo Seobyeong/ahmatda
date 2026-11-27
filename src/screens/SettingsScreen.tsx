@@ -207,6 +207,21 @@ export function SettingsScreen() {
   const [routineDraft, setRoutineDraft] = useState('');
   const [routineMessage, setRoutineMessage] = useState<string | null>(null);
   const [keywordDraft, setKeywordDraft] = useState('');
+  const [homeTaskDraft, setHomeTaskDraft] = useState('');
+  const homecomingAlert = useAppStore((s) => s.userSettings.homecomingAlert);
+  const homecomingTasks = useAppStore((s) => s.userSettings.homecomingTasks);
+  const setHomecomingAlert = useAppStore((s) => s.setHomecomingAlert);
+  const setHomecomingTasks = useAppStore((s) => s.setHomecomingTasks);
+  const handleAddHomeTask = () => {
+    const task = homeTaskDraft.trim();
+    if (!task) return;
+    if (homecomingTasks.length >= 10 && !homecomingTasks.includes(task)) {
+      showToast('할 일은 10개까지예요. 하나를 지우고 넣어 주세요.', null, 'warning');
+      return;
+    }
+    setHomecomingTasks([...homecomingTasks, task]);
+    setHomeTaskDraft('');
+  };
   const [editingSensitivity, setEditingSensitivity] = useState(false);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [wifiRegisterStatus, setWifiRegisterStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -621,6 +636,53 @@ export function SettingsScreen() {
             </View>
           </>
         )}
+
+        {/* 귀가 루틴 (C4) — 집에 돌아오면 할 일. 정한 것 + 오늘 챙겨 나간 것에서 자동 */}
+        <Text style={styles.sectionTitle}>집에 왔을 때</Text>
+        <View style={styles.weatherRow}>
+          <View style={styles.weatherTextArea}>
+            <Text style={styles.routineLabel}>돌아오면 할 일 알림</Text>
+            <Text style={styles.weatherDescription}>
+              30분 넘게 나갔다 집 Wi-Fi에 다시 붙으면 한 번 알려요. 우산을 챙겨 나간 날은 '우산 펴서 말리기'처럼 자동으로 더해요.
+            </Text>
+          </View>
+          <SettingSwitch value={homecomingAlert} onValueChange={setHomecomingAlert} accessibilityLabel="돌아오면 할 일 알림" />
+        </View>
+        {homecomingAlert ? (
+          <>
+            <View style={styles.keywordChipRow}>
+              {homecomingTasks.map((task) => (
+                <Pressable
+                  key={task}
+                  style={styles.keywordChip}
+                  onPress={() => setHomecomingTasks(homecomingTasks.filter((t) => t !== task))}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`돌아오면 할 일 ${task} 삭제`}
+                >
+                  <Text style={styles.keywordChipText}>{task}</Text>
+                  <X size={10} color={Colors.indigoText} />
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.keywordAddRow}>
+              <TextInput
+                style={styles.keywordInput}
+                value={homeTaskDraft}
+                onChangeText={setHomeTaskDraft}
+                placeholder="할 일 추가 (예: 충전기 꽂기)"
+                accessibilityLabel="돌아오면 할 일 추가"
+                placeholderTextColor={Colors.slate500}
+                onSubmitEditing={handleAddHomeTask}
+                returnKeyType="done"
+                maxLength={30}
+              />
+              <Pressable style={styles.timeDoneButton} onPress={handleAddHomeTask} hitSlop={8} accessibilityRole="button" accessibilityLabel="할 일 추가">
+                <Check size={14} color={Colors.emeraldText} />
+              </Pressable>
+            </View>
+          </>
+        ) : null}
 
         </>) : null}
 

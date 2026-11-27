@@ -76,11 +76,19 @@ export const OutingLog = {
   // 집 Wi-Fi 상태를 한 번 본다 — 백그라운드 확인(하루 종일)·앱 복귀 때. 집 Wi-Fi가 없으면 아무것도 안 함.
   // 'away'는 Wi-Fi를 끈 경우도 포함하지만, 그 결과는 "외출함"(평소처럼 피드백까지 보냄)이라 안전한 쪽이다.
   // 다시 계획하지는 않는다 — 부르는 쪽이 이어서 NightlyService.plan()을 부른다.
-  async observeWifi(): Promise<void> {
+  // homecoming: false면 귀가 루틴을 건드리지 않는다 (진단 화면의 관찰 버튼)
+  async observeWifi({ homecoming = true }: { homecoming?: boolean } = {}): Promise<void> {
     try {
       // 집 Wi-Fi 미등록이면 'unknown' — 아무것도 안 한다
       const presence = await observeHomeWifi();
-      if (presence === 'home') await OutingLog.observeHome();
+      if (presence === 'home') {
+        await OutingLog.observeHome();
+        // 귀가 루틴 — 나간 기록이 있으면 이번이 돌아온 것이다
+        if (homecoming) {
+          const { HomecomingService } = await import('@/services/homecoming/HomecomingService');
+          await HomecomingService.noteHome();
+        }
+      }
       if (presence === 'away') await OutingLog.markOut(await outingDateNow());
     } catch {
       // 관찰 실패는 "모름"으로 남는다 — 모르면 외출한 것으로 본다.
@@ -97,8 +105,11 @@ async function outingDateNow(): Promise<string> {
 
 // 외출 흔적 기록 — 신호 쪽(지오펜스·외출 확정·머묾)에서 쓴다. 흔적이 새로 생기면 오늘 밤 알림을 다시
 // 계획하되 기다리지 않는다 — 긴급 알림·지오펜스 등록 같은 본 작업을 늦추면 안 된다.
-export async function markOutingToday(): Promise<void> {
+// leftAt: 실제로 나간 시각 (판정이 늦게 확정돼도 그 시각으로) — 귀가 루틴이 30분을 잰다.
+export async function markOutingToday(leftAt: number = Date.now()): Promise<void> {
   try {
+    // 귀가 루틴이 "나간 시각"으로 쓴다 (외출 확정·집 반경 이탈만 — Wi-Fi 끊김만으로는 세지 않는다)
+    import('@/services/homecoming/HomecomingService').then(({ HomecomingService }) => HomecomingService.noteLeft(leftAt)).catch(() => {});
     if (await OutingLog.markOut(await outingDateNow())) {
       // 동적 import — NightlyService는 store·알림·날씨를 물고 있다.
       import('./NightlyService').then(({ NightlyService }) => NightlyService.plan()).catch(() => {});

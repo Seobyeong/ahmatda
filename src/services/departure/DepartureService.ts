@@ -106,7 +106,7 @@ async function evaluateOnce(): Promise<ChecklistItem[] | null> {
   if (recheckTimer) { clearTimeout(recheckTimer); recheckTimer = null; }
   await AsyncStorage.setItem(DEPARTED_DATE_KEY, today);
   // 자기 전 정리가 "오늘 외출함"으로 보게 (착장 피드백을 붙인다)
-  await markOutingToday();
+  await markOutingToday(decision.at);
 
   // 집을 나섰으니 잠금화면 출발 상태는 내린다 (다 챙기고 나간 날도 포함)
   await NotificationService.clearDepartureStatus();

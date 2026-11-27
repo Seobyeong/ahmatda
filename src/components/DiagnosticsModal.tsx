@@ -18,6 +18,7 @@ import { NightlyService } from '../services/nightly/NightlyService';
 import { OutingLog } from '../services/nightly/outingLog';
 import { WifiMonitorService } from '../services/wifi/WifiMonitorService';
 import { useAppStore } from '../store';
+import { HomecomingService } from '../services/homecoming/HomecomingService';
 import { calcPerceivedTemp, formatPerceivedFormula, getEffectiveDelta, getExposureAdjust } from '../utils/temperature';
 import {
   clearMotionRecords, getStillStarts, getVehicleStarts, getWalkingStarts, hasMotionPermission, isMotionSupported,
@@ -66,6 +67,7 @@ async function collect(): Promise<Section[]> {
     notifee.getTriggerNotificationIds().catch(() => [] as string[]),
     getHomeWifi().catch(() => null),
   ]);
+  const homecoming = await HomecomingService.inspect();
 
   const d = departure.decision;
   const decision =
@@ -119,6 +121,13 @@ async function collect(): Promise<Section[]> {
         ['머무는 자리', p ? `있음 · 머묾 ${hm(p.since)} · 등록 ${hm(p.registeredAt)}${p.exitAt ? ` · 이탈 ${hm(p.exitAt)}` : ''}` : '없음'],
         ['자리 지오펜스', place.geofenceStarted ? '걸림' : '안 걸림'],
         ['오늘 보낸 횟수', `${place.state.sent} / 3`],
+      ],
+    },
+    {
+      title: '귀가 루틴',
+      rows: [
+        ['나간 시각', homecoming.leftAt ? `${homecoming.leftDate} ${hm(homecoming.leftAt)}` : '없음'],
+        ['알린 날', homecoming.sentDate ?? '없음'],
       ],
     },
     {
@@ -194,7 +203,7 @@ export function DiagnosticsModal({ visible, onClose }: Props) {
     ['지금 판정', '외출이 확정이면 실제 긴급 알림이 가고 "놓침"이 기록돼요.', () => DepartureService.evaluate()],
     ['머묾 확인', '떠남이 확정이면 실제 알림이 가요. 위치를 한 번 켤 수 있어요.', () => AwayPlaceService.tick()],
     ['자기 전 계획', '오늘 밤 자기 전 정리 알림을 지금 상태로 다시 예약해요.',
-      () => OutingLog.observeWifi().then(() => NightlyService.plan({ fresh: true }))],
+      () => OutingLog.observeWifi({ homecoming: false }).then(() => NightlyService.plan({ fresh: true }))],
     ['테스트 기록 지우기', '신호·걷기 기록, 오늘 알림 보낸 표시, 머무는 자리, [떠나기] 기록을 지워요.', resetForTest],
   ];
 

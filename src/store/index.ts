@@ -67,6 +67,10 @@ interface AppState {
 
   // 자주 까먹는 항목 학습 — 외출(Wi-Fi 이탈) 시점에 미체크였던 항목 기록
   forgottenHistory: ForgottenRecord[];
+  // 다 챙긴 날 (YYYY-MM-DD, 최근 것만) — 다 챙김 배너의 "N일째" (C7)
+  packedDays: string[];
+  // 그날만 쉰다고 한 날 (오늘만 건너뛰기·공휴일에 쉬어요) — 날짜별 계획은 지나면 지워져서 연속 기록이 따로 기억한다
+  restDays: string[];
 
   // AI 연결 (선택 기능) — 기기 로컬 전용
   ai: AiState;
@@ -230,6 +234,8 @@ interface AppActions {
   setNightlyCheckTime: (time: string) => void;
   setAlertPreference: (pref: AlertPreference) => void;
   setAwayPlaceAlert: (on: boolean) => void;
+  setHomecomingAlert: (on: boolean) => void;
+  setHomecomingTasks: (tasks: string[]) => void;
   setCommuteMode: (mode: CommuteMode) => void;
   setHomeBssid: (bssid: string) => void;
   setSensitivity: (level: 1 | 2 | 3 | 4 | 5) => void;
@@ -419,6 +425,8 @@ const defaultState: AppState = {
     nightlyCheckTime: '22:00',
     alertPreference: 'normal',
     awayPlaceAlert: null,
+    homecomingAlert: true,
+    homecomingTasks: [],
     commuteMode: null,
     homeBssid: null,
     sensitivityLevel: 3,
@@ -439,6 +447,8 @@ const defaultState: AppState = {
   todayFeedback: null,
 
   forgottenHistory: [],
+  packedDays: [],
+  restDays: [],
 
   ai: {
     enabled: false,
@@ -476,6 +486,22 @@ const defaultState: AppState = {
   tomorrowPreviewRequested: false,
 };
 
+const PACKED_DAYS_KEEP = 60;
+
+// 쉰다고 한 날을 더하거나(rest) 뺀다 — 연속 기록이 그날을 세지도 끊지도 않게
+function withRestDays(days: string[], dates: string[], rest: boolean): string[] {
+  const without = days.filter((d) => !dates.includes(d));
+  return (rest ? [...without, ...dates].sort() : without).slice(-PACKED_DAYS_KEEP);
+}
+
+// 체크한 결과 오늘 목록을 다 챙겼으면 오늘을 '다 챙긴 날'로 남긴다. 다시 풀어도 지우지 않는다 — 한 번 다 챙긴 날이다.
+function withPackedDay(state: AppStore, checklist: ChecklistItem[]): Partial<AppStore> {
+  const today = getTodayString();
+  const done = checklist.length > 0 && checklist.every((i) => i.checked) && state.checklistDate === today;
+  if (!done || state.packedDays.includes(today)) return { checklist };
+  return { checklist, packedDays: [...state.packedDays, today].slice(-PACKED_DAYS_KEEP) };
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set, get) => ({
@@ -483,16 +509,12 @@ export const useAppStore = create<AppStore>()(
 
       // 체크리스트
       toggleCheck: (id) =>
-        set((state) => ({
-          checklist: state.checklist.map((item) =>
-            item.id === id ? { ...item, checked: !item.checked } : item
-          ),
-        })),
+        set((state) => withPackedDay(state, state.checklist.map((item) =>
+          item.id === id ? { ...item, checked: !item.checked } : item
+        ))),
 
       checkAll: () =>
-        set((state) => ({
-          checklist: state.checklist.map((item) => ({ ...item, checked: true })),
-        })),
+        set((state) => withPackedDay(state, state.checklist.map((item) => ({ ...item, checked: true })))),
 
       uncheckAll: () =>
         set((state) => ({
@@ -919,7 +941,10 @@ export const useAppStore = create<AppStore>()(
           return patchSettings(state, { departureWeekdays: weekdays });
         }),
       setTodayPlan: (plan) =>
-        set({ departureToday: plan === null ? null : { date: getTodayString(), plan } }),
+        set((state) => ({
+          departureToday: plan === null ? null : { date: getTodayString(), plan },
+          restDays: withRestDays(state.restDays, [getTodayString()], plan === 'off'),
+        })),
       setDatePlans: (dates, plan) =>
         set((state) => {
           const next = activeDates(state.departureDates, new Date());
@@ -928,7 +953,7 @@ export const useAppStore = create<AppStore>()(
             else next[d] = plan;
           });
           // '오늘만 바꾸기'는 건드리지 않는다 — 그쪽이 앞선다(planOn). 오늘을 바꾼 사람에겐 공휴일을 묻지도 않는다.
-          return { departureDates: next };
+          return { departureDates: next, restDays: withRestDays(state.restDays, dates, plan === 'off') };
         }),
       setHolidays: (cache) => set({ holidays: cache }),
       registerEvent: ({ eventId, date, purposeId, departureTime, items }) => {
@@ -975,6 +1000,10 @@ export const useAppStore = create<AppStore>()(
           : patchSettings(state, { alertPreference: pref, awayPlaceAlert: null })
       ),
       setAwayPlaceAlert: (on) => set((state) => patchSettings(state, { awayPlaceAlert: on })),
+      setHomecomingAlert: (on) => set((state) => patchSettings(state, { homecomingAlert: on })),
+      setHomecomingTasks: (tasks) => set((state) => patchSettings(state, {
+        homecomingTasks: [...new Set(tasks.map((t) => t.trim()).filter(Boolean))].slice(0, 10),
+      })),
       setCommuteMode: (mode) => set((state) => patchSettings(state, { commuteMode: mode })),
 
       setHomeBssid: (bssid) => set((state) => patchSettings(state, { homeBssid: bssid })),
@@ -1271,6 +1300,8 @@ export const useAppStore = create<AppStore>()(
         userSettings: state.userSettings,
         feedbackHistory: state.feedbackHistory,
         forgottenHistory: state.forgottenHistory,
+        packedDays: state.packedDays,
+        restDays: state.restDays,
         // 같은 날 앱이 재시작돼도(기기 재부팅, 강제 종료 등) 오늘 이미 준 피드백을
         // 기억해야 applyFeedback의 재선택 방지 로직이 제대로 동작한다.
         todayFeedback: state.todayFeedback,

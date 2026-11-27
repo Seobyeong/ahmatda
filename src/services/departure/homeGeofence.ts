@@ -91,8 +91,9 @@ TaskManager.defineTask<GeofenceTaskData>(HOME_GEOFENCE_TASK, async ({ data, erro
     }
     await SignalLog.record('locationExit', now);
     // 감시 창 밖(주말 오후 등)의 외출도 자기 전 정리에는 "외출한 날"이다
-    await markOutingToday();
+    await markOutingToday(now);
   } else if (data.eventType === Location.GeofencingEventType.Enter) {
+    // 귀가 루틴은 SignalLog가 locationEnter를 기록하며 부른다
     await SignalLog.record('locationEnter', now);
   } else {
     return;

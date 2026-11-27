@@ -70,10 +70,18 @@ async function read(): Promise<DepartureSignal[]> {
 export const SignalLog = {
   // onHomeWifi: 위치 이탈이 집 Wi-Fi에 붙은 채 들어왔을 때 (판정 규칙 7이 거른다)
   record(type: LoggedSignalType, at: number = Date.now(), opts: { onHomeWifi?: true } = {}): Promise<void> {
-    return serialized(async () => {
+    const done = serialized(async () => {
       const next = appendSignal(await read(), { type, at, ...opts }, Date.now());
       await AsyncStorage.setItem(LOG_KEY, JSON.stringify(next));
     });
+    // 집에 돌아온 신호(Wi-Fi 재연결·집 반경 재진입)는 귀가 루틴도 본다 — 기록하는 곳마다 따로 부르지 않게.
+    // 기다리지 않는다: 판정 경로를 늦추지 않게 (동적 import — 귀가 루틴은 store·알림을 문다).
+    if (type === 'wifiReturn' || type === 'locationEnter') {
+      done.then(() => import('@/services/homecoming/HomecomingService'))
+        .then(({ HomecomingService }) => HomecomingService.noteHome(at))
+        .catch(() => {});
+    }
+    return done;
   },
 
   // 판정용. 기록과 같은 줄에 세워서, 방금 들어온 신호를 읽기 전에 판정하는 일이 없게 한다.

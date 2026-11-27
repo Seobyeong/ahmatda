@@ -1,5 +1,6 @@
 import notifee, {
   AndroidImportance,
+  AndroidStyle,
   AndroidNotificationSetting,
   AndroidVisibility,
   TriggerType,
@@ -20,6 +21,8 @@ import { isAlarmNotificationId } from '@/utils/alarms';
 
 const CHANNEL_REMINDER  = 'ahmatda-reminder';
 const CHANNEL_CHECKLIST = 'ahmatda-checklist';
+// 귀가 루틴 — 급하지 않아 소리·진동·헤드업 없이 알림 목록에만 (C4)
+const CHANNEL_HOMECOMING = 'ahmatda-homecoming';
 const LEGACY_CHANNEL_FEEDBACK = 'ahmatda-feedback';
 
 // 출발 알림은 울린 뒤 그대로 "잠금화면 출발 상태"로 남는다 (Android ongoing).
@@ -35,6 +38,7 @@ const LEGACY_NIGHTLY_IDS = ['day-before-alert', 'feedback-alert'];
 const LAST_CHECK_ID = 'last-check';
 const LAST_CHECK_TIMEOUT_MS = 10 * 60 * 1000;
 const LAST_CHECK_MAX_LABELS = 3;
+const HOMECOMING_ID = 'homecoming';
 
 // 잠금화면 출발 상태 알림의 [떠나기]. launchActivity가 없어 앱을 열지 않고
 // 백그라운드 이벤트로 처리된다 — 잠금을 풀지 않고 누를 수 있어야 의미가 있다.
@@ -212,6 +216,13 @@ export const NotificationService = {
       importance: AndroidImportance.HIGH,
       visibility: AndroidVisibility.PUBLIC,
       sound:      'default',
+    });
+    await notifee.createChannel({
+      id:         CHANNEL_HOMECOMING,
+      name:       '집에 왔을 때 할 일',
+      importance: AndroidImportance.LOW,
+      visibility: AndroidVisibility.PUBLIC,
+      vibration:  false,
     });
     await notifee.createChannel({
       id:         CHANNEL_CHECKLIST,
@@ -426,6 +437,20 @@ export const NotificationService = {
     if (!shown) return null;
     const at = Number(shown.notification?.data?.shownAt);
     return Number.isFinite(at) && at > 0 ? at : Date.now() - LAST_CHECK_TIMEOUT_MS / 2;
+  },
+
+  // 귀가 루틴 (C4) — 집에 돌아왔을 때 할 일. 조용한 채널(소리·진동·헤드업 없음)로 하루 한 번.
+  async showHomecoming(tasks: string[]): Promise<void> {
+    await notifee.displayNotification({
+      id:    HOMECOMING_ID,
+      title: '다녀오셨어요',
+      body:  tasks.length > 3 ? `${tasks.slice(0, 3).join(' · ')} 외 ${tasks.length - 3}개` : tasks.join(' · '),
+      android: {
+        channelId:   CHANNEL_HOMECOMING,
+        pressAction: { id: 'default', launchActivity: 'default' },
+        style:       { type: AndroidStyle.BIGTEXT, text: tasks.map((t) => `· ${t}`).join('\n') },
+      },
+    });
   },
 
   async clearLastCheck(): Promise<void> {
