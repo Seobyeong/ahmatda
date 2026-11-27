@@ -9,7 +9,7 @@ describe('저장 대상', () => {
   const saved = Object.keys(useAppStore.persist.getOptions().partialize!(useAppStore.getState()) as object);
 
   it('사용자가 만든 데이터는 저장된다', () => {
-    ['checklist', 'permanentRoutines', 'userSettings', 'memos', 'alarms', 'departureToday', 'leaveIntent', 'deletions']
+    ['checklist', 'permanentRoutines', 'userSettings', 'memos', 'alarms', 'departureToday', 'departureDates', 'holidays', 'leaveIntent', 'deletions']
       .forEach((key) => expect(saved).toContain(key));
   });
 

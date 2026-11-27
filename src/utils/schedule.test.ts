@@ -103,12 +103,12 @@ describe('planDepartureAlerts', () => {
     const skip = { ...s, today: { date: '2026-11-18', plan: 'off' as const } };
     const plan = planDepartureAlerts(skip, d(18, 7));
     expect(plan.find((p) => p.id === 'departure-alert-d3')?.alertAt).toEqual(d(25, 9, 30));
-    expect(plan.some((p) => p.id === 'departure-alert-today')).toBe(false);
+    expect(plan.some((p) => p.id === 'departure-alert-o2026-11-18')).toBe(false);
   });
   it('오늘만 시간을 바꾸면 한 번짜리가 추가된다', () => {
     const moved = { ...s, today: { date: '2026-11-18', plan: '11:00' } };
     const plan = planDepartureAlerts(moved, d(18, 7));
-    expect(plan[0]).toEqual({ id: 'departure-alert-today', alertAt: d(18, 10, 30), departure: d(18, 11), weekly: false });
+    expect(plan[0]).toEqual({ id: 'departure-alert-o2026-11-18', alertAt: d(18, 10, 30), departure: d(18, 11), weekly: false, holiday: null });
   });
 });
 
@@ -119,5 +119,84 @@ describe('currentDepartureLabel', () => {
     expect(currentDepartureLabel(s, d(18, 10, 20))).toBe('10:00');
     expect(currentDepartureLabel(s, d(18, 12))).toBe('내일 08:30');
     expect(currentDepartureLabel(s, d(20, 22))).toBe('월요일 08:30');
+  });
+});
+
+import { answeredHolidayFrom, holidayQuestionFrom, isUnansweredHoliday, pendingHolidayQuestion, planOn, activeDates, withIeyo } from './schedule';
+
+describe('날짜별 계획과 공휴일', () => {
+  // 11-19(목) 공휴일 가정, 11-20(금)도 공휴일, 11-21~22 주말(원래 쉼), 11-23(월) 대체공휴일
+  const hol: DepartureSchedule = {
+    ...s,
+    holidays: { '2026-11-19': '추석', '2026-11-20': '추석', '2026-11-23': '대체공휴일', '2026-11-28': '토요공휴일' },
+  };
+
+  it('대답 없는 공휴일은 평소처럼 나간다', () => {
+    expect(planOn(d(19), hol)).toBe('08:30');
+    expect(isUnansweredHoliday(d(19), hol)).toBe(true);
+    expect(isUnansweredHoliday(d(28), hol)).toBe(false); // 원래 쉬는 토요일은 물을 게 없다
+  });
+
+  it('날짜별 대답 — 쉼·다른 시간·평소대로', () => {
+    const answered = { ...hol, dates: { '2026-11-19': 'off', '2026-11-20': '13:00', '2026-11-23': 'usual' } as const };
+    expect(planOn(d(19), answered)).toBe('off');
+    expect(planOn(d(20), answered)).toBe('13:00');
+    expect(planOn(d(23), answered)).toBe('08:30');
+    expect(isUnansweredHoliday(d(23), answered)).toBe(false);
+    // 오늘만 바꾸기가 날짜별 대답보다 앞선다
+    expect(planOn(d(19), { ...answered, today: { date: '2026-11-19', plan: '10:00' } })).toBe('10:00');
+  });
+
+  it('연휴는 주말을 넘어 대체공휴일까지 한 번에 묻는다', () => {
+    const q = holidayQuestionFrom(hol, d(19));
+    expect(q).toMatchObject({ name: '추석 연휴', dates: ['2026-11-19', '2026-11-20', '2026-11-23'] });
+    expect(holidayQuestionFrom(hol, d(18))).toBeNull();
+    // 수요일 밤에 보면 내일 시작하는 연휴
+    expect(pendingHolidayQuestion(hol, d(18, 22))?.dates[0]).toBe('2026-11-19');
+    // 하루만 대답했으면 남은 날만 묻는다
+    const part = { ...hol, dates: { '2026-11-19': 'off' } as const };
+    expect(pendingHolidayQuestion(part, d(19, 9))?.dates).toEqual(['2026-11-20', '2026-11-23']);
+  });
+
+  it('공휴일·날짜별 계획이 있는 요일은 그날을 한 번짜리로, 반복은 그 뒤부터', () => {
+    const plan = planDepartureAlerts(hol, d(18, 7)); // 수 07:00
+    const thu = plan.filter((p) => p.departure.getDay() === 4);
+    // 목 19일 공휴일(대답 없음) → 한 번짜리 + 공휴일 표시, 반복은 26일부터
+    expect(thu).toContainEqual({ id: 'departure-alert-o2026-11-19', alertAt: d(19, 8), departure: d(19, 8, 30), weekly: false, holiday: '추석' });
+    expect(thu.find((p) => p.weekly)?.departure).toEqual(d(26, 8, 30));
+    // 월 23일 대체공휴일 → 월요일 반복은 30일부터
+    expect(plan.find((p) => p.id === 'departure-alert-d1')?.departure).toEqual(d(30, 8, 30));
+  });
+
+  it('쉬기로 한 공휴일은 알림이 없고, 그 앞의 평범한 같은 요일은 한 번짜리로 남는다', () => {
+    const later = { ...s, dates: { '2026-11-26': 'off' } as const }; // 다음 주 목요일만 쉼
+    const plan = planDepartureAlerts(later, d(18, 7));
+    const thu = plan.filter((p) => p.departure.getDay() === 4);
+    expect(thu.map((p) => [p.id, p.weekly])).toEqual([
+      ['departure-alert-o2026-11-19', false],
+      ['departure-alert-d4', true],
+    ]);
+    expect(thu[1].departure).toEqual(d(26 + 7, 8, 30));
+  });
+
+  it('지난 날짜별 계획은 어제 것까지만 남긴다', () => {
+    expect(activeDates({ '2026-11-16': 'off', '2026-11-17': 'off', '2026-11-18': '10:00' }, d(18, 9)))
+      .toEqual({ '2026-11-17': 'off', '2026-11-18': '10:00' });
+  });
+});
+
+describe('공휴일 대답 보기·문구', () => {
+  const hol: DepartureSchedule = { ...s, holidays: { '2026-11-19': '추석', '2026-11-20': '추석' }, dates: { '2026-11-19': 'off', '2026-11-20': 'off' } };
+  it('내일 대답한 연휴를 묶어서 돌려준다', () => {
+    expect(answeredHolidayFrom(hol, d(18, 21))).toMatchObject({ name: '추석', dates: ['2026-11-19', '2026-11-20'], plan: 'off' });
+    expect(answeredHolidayFrom(s, d(18, 21))).toBeNull();
+  });
+  it('쉬기로 한 평일이 연휴를 잇는다', () => {
+    const bridge: DepartureSchedule = { ...s, holidays: { '2026-11-19': '추석', '2026-11-23': '대체공휴일' }, dates: { '2026-11-20': 'off' } };
+    expect(holidayQuestionFrom(bridge, d(19))?.dates).toEqual(['2026-11-19', '2026-11-23']);
+  });
+  it('받침에 맞는 어미', () => {
+    expect(withIeyo('성탄절')).toBe('성탄절이에요');
+    expect(withIeyo('추석 연휴')).toBe('추석 연휴예요');
   });
 });

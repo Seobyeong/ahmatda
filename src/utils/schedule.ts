@@ -10,21 +10,120 @@
 import { DEPARTURE_ALERT_LEAD_MS, DEPARTURE_WINDOW_MS, toDateString } from './time';
 
 export type DayPlan = string | 'off'; // "HH:mm" 또는 쉬는 날
+// 날짜를 콕 집어 정한 것 — 'usual'은 "평소(요일 계획)대로"라고 대답했다는 표시다 (공휴일 질문에 답함).
+export type DatePlan = DayPlan | 'usual';
 
 export interface DepartureSchedule {
   base: string;                                // 기본 외출 시간
   weekdays: Partial<Record<string, DayPlan>>;  // 요일 예외 — 키 '0'(일)~'6'(토)
   today: { date: string; plan: DayPlan } | null; // 그날만 바꾼 것 — date가 지나면 무시
+  // 날짜별로 정한 것 — 공휴일 질문의 대답, 앱에서 등록한 일정의 나가는 시간. 키 "YYYY-MM-DD".
+  dates?: Record<string, DatePlan>;
+  // 공휴일 이름 — 키 "YYYY-MM-DD". 계획을 바꾸지는 않는다: 대답이 없으면 평소처럼 나가는 날이다
+  // (2026-11-27 결정 — 공휴일에도 일하는 사람이 알림을 놓치지 않게). 알림 문구와 질문에만 쓴다.
+  holidays?: Record<string, string>;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 다음 외출을 찾을 때 볼 범위. 요일 예외로 일주일 내내 쉬는 날이면 외출이 없다.
 const SEARCH_DAYS = 8;
 
-// 그날의 계획. 오늘만 바꾼 것 > 요일 예외 > 기본.
+// 그날의 계획. 오늘만 바꾼 것 > 날짜별로 정한 것 > 요일 예외 > 기본.
 export function planOn(date: Date, s: DepartureSchedule): DayPlan {
-  if (s.today && s.today.date === toDateString(date)) return s.today.plan;
+  const key = toDateString(date);
+  if (s.today && s.today.date === key) return s.today.plan;
+  const dated = s.dates?.[key];
+  if (dated !== undefined && dated !== 'usual') return dated;
+  return weeklyPlanOn(date, s);
+}
+
+// 요일 계획만 — 날짜별로 정한 것을 빼고 본 그날.
+export function weeklyPlanOn(date: Date, s: Pick<DepartureSchedule, 'base' | 'weekdays'>): DayPlan {
   return s.weekdays[String(date.getDay())] ?? s.base;
+}
+
+// ---- 공휴일 ----
+
+export function holidayOn(date: Date, s: DepartureSchedule): string | null {
+  return s.holidays?.[toDateString(date)] ?? null;
+}
+
+// 물어봐야 하는 공휴일 — 공휴일인데 아직 대답이 없고, 대답이 없으면 평소처럼 나가는 날.
+// (원래 쉬는 요일인 공휴일은 물을 게 없다.)
+export function isUnansweredHoliday(date: Date, s: DepartureSchedule): boolean {
+  const key = toDateString(date);
+  if (!s.holidays?.[key]) return false;
+  if (s.today && s.today.date === key) return false;
+  if (s.dates?.[key] !== undefined) return false;
+  return weeklyPlanOn(date, s) !== 'off';
+}
+
+export interface HolidayQuestion {
+  name: string;     // "성탄절" / "추석 연휴"
+  dates: string[];  // 대답을 받을 날짜들 (원래 나가는 날인 공휴일만)
+  first: Date;
+}
+
+// 연휴로 이어 볼 최대 날수 — 설·추석에 주말·대체공휴일이 붙어도 이 안이다.
+const HOLIDAY_BLOCK_MAX_DAYS = 10;
+
+// start 날짜부터 시작하는 공휴일 묶음의 질문. start가 물어볼 공휴일이 아니면 null.
+// 공휴일과 원래 쉬는 요일이 이어진 동안을 한 묶음으로 본다 — 토요일 개천절 → 일 → 월 대체공휴일.
+export function holidayQuestionFrom(s: DepartureSchedule, start: Date): HolidayQuestion | null {
+  if (!isUnansweredHoliday(start, s)) return null;
+  const dates: string[] = [];
+  const names: string[] = [];
+  for (let i = 0; i < HOLIDAY_BLOCK_MAX_DAYS; i++) {
+    const day = addDays(start, i);
+    const name = holidayOn(day, s);
+    // 공휴일이 아닌 날은 원래 쉬는 날(요일 계획이든 날짜별로 정한 쉼이든)일 때만 연휴를 잇는다.
+    if (!name && planOn(day, s) !== 'off') break;
+    if (name && !names.includes(name)) names.push(name);
+    if (isUnansweredHoliday(day, s)) dates.push(toDateString(day));
+  }
+  const main = names.find((n) => n !== '대체공휴일') ?? names[0];
+  const span = new Set(dates).size;
+  return { name: span > 1 && !main.endsWith('연휴') ? `${main} 연휴` : main, dates, first: start };
+}
+
+// 이미 대답한 공휴일 — 오늘이나 내일 것. 대시보드가 대답을 보여주고 [바꾸기]로 지울 수 있게 한다.
+export interface AnsweredHoliday {
+  name: string;
+  dates: string[];      // 대답한 공휴일 날짜들 (지우면 다시 묻는다)
+  first: Date;
+  plan: DatePlan;       // 첫날의 대답
+}
+
+export function answeredHolidayFrom(s: DepartureSchedule, now: Date): AnsweredHoliday | null {
+  for (const offset of [0, 1]) {
+    const start = addDays(now, offset);
+    const key = toDateString(start);
+    const name = holidayOn(start, s);
+    const plan = s.dates?.[key];
+    if (!name || plan === undefined) continue;
+    const dates: string[] = [];
+    for (let i = 0; i < HOLIDAY_BLOCK_MAX_DAYS; i++) {
+      const day = addDays(start, i);
+      const dayKey = toDateString(day);
+      if (!holidayOn(day, s) && planOn(day, s) !== 'off') break;
+      if (holidayOn(day, s) && s.dates?.[dayKey] !== undefined) dates.push(dayKey);
+    }
+    return { name, dates, first: start, plan };
+  }
+  return null;
+}
+
+// "성탄절이에요" / "추석 연휴예요" — 받침 따라.
+export function withIeyo(word: string): string {
+  const last = word.charCodeAt(word.length - 1);
+  const hangul = last >= 0xac00 && last <= 0xd7a3;
+  return `${word}${hangul && (last - 0xac00) % 28 === 0 ? '예요' : '이에요'}`;
+}
+
+// 지금 물어볼 공휴일 — 오늘이나 내일 시작하는 것. 오늘 것이 먼저다.
+// 어제부터 이어진 연휴의 가운데 날이어도 아직 대답이 없으면 그날부터 다시 묻는다.
+export function pendingHolidayQuestion(s: DepartureSchedule, now: Date): HolidayQuestion | null {
+  return holidayQuestionFrom(s, addDays(now, 0)) ?? holidayQuestionFrom(s, addDays(now, 1));
 }
 
 // 그날 출발 시각(HH:mm), 쉬는 날이면 null.
@@ -186,45 +285,87 @@ export function describeSchedule(s: Pick<DepartureSchedule, 'base' | 'weekdays'>
 // ---- 출발 알림 예약 계획 ----
 //
 // 앱을 며칠 안 열어도 알림이 끊기지 않게 요일마다 "매주 반복" 예약을 하나씩 건다 (쉬는 요일은 없음).
-// 오늘만 바꾼 게 있으면 오늘 요일의 반복 예약은 다음 주부터 시작하고, 바꾼 시간은 한 번짜리로 건다.
+// 날짜를 따로 정한 날(오늘만 바꾸기·공휴일 대답·등록한 일정)과 대답 없는 공휴일은 반복으로 덮을 수 없다 —
+// 그날은 한 번짜리로 따로 걸고(쉬면 안 건다), 그 요일의 반복은 그런 날이 다 지난 뒤부터 시작한다.
+// 반복이 시작되기 전의 평범한 날도 한 번짜리로 건다. 앞으로 SPECIAL_HORIZON_DAYS일만 본다 —
+// 그 뒤의 특별한 날은 그 사이에 앱이 다시 예약할 때 반영된다.
 
 export const DEPARTURE_ALERT_PREFIX = 'departure-alert';
+const SPECIAL_HORIZON_DAYS = 15;
+
+// 날짜 하나짜리 출발 알림 id
+export function oneOffAlertId(date: string): string {
+  return `${DEPARTURE_ALERT_PREFIX}-o${date}`;
+}
 
 export interface AlertTrigger {
   id: string;
   alertAt: Date;
   departure: Date;
   weekly: boolean;
+  // 대답 없는 공휴일이면 그 이름 — 알림에 "오늘은 성탄절이에요"와 [오늘은 쉬어요]를 붙인다.
+  holiday?: string | null;
+}
+
+function isSpecialDay(date: Date, s: DepartureSchedule): boolean {
+  const key = toDateString(date);
+  return (s.today?.date === key) || s.dates?.[key] !== undefined || isUnansweredHoliday(date, s);
 }
 
 export function planDepartureAlerts(s: DepartureSchedule, now: Date): AlertTrigger[] {
   const out: AlertTrigger[] = [];
-  const todayKey = toDateString(now);
-  const overridden = s.today && s.today.date === todayKey ? s.today : null;
+  const alertOf = (date: Date, plan: string) => {
+    const departure = at(date, plan);
+    return { departure, alertAt: new Date(departure.getTime() - DEPARTURE_ALERT_LEAD_MS) };
+  };
 
   for (let day = 0; day < 7; day++) {
     const plan = s.weekdays[String(day)] ?? s.base;
     if (plan === 'off') continue;
-    // 이 요일의 다음 출발 — 알림 시각이 이미 지났거나, 오늘을 따로 바꿨으면 다음 주로.
-    for (let i = 0; i <= 7; i++) {
-      const date = addDays(now, i);
-      if (date.getDay() !== day) continue;
-      const departure = at(date, plan);
-      const alertAt = new Date(departure.getTime() - DEPARTURE_ALERT_LEAD_MS);
-      const skipToday = overridden && toDateString(date) === todayKey;
-      if (alertAt.getTime() > now.getTime() && !skipToday) {
-        out.push({ id: `${DEPARTURE_ALERT_PREFIX}-d${day}`, alertAt, departure, weekly: true });
+    const occurrences = Array.from({ length: SPECIAL_HORIZON_DAYS }, (_, i) => addDays(now, i))
+      .filter((d) => d.getDay() === day);
+    // 반복은 마지막 특별한 날 다음 주부터 — 그 전 평범한 날은 한 번짜리로.
+    let lastSpecial = -1;
+    occurrences.forEach((d, i) => { if (isSpecialDay(d, s)) lastSpecial = i; });
+    occurrences.forEach((d, i) => {
+      if (i >= lastSpecial || isSpecialDay(d, s)) return;
+      const a = alertOf(d, plan);
+      if (a.alertAt.getTime() > now.getTime()) {
+        out.push({ id: oneOffAlertId(toDateString(d)), ...a, weekly: false });
+      }
+    });
+    // 반복 시작 — 마지막 특별한 날 뒤(없으면 처음부터) 알림 시각이 아직 안 지난 첫 그 요일.
+    let candidate = lastSpecial >= 0 ? addDays(occurrences[lastSpecial], 7) : occurrences[0];
+    for (let guard = 0; guard < 3; guard++) {
+      const a = alertOf(candidate, plan);
+      if (a.alertAt.getTime() > now.getTime()) {
+        out.push({ id: `${DEPARTURE_ALERT_PREFIX}-d${day}`, ...a, weekly: true });
         break;
       }
+      candidate = addDays(candidate, 7);
     }
   }
 
-  if (overridden && overridden.plan !== 'off') {
-    const departure = at(now, overridden.plan);
-    const alertAt = new Date(departure.getTime() - DEPARTURE_ALERT_LEAD_MS);
-    if (alertAt.getTime() > now.getTime()) out.push({ id: `${DEPARTURE_ALERT_PREFIX}-today`, alertAt, departure, weekly: false });
+  for (let i = 0; i < SPECIAL_HORIZON_DAYS; i++) {
+    const d = addDays(now, i);
+    if (!isSpecialDay(d, s)) continue;
+    const plan = planOn(d, s);
+    if (plan === 'off') continue;
+    const a = alertOf(d, plan);
+    if (a.alertAt.getTime() <= now.getTime()) continue;
+    out.push({
+      id: oneOffAlertId(toDateString(d)), ...a, weekly: false,
+      holiday: isUnansweredHoliday(d, s) ? holidayOn(d, s) : null,
+    });
   }
   return out.sort((a, b) => a.alertAt.getTime() - b.alertAt.getTime());
+}
+
+// 지난 날짜의 날짜별 계획을 지운다 — 저장된 값이 쌓이지 않게. 어제 것은 남긴다
+// (자정 직후 출발이면 어제 출발의 감시 창이 아직 열려 있을 수 있다).
+export function activeDates(dates: Record<string, DatePlan> | undefined, now: Date): Record<string, DatePlan> {
+  const from = toDateString(addDays(now, -1));
+  return Object.fromEntries(Object.entries(dates ?? {}).filter(([d]) => d >= from));
 }
 
 // 앱 밖 표시용 출발 — 감시 창 안이면 그 출발(출발 시각이 막 지나 아직 집에 있어도 그 외출이다),

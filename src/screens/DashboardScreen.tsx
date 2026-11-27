@@ -24,12 +24,14 @@ import type { PurposeId } from '../types';
 import { ChecklistCard } from './dashboard/ChecklistCard';
 import { LeaveBar } from './dashboard/LeaveBar';
 import { StatusRow } from './dashboard/StatusRow';
+import { HolidayQuestion } from './dashboard/HolidayQuestion';
 import { WeatherBlock } from './dashboard/WeatherBlock';
 import { useDashboardData } from './dashboard/useDashboardData';
 
 // 대시보드 — 화면의 뼈대만 여기 있고, 덩어리마다 screens/dashboard/ 아래 파일로 나뉘어 있다.
 //   useDashboardData  일정·날씨 불러오기, 날짜 바뀜, 체크리스트 다시 조립
 //   StatusRow         외출까지 남은 시간
+//   HolidayQuestion   오늘·내일이 공휴일이면 그날 어떻게 할지 묻기
 //   WeatherBlock      날씨 요약과 자세히
 //   ChecklistCard     체크리스트 (추가·음성·삭제)
 //   LeaveBar          아래에 고정된 [떠나기]
@@ -186,6 +188,8 @@ export function DashboardScreen({ navigation }: NativeStackScreenProps<RootStack
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={Role.action} />}
       >
         <StatusRow now={now} />
+
+        <HolidayQuestion now={now} />
 
         <WeatherBlock onRetry={refresh} usingFallbackLocation={usingFallbackLocation} />
 

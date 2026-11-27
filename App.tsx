@@ -22,6 +22,7 @@ import { NightlyService } from '@/services/nightly/NightlyService';
 import { OutingLog } from '@/services/nightly/outingLog';
 import { AlarmService } from '@/services/alarm/AlarmService';
 import { AlarmOverlay } from '@/components/AlarmOverlay';
+import { HolidayService } from '@/services/holiday/HolidayService';
 // 집 지오펜스 태스크 정의 — TaskManager.defineTask는 번들 최상위에서 돌아야 한다
 // (앱이 화면 없이 백그라운드로 깨어나도 태스크가 정의돼 있게). import만으로 정의된다.
 import { HomeGeofence } from '@/services/departure/homeGeofence';
@@ -105,6 +106,8 @@ export default function App() {
     // 집 지오펜스도 같은 이유로 맞춘다 (위치 '항상 허용'을 설정에서 켜고 돌아오는 경우).
     syncWalkingDetection();
     HomeGeofence.sync();
+    // 공휴일 목록 — 필요한 해만, 30일에 한 번 (실패해도 조용히 넘어간다).
+    HolidayService.refresh();
     // 알람이 울리는 중에 앱이 열렸으면(잠금화면 전체 화면 · 알림 탭) 알람 창을 띄운다.
     whenHydrated().then(() => AlarmService.checkRinging()).catch(() => {});
     const appStateSub = AppState.addEventListener('change', (state) => {
@@ -113,6 +116,7 @@ export default function App() {
         syncWalkingDetection();
         HomeGeofence.sync();
         AwayPlaceService.tick();
+        HolidayService.refresh();
         OutingLog.observeWifi().then(() => NightlyService.plan());
       }
     });

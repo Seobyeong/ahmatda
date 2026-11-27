@@ -5,8 +5,8 @@ import { FontSize, Radius, Space, makeStyles, useTheme } from '../constants/them
 import { Button } from './ui';
 import { TimeInput } from './TimeInput';
 import { scheduleOf, useAppStore } from '../store';
-import { planOn } from '../utils/schedule';
-import { isValidHHmm } from '../utils/time';
+import { holidayOn, weeklyPlanOn } from '../utils/schedule';
+import { getTodayString, isValidHHmm } from '../utils/time';
 
 type Choice = 'usual' | 'off' | 'time';
 
@@ -16,11 +16,18 @@ export function TodayPlanSheet({ visible, onClose }: { visible: boolean; onClose
   const styles = useStyles();
   const { Role } = useTheme();
   const setTodayPlan = useAppStore((s) => s.setTodayPlan);
+  const setDatePlans = useAppStore((s) => s.setDatePlans);
   const showToast = useAppStore((s) => s.showToast);
 
-  // 원래 일정(오늘만 바꾼 것 빼고)과 지금 오늘 계획
-  const usual = useAppStore((s) => planOn(new Date(), { ...scheduleOf(s), today: null }));
-  const current = useAppStore((s) => scheduleOf(s).today?.plan ?? null);
+  // 원래 일정(요일 계획)과 지금 오늘 계획. 공휴일 대답·등록한 일정 같은 날짜별 계획도 '바꾼 것'으로 본다 —
+  // [원래대로]가 그것까지 되돌려야 잘못 누른 [쉬어요]를 되돌릴 수 있다.
+  const usual = useAppStore((s) => weeklyPlanOn(new Date(), scheduleOf(s)));
+  const current = useAppStore((s) => {
+    const sch = scheduleOf(s);
+    const dated = sch.dates?.[getTodayString()];
+    return sch.today?.plan ?? (dated === undefined || dated === 'usual' ? null : dated);
+  });
+  const todayHoliday = useAppStore((s) => holidayOn(new Date(), scheduleOf(s)));
 
   const [choice, setChoice] = useState<Choice>('usual');
   const [time, setTime] = useState('09:00');
@@ -39,6 +46,8 @@ export function TodayPlanSheet({ visible, onClose }: { visible: boolean; onClose
   const handleSave = () => {
     if (choice === 'usual') {
       setTodayPlan(null);
+      // 공휴일이면 "평소처럼"이라고 대답한 것으로 남긴다 (다시 묻지 않게).
+      setDatePlans([getTodayString()], todayHoliday ? 'usual' : null);
       showToast('오늘은 원래 일정대로예요.');
     } else if (choice === 'off') {
       setTodayPlan('off');

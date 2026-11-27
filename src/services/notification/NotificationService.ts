@@ -11,7 +11,10 @@ import { departureAlertContent, sortByUrgency, type DepartureSnapshot } from '@/
 import { ChecklistItem } from '@/types';
 import { renderAlert, type AlertKind, type AlertVars } from '@/constants/alertVoices';
 import { scheduleOf, useAppStore } from '@/store';
-import { DEPARTURE_ALERT_PREFIX, currentWindow, formatHm, nextDeparture, planDepartureAlerts, type DepartureSchedule } from '@/utils/schedule';
+import {
+  DEPARTURE_ALERT_PREFIX, currentWindow, formatHm, holidayOn, isUnansweredHoliday, nextDeparture, oneOffAlertId,
+  planDepartureAlerts, withIeyo, type DepartureSchedule,
+} from '@/utils/schedule';
 import { AlarmService } from '@/services/alarm/AlarmService';
 import { isAlarmNotificationId } from '@/utils/alarms';
 
@@ -21,7 +24,7 @@ const LEGACY_CHANNEL_FEEDBACK = 'ahmatda-feedback';
 
 // 출발 알림은 울린 뒤 그대로 "잠금화면 출발 상태"로 남는다 (Android ongoing).
 // 앱이 같은 id로 내용을 갱신하고, 집을 나서거나 감시 창이 끝나면 사라진다.
-// id는 departure-alert-d{요일} (매주 반복) / departure-alert-today (오늘만 바꾼 시간).
+// id는 departure-alert-d{요일} (매주 반복) / departure-alert-oYYYY-MM-DD (날짜 하나짜리 — 오늘 목록·오늘만 바꾸기·공휴일·날짜별 계획).
 
 // 자기 전 정리 알림. 예전 22:00 전날 알림 / 20:00 착장 피드백을 대체한다.
 const NIGHTLY_CHECK_ID = 'nightly-check';
@@ -50,8 +53,25 @@ function isUmbrellaItem(item: ChecklistItem): boolean {
   return item.tier === 1 && item.label === '우산';
 }
 
-function departureBody(detail: string): string {
-  return `출발 30분 전 · ${detail}`;
+function departureBody(detail: string, holiday?: string | null): string {
+  const lead = holiday ? `오늘은 ${withIeyo(holiday)}. 쉬는 날이면 [오늘은 쉬어요]를 눌러 주세요.
+` : '';
+  return `${lead}출발 30분 전 · ${detail}`;
+}
+
+// 대답 없는 공휴일의 출발 알림 — 쉬면 이 버튼 하나로 그날 알림·외출 감지를 끈다. 앱을 열지 않는다.
+const HOLIDAY_OFF_ACTION = { title: '오늘은 쉬어요', pressAction: { id: 'holiday-off' } };
+
+// 출발 알림이 걸린 날이 대답 없는 공휴일이면 그 이름
+function holidayOf(schedule: DepartureSchedule, departure: Date): string | null {
+  return isUnansweredHoliday(departure, schedule) ? holidayOn(departure, schedule) : null;
+}
+
+// 자기 전 정리 알림의 공휴일 질문 (NightlyEntry.holiday)
+export interface NightlyHoliday {
+  name: string;
+  dates: string[];
+  dayLabel: string; // "내일" / "금요일"
 }
 
 // 지금 고른 알림 말투로 제목·첫 줄을 만든다 (constants/alertVoices.ts).
@@ -99,6 +119,8 @@ export interface NightlyEntry {
   // 이 알림 다음 외출 — "내일 08:30" / "월요일 08:30". 날마다 다르므로 칸마다 따로 정한다.
   // null이면 시각을 말하지 않는다 (매일 반복 칸, 일주일 안에 외출 없음).
   departure: string | null;
+  // 다음 날이 대답 없는 공휴일이면 묻는다 — 이때는 피드백 버튼 대신 [쉬어요]/[평소처럼]/[다른 시간].
+  holiday?: NightlyHoliday | null;
 }
 
 const NIGHTLY_ID_PREFIX = 'nightly-check-';
@@ -120,6 +142,25 @@ function nightlyContent(entry: NightlyEntry) {
     // 본문을 누르면 다음 외출 준비 미리보기가 열린다 (TomorrowPreviewModal)
     pressAction: { id: 'open-tomorrow', launchActivity: 'default' },
   };
+  if (entry.holiday) {
+    const h = entry.holiday;
+    const span = h.dates.length > 1 ? ` (${h.dates.length}일)` : '';
+    return {
+      id:    nightlyId(entry),
+      title: `${h.dayLabel}은 ${withIeyo(h.name)}${span}`,
+      body:  `평소처럼 나가세요? 대답이 없으면 평소처럼 알려 드려요.${entry.highlight ? `
+다음 외출: ${entry.highlight}` : ''}`,
+      data:  { holidayDates: h.dates.join(',') },
+      android: {
+        ...android,
+        actions: [
+          { title: '쉬어요',     pressAction: { id: 'holiday-off' } },
+          { title: '평소처럼',   pressAction: { id: 'holiday-usual' } },
+          { title: '다른 시간', pressAction: { id: 'holiday-other', launchActivity: 'default' } },
+        ],
+      },
+    };
+  }
   if (entry.variant === 'preview') {
     return {
       id:    nightlyId(entry),
@@ -208,7 +249,7 @@ export const NotificationService = {
     const plan = planDepartureAlerts(schedule, new Date()).flatMap((p) => {
       if (!p.weekly || snapshot.date !== toDateString(p.departure)) return [p];
       return [
-        { ...p, id: `${DEPARTURE_ALERT_PREFIX}-today`, weekly: false },
+        { ...p, id: oneOffAlertId(snapshot.date), weekly: false },
         { ...p, alertAt: new Date(p.alertAt.getTime() + WEEK_MS), departure: new Date(p.departure.getTime() + WEEK_MS) },
       ];
     });
@@ -241,14 +282,16 @@ export const NotificationService = {
         ...(p.weekly ? { repeatFrequency: RepeatFrequency.WEEKLY } : {}),
       };
       // 다른 날 예약은 일반 문구라 체크해도 그대로다 — 같으면 건너뛴다 (보통 오늘 것 하나만 다시 건다).
-      const signature = JSON.stringify([p.alertAt.getTime(), p.weekly, title, content]);
+      const holiday = p.holiday ?? null;
+      const signature = JSON.stringify([p.alertAt.getTime(), p.weekly, title, content, holiday]);
       if (alertSignatures.get(p.id) === signature && existing.includes(p.id)) continue;
 
       await notifee.createTriggerNotification(
         {
           id:      p.id,
           title,
-          body:    departureBody(content.detail),
+          body:    departureBody(content.detail, holiday),
+          data:    { date: alertDay },
           android: {
             channelId:     CHANNEL_CHECKLIST,
             pressAction:   { id: 'open-checklist', launchActivity: 'default' },
@@ -256,7 +299,7 @@ export const NotificationService = {
             autoCancel:    false,
             onlyAlertOnce: true,
             timeoutAfter:  DEPARTURE_WINDOW_MS,
-            actions:       [LEAVE_ACTION],
+            actions:       holiday ? [LEAVE_ACTION, HOLIDAY_OFF_ACTION] : [LEAVE_ACTION],
           },
         },
         trigger
@@ -285,10 +328,12 @@ export const NotificationService = {
       return;
     }
 
+    const holiday = holidayOf(schedule, window.departure);
     await notifee.displayNotification({
       id:    displayed.id,
       title: voiceText('departure', { items: snapshot.labels ?? [], count: snapshot.remaining }, formatHm(window.departure)).title,
-      body:  departureBody(snapshot.detail),
+      body:  departureBody(snapshot.detail, holiday),
+      data:  { date: toDateString(window.departure) },
       android: {
         channelId:     CHANNEL_CHECKLIST,
         pressAction:   { id: 'open-checklist', launchActivity: 'default' },
@@ -296,7 +341,7 @@ export const NotificationService = {
         autoCancel:    false,
         onlyAlertOnce: true,
         timeoutAfter:  window.remainingMs,
-        actions:       [LEAVE_ACTION],
+        actions:       holiday ? [LEAVE_ACTION, HOLIDAY_OFF_ACTION] : [LEAVE_ACTION],
       },
     });
   },
@@ -364,7 +409,7 @@ export const NotificationService = {
   //   skip    — 예약하지 않음
   async scheduleNightlyChecks(entries: NightlyEntry[]): Promise<void> {
     const wanted = entries.filter((e) => e.variant !== 'skip');
-    const signature = JSON.stringify([voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat, e.departure])]);
+    const signature = JSON.stringify([voiceSignature(), entries.map((e) => [e.at.getTime(), e.variant, e.highlight, e.repeat, e.departure, e.holiday ?? null])]);
 
     const existing = await notifee.getTriggerNotificationIds();
     const wantedIds = new Set(wanted.map((e) => nightlyId(e)));
@@ -489,6 +534,32 @@ export async function handleNotificationEvent(
     const { DirectionsService } = await import('@/services/directions/DirectionsService');
     const opened = await DirectionsService.openPlaceWhenActive(useAppStore.getState().userSettings.mapApp, FIND_STORE_QUERY);
     if (!opened) useAppStore.getState().showToast('지도 앱을 열지 못했어요. 지도 앱에서 "편의점"을 검색해 보세요.');
+    return;
+  }
+
+  // 공휴일 대답 — 출발 알림의 [오늘은 쉬어요], 자기 전 정리 알림의 [쉬어요]/[평소처럼]/[다른 시간].
+  // 앱이 꺼진 채 눌러도 대답이 남게 복원을 기다린다. [다른 시간]은 앱을 열어 대시보드 질문 줄에서 고른다.
+  const holidayAction = detail.pressAction?.id;
+  // [다른 시간] — 앱이 열리고 대시보드 질문 줄에서 고른다. 알림은 내린다: 남아 있으면 나중에 [쉬어요]가
+  // 방금 고른 시간을 덮어쓴다.
+  if (type === EventType.ACTION_PRESS && holidayAction === 'holiday-other') {
+    if (detail.notification?.id) await notifee.cancelNotification(detail.notification.id);
+    return;
+  }
+  if (type === EventType.ACTION_PRESS && (holidayAction === 'holiday-off' || holidayAction === 'holiday-usual')) {
+    const data = detail.notification?.data ?? {};
+    const dates = typeof data.holidayDates === 'string'
+      ? data.holidayDates.split(',').filter(Boolean)
+      : typeof data.date === 'string' ? [data.date] : [];
+    if (dates.length > 0) {
+      const { useAppStore, whenHydrated } = await import('@/store');
+      await whenHydrated();
+      useAppStore.getState().setDatePlans(dates, holidayAction === 'holiday-off' ? 'off' : 'usual');
+    }
+    if (detail.notification?.id) await notifee.cancelNotification(detail.notification.id);
+    // 앱 화면이 없으면(백그라운드) App.tsx의 다시 맞추기가 안 돈다 — 출발 알림·정리 알림을 여기서 맞춘다.
+    const { resyncAfterDatePlanChange } = await import('@/services/holiday/resync');
+    await resyncAfterDatePlanChange();
     return;
   }
 

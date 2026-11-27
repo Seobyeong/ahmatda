@@ -13,7 +13,11 @@ import { countRecentForgotten } from '@/utils/forgotten';
 import {
   DEPARTURE_ALERT_LEAD_MS, getNextDailyDate, getTodayString, isValidHHmm, toDateString,
 } from '@/utils/time';
-import { feedbackOutingDate, formatHm, nextDeparture, nextDepartureLabel, referenceTimeOn } from '@/utils/schedule';
+import {
+  dayLabel, feedbackOutingDate, formatHm, holidayQuestionFrom, nextDeparture, nextDepartureLabel, referenceTimeOn,
+  type DepartureSchedule,
+} from '@/utils/schedule';
+import type { NightlyHoliday } from '@/services/notification/NotificationService';
 import { fetchPreviewInputs } from './previewInputs';
 import { classifyOuting, decideNightly, nextOutingDiffers, previewHighlight } from './nightlyRules';
 import { OutingLog } from './outingLog';
@@ -53,6 +57,14 @@ function windowStartOf(date: string, departureTime: string): number {
   const [y, m, d] = date.split('-').map(Number);
   const [hh, mm] = departureTime.split(':').map(Number);
   return new Date(y, m - 1, d, hh, mm, 0, 0).getTime() - DEPARTURE_ALERT_LEAD_MS;
+}
+
+// 이 밤 알림이 물어볼 공휴일 — 다음 날 시작하는 대답 없는 공휴일(연휴는 한 번에).
+// 새벽(04시 전)에 울리는 정리 알림이면 "다음 날"은 그날이다.
+function holidayFor(at: Date, schedule: DepartureSchedule): NightlyHoliday | null {
+  const target = new Date(at.getFullYear(), at.getMonth(), at.getDate() + (at.getHours() < 4 ? 0 : 1));
+  const q = holidayQuestionFrom(schedule, target);
+  return q && q.dates.length > 0 ? { name: q.name, dates: q.dates, dayLabel: dayLabel(target, at) } : null;
 }
 
 async function nextOutingPreview(fireAt: Date, fresh: boolean): Promise<PreviewItem[] | null> {
@@ -116,9 +128,12 @@ async function planOnce(fresh: boolean): Promise<void> {
   // 칸마다 그 밤 다음 외출 ("내일 08:30" / "월요일 08:30"). 매일 반복 칸은 날마다 달라서 시각을 말하지 않는다.
   const entries: NightlyEntry[] = fires.map((at, i) => {
     const repeat = i === fires.length - 1;
+    const atSchedule = scheduleOf(state, at);
     return {
       at, variant: 'full', highlight: null, repeat,
-      departure: repeat ? null : nextDepartureLabel(scheduleOf(state, at), at),
+      departure: repeat ? null : nextDepartureLabel(atSchedule, at),
+      // 매일 반복 칸은 날마다 달라서 묻지 않는다 (그 전에 앱이 다시 계획한다).
+      holiday: repeat ? null : holidayFor(at, atSchedule),
     };
   });
 
@@ -147,7 +162,10 @@ async function planOnce(fresh: boolean): Promise<void> {
       highlight: previewHighlight(items),
       repeat: false,
       departure: entries[0].departure,
+      holiday: entries[0].holiday,
     };
+    // 물어볼 공휴일이 있으면 건너뛰지 않는다 — 대답을 받을 기회가 이 알림이다.
+    if (entries[0].holiday && entries[0].variant === 'skip') entries[0].variant = 'preview';
   }
 
   await NotificationService.scheduleNightlyChecks(entries);

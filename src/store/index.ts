@@ -7,7 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PURPOSES, findMatchingEvent, purposeItemKey } from '../constants/purposes';
 import { FEEDBACK_DELTA } from '../constants/feedback';
 import { getCurrentSlotIndex, getTodayString } from '../utils/time';
-import { activeToday, feedbackOutingDate, referenceTimeOn, type DayPlan, type DepartureSchedule } from '../utils/schedule';
+import { activeDates, activeToday, feedbackOutingDate, referenceTimeOn, type DatePlan, type DayPlan, type DepartureSchedule } from '../utils/schedule';
+import { EMPTY_HOLIDAY_CACHE, type HolidayCache } from '../services/holiday/HolidayService';
 import { getUmbrellaBadge } from '../services/weather/forecastDate';
 import { CUSTOM_TEXT_MAX } from '../constants/alertVoices';
 import type { Alarm } from '../utils/alarms';
@@ -81,6 +82,13 @@ interface AppState {
   // 기기 로컬 — 동기화하는 설정(userSettings)이 아니라 그날 하루짜리 상태다.
   departureToday: { date: string; plan: DayPlan } | null;
 
+  // 날짜별로 정한 외출 — 공휴일 질문의 대답, 앱에서 등록한 일정의 나가는 시간 (utils/schedule.ts dates).
+  // 기기 로컬. 지난 날짜는 정리된다(activeDates).
+  departureDates: Record<string, DatePlan>;
+
+  // 공휴일 목록 캐시 (services/holiday/HolidayService.ts). 기기 로컬.
+  holidays: HolidayCache;
+
   // 삭제 기록 (tombstone) — 나중에 기기 간 동기화를 붙일 때, 한 기기에서 지운 루틴·메모·알람이
   // 다른 기기에서 되살아나지 않게 "지웠음"을 남긴다 ("없음"만으로는 "아직 못 받음"과 구분이 안 된다).
   // 지금은 기록만 하고 쓰는 곳은 없다. 오래된 기록은 DELETION_KEEP_MS 뒤 정리된다 (docs/계정-기능-구상.md 7장).
@@ -107,11 +115,16 @@ export interface ToastAction {
 
 // 지금 외출 일정 — 요일별 시간·쉬는 날·오늘만 바꾼 것 (utils/schedule.ts).
 // 외출 시간이 필요한 곳은 userSettings.departureTime(기본 시간)을 바로 쓰지 말고 이걸 쓴다.
-export function scheduleOf(state: Pick<AppState, 'userSettings' | 'departureToday'>, now: Date = new Date()): DepartureSchedule {
+export function scheduleOf(
+  state: Pick<AppState, 'userSettings' | 'departureToday' | 'departureDates' | 'holidays'>,
+  now: Date = new Date()
+): DepartureSchedule {
   return {
     base: state.userSettings.departureTime,
     weekdays: state.userSettings.departureWeekdays ?? {},
     today: activeToday(state.departureToday, now),
+    dates: activeDates(state.departureDates, now),
+    holidays: state.holidays?.dates ?? {},
   };
 }
 
@@ -193,6 +206,9 @@ interface AppActions {
   setWeekdayPlan: (day: number, plan: DayPlan | null) => void;
   // 오늘만 — null이면 원래 일정으로
   setTodayPlan: (plan: DayPlan | null) => void;
+  // 날짜별 — 공휴일 대답('usual' = 평소대로), 등록한 일정의 나가는 시간. null이면 정한 것을 지운다.
+  setDatePlans: (dates: string[], plan: DatePlan | null) => void;
+  setHolidays: (cache: HolidayCache) => void;
   setNightlyCheckTime: (time: string) => void;
   setAlertPreference: (pref: AlertPreference) => void;
   setAwayPlaceAlert: (on: boolean) => void;
@@ -421,6 +437,10 @@ const defaultState: AppState = {
   memos: [],
 
   departureToday: null,
+
+  departureDates: {},
+
+  holidays: EMPTY_HOLIDAY_CACHE,
 
   deletions: [],
 
@@ -877,6 +897,17 @@ export const useAppStore = create<AppStore>()(
         }),
       setTodayPlan: (plan) =>
         set({ departureToday: plan === null ? null : { date: getTodayString(), plan } }),
+      setDatePlans: (dates, plan) =>
+        set((state) => {
+          const next = activeDates(state.departureDates, new Date());
+          dates.forEach((d) => {
+            if (plan === null) delete next[d];
+            else next[d] = plan;
+          });
+          // '오늘만 바꾸기'는 건드리지 않는다 — 그쪽이 앞선다(planOn). 오늘을 바꾼 사람에겐 공휴일을 묻지도 않는다.
+          return { departureDates: next };
+        }),
+      setHolidays: (cache) => set({ holidays: cache }),
       setNightlyCheckTime: (time) => set((state) => patchSettings(state, { nightlyCheckTime: time })),
       // 성향을 다시 고르면 집 밖 머묾 알림도 성향을 따르게 되돌린다 (스위치로 따로 정한 값은 풀림).
       // 같은 성향을 다시 누른 건 바꾼 게 아니다 — 스위치로 끈 값을 지우지 않는다.
@@ -1196,6 +1227,10 @@ export const useAppStore = create<AppStore>()(
         alarms: state.alarms,
         // 오늘만 바꾼 외출 — 앱이 꺼졌다가 백그라운드로 깨어나도(외출 감지) 오늘 건너뛴 걸 알아야 한다.
         departureToday: state.departureToday,
+        // 날짜별로 정한 외출 — 공휴일 대답, 등록한 일정. 앱이 꺼져도 그날 알림·감지가 알아야 한다.
+        departureDates: state.departureDates,
+        // 공휴일 목록 — 인터넷 없이도 쓰게 둔다.
+        holidays: state.holidays,
         // 삭제 기록 — 나중에 동기화할 때 지운 것이 되살아나지 않게.
         deletions: state.deletions,
       }),
